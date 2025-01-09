@@ -243,6 +243,9 @@ class ModelResponse:
     parts: list[ModelResponsePart]
     """The parts of the model message."""
 
+    model_name: str
+    """The name of the model that generated the response."""
+
     timestamp: datetime = field(default_factory=_now_utc)
     """The timestamp of the response.
 
@@ -253,12 +256,12 @@ class ModelResponse:
     """Message type identifier, this is available on all parts as a discriminator."""
 
     @classmethod
-    def from_text(cls, content: str, timestamp: datetime | None = None) -> Self:
-        return cls([TextPart(content)], timestamp=timestamp or _now_utc())
+    def from_text(cls, content: str, model_name: str, timestamp: datetime | None = None) -> Self:
+        return cls([TextPart(content)], model_name=model_name, timestamp=timestamp or _now_utc())
 
     @classmethod
-    def from_tool_call(cls, tool_call: ToolCallPart) -> Self:
-        return cls([tool_call])
+    def from_tool_call(cls, model_name: str, tool_call: ToolCallPart) -> Self:
+        return cls([tool_call], model_name=model_name)
 
 
 ModelMessage = Union[ModelRequest, ModelResponse]

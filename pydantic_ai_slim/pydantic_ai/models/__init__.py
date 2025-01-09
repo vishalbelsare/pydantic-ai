@@ -172,6 +172,11 @@ class StreamTextResponse(ABC):
         raise NotImplementedError()
 
     @abstractmethod
+    def model_name(self) -> str:
+        """Return the name of the model associated with the response."""
+        raise NotImplementedError()
+
+    @abstractmethod
     def timestamp(self) -> datetime:
         """Get the timestamp of the response."""
         raise NotImplementedError()
@@ -210,6 +215,11 @@ class StreamStructuredResponse(ABC):
 
         NOTE: this won't return the full usage until the stream is finished.
         """
+        raise NotImplementedError()
+
+    @abstractmethod
+    def model_name(self) -> str:
+        """Return the name of the model associated with the response."""
         raise NotImplementedError()
 
     @abstractmethod

@@ -200,8 +200,7 @@ class OpenAIAgentModel(AgentModel):
             timeout=model_settings.get('timeout', NOT_GIVEN),
         )
 
-    @staticmethod
-    def _process_response(response: chat.ChatCompletion) -> ModelResponse:
+    def _process_response(self, response: chat.ChatCompletion) -> ModelResponse:
         """Process a non-streamed response, and prepare a message to return."""
         timestamp = datetime.fromtimestamp(response.created, tz=timezone.utc)
         choice = response.choices[0]
@@ -211,10 +210,9 @@ class OpenAIAgentModel(AgentModel):
         if choice.message.tool_calls is not None:
             for c in choice.message.tool_calls:
                 items.append(ToolCallPart.from_raw_args(c.function.name, c.function.arguments, c.id))
-        return ModelResponse(items, timestamp=timestamp)
+        return ModelResponse(items, model_name=self.model_name, timestamp=timestamp)
 
-    @staticmethod
-    async def _process_streamed_response(response: AsyncStream[ChatCompletionChunk]) -> EitherStreamedResponse:
+    async def _process_streamed_response(self, response: AsyncStream[ChatCompletionChunk]) -> EitherStreamedResponse:
         """Process a streamed response, and prepare a streaming response to return."""
         timestamp: datetime | None = None
         start_usage = Usage()
@@ -232,11 +230,12 @@ class OpenAIAgentModel(AgentModel):
                 delta = chunk.choices[0].delta
 
                 if delta.content is not None:
-                    return OpenAIStreamTextResponse(delta.content, response, timestamp, start_usage)
+                    return OpenAIStreamTextResponse(delta.content, response, self.model_name, timestamp, start_usage)
                 elif delta.tool_calls is not None:
                     return OpenAIStreamStructuredResponse(
                         response,
                         {c.index: c for c in delta.tool_calls},
+                        self.model_name,
                         timestamp,
                         start_usage,
                     )
@@ -300,6 +299,7 @@ class OpenAIStreamTextResponse(StreamTextResponse):
 
     _first: str | None
     _response: AsyncStream[ChatCompletionChunk]
+    _model_name: OpenAIModelName
     _timestamp: datetime
     _usage: result.Usage
     _buffer: list[str] = field(default_factory=list, init=False)
@@ -330,6 +330,9 @@ class OpenAIStreamTextResponse(StreamTextResponse):
     def usage(self) -> Usage:
         return self._usage
 
+    def model_name(self) -> str:
+        return self._model_name
+
     def timestamp(self) -> datetime:
         return self._timestamp
 
@@ -340,6 +343,7 @@ class OpenAIStreamStructuredResponse(StreamStructuredResponse):
 
     _response: AsyncStream[ChatCompletionChunk]
     _delta_tool_calls: dict[int, ChoiceDeltaToolCall]
+    _model_name: OpenAIModelName
     _timestamp: datetime
     _usage: result.Usage
 
@@ -373,10 +377,13 @@ class OpenAIStreamStructuredResponse(StreamStructuredResponse):
                 if f.name is not None and f.arguments is not None:
                     items.append(ToolCallPart.from_raw_args(f.name, f.arguments, c.id))
 
-        return ModelResponse(items, timestamp=self._timestamp)
+        return ModelResponse(items, model_name=self._model_name, timestamp=self._timestamp)
 
     def usage(self) -> Usage:
         return self._usage
+
+    def model_name(self) -> str:
+        return self._model_name
 
     def timestamp(self) -> datetime:
         return self._timestamp

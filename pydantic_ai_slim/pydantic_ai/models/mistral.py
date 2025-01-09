@@ -148,7 +148,7 @@ class MistralAgentModel(AgentModel):
     """Implementation of `AgentModel` for Mistral models."""
 
     client: Mistral
-    model_name: str
+    model_name: MistralModelName
     allow_text_result: bool
     function_tools: list[ToolDefinition]
     result_tools: list[ToolDefinition]
@@ -266,8 +266,7 @@ class MistralAgentModel(AgentModel):
         ]
         return tools if tools else None
 
-    @staticmethod
-    def _process_response(response: MistralChatCompletionResponse) -> ModelResponse:
+    def _process_response(self, response: MistralChatCompletionResponse) -> ModelResponse:
         """Process a non-streamed response, and prepare a message to return."""
         assert response.choices, 'Unexpected empty response choice.'
 
@@ -289,10 +288,10 @@ class MistralAgentModel(AgentModel):
                 tool = _map_mistral_to_pydantic_tool_call(tool_call)
                 parts.append(tool)
 
-        return ModelResponse(parts, timestamp=timestamp)
+        return ModelResponse(parts, model_name=self.model_name, timestamp=timestamp)
 
-    @staticmethod
     async def _process_streamed_response(
+        self,
         result_tools: list[ToolDefinition],
         response: MistralEventStreamAsync[MistralCompletionEvent],
     ) -> EitherStreamedResponse:
@@ -328,12 +327,13 @@ class MistralAgentModel(AgentModel):
                         {c.name: c for c in result_tools},
                         response,
                         content,
+                        self.model_name,
                         timestamp,
                         start_usage,
                     )
 
                 elif content:
-                    return MistralStreamTextResponse(content, response, timestamp, start_usage)
+                    return MistralStreamTextResponse(content, response, self.model_name, timestamp, start_usage)
 
     @staticmethod
     def _map_to_mistral_tool_call(t: ToolCallPart) -> MistralToolCall:
@@ -473,6 +473,7 @@ class MistralStreamTextResponse(StreamTextResponse):
 
     _first: str | None
     _response: MistralEventStreamAsync[MistralCompletionEvent]
+    _model_name: MistralModelName
     _timestamp: datetime
     _usage: Usage
     _buffer: list[str] = field(default_factory=list, init=False)
@@ -505,6 +506,9 @@ class MistralStreamTextResponse(StreamTextResponse):
     def usage(self) -> Usage:
         return self._usage
 
+    def model_name(self) -> str:
+        return self._model_name
+
     def timestamp(self) -> datetime:
         return self._timestamp
 
@@ -517,6 +521,7 @@ class MistralStreamStructuredResponse(StreamStructuredResponse):
     _result_tools: dict[str, ToolDefinition]
     _response: MistralEventStreamAsync[MistralCompletionEvent]
     _delta_content: str | None
+    _model_name: MistralModelName
     _timestamp: datetime
     _usage: Usage
 
@@ -561,10 +566,13 @@ class MistralStreamStructuredResponse(StreamStructuredResponse):
                     tool = ToolCallPart.from_raw_args(result_tool.name, output_json)
                     calls.append(tool)
 
-        return ModelResponse(calls, timestamp=self._timestamp)
+        return ModelResponse(calls, model_name=self._model_name, timestamp=self._timestamp)
 
     def usage(self) -> Usage:
         return self._usage
+
+    def model_name(self) -> str:
+        return self._model_name
 
     def timestamp(self) -> datetime:
         return self._timestamp

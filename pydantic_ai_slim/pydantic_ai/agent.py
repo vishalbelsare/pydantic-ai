@@ -1234,7 +1234,9 @@ class Agent(Generic[AgentDeps, ResultData]):
                     pass
 
                 text = ''.join(model_response.get(final=True))
-                return _messages.ModelResponse([_messages.TextPart(text)]), [response]
+                return _messages.ModelResponse([_messages.TextPart(text)], model_name=model_response.model_name()), [
+                    response
+                ]
         elif isinstance(model_response, models.StreamStructuredResponse):
             if result_schema is not None:
                 # if there's a result schema, iterate over the stream until we find at least one tool

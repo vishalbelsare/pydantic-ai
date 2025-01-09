@@ -230,15 +230,13 @@ class GeminiAgentModel(AgentModel):
                 raise exceptions.UnexpectedModelBehavior(f'Unexpected response from gemini {r.status_code}', r.text)
             yield r
 
-    @staticmethod
-    def _process_response(response: _GeminiResponse) -> ModelResponse:
+    def _process_response(self, response: _GeminiResponse) -> ModelResponse:
         if len(response['candidates']) != 1:
             raise UnexpectedModelBehavior('Expected exactly one candidate in Gemini response')
         parts = response['candidates'][0]['content']['parts']
-        return _process_response_from_parts(parts)
+        return _process_response_from_parts(parts, model_name=self.model_name)
 
-    @staticmethod
-    async def _process_streamed_response(http_response: HTTPResponse) -> EitherStreamedResponse:
+    async def _process_streamed_response(self, http_response: HTTPResponse) -> EitherStreamedResponse:
         """Process a streamed response, and prepare a streaming response to return."""
         aiter_bytes = http_response.aiter_bytes()
         start_response: _GeminiResponse | None = None
@@ -261,9 +259,9 @@ class GeminiAgentModel(AgentModel):
 
         # TODO: Update this once we rework stream responses to be more flexible
         if _extract_response_parts(start_response).is_left():
-            return GeminiStreamStructuredResponse(_content=content, _stream=aiter_bytes)
+            return GeminiStreamStructuredResponse(_content=content, _model_name=self.model_name, _stream=aiter_bytes)
         else:
-            return GeminiStreamTextResponse(_json_content=content, _stream=aiter_bytes)
+            return GeminiStreamTextResponse(_json_content=content, _model_name=self.model_name, _stream=aiter_bytes)
 
     @classmethod
     def _message_to_gemini_content(
@@ -307,6 +305,7 @@ class GeminiStreamTextResponse(StreamTextResponse):
 
     _json_content: bytearray
     _stream: AsyncIterator[bytes]
+    _model_name: GeminiModelName
     _position: int = 0
     _timestamp: datetime = field(default_factory=_utils.now_utc, init=False)
     _usage: result.Usage = field(default_factory=result.Usage, init=False)
@@ -342,6 +341,9 @@ class GeminiStreamTextResponse(StreamTextResponse):
     def usage(self) -> result.Usage:
         return self._usage
 
+    def model_name(self) -> str:
+        return self._model_name
+
     def timestamp(self) -> datetime:
         return self._timestamp
 
@@ -352,6 +354,7 @@ class GeminiStreamStructuredResponse(StreamStructuredResponse):
 
     _content: bytearray
     _stream: AsyncIterator[bytes]
+    _model_name: GeminiModelName
     _timestamp: datetime = field(default_factory=_utils.now_utc, init=False)
     _usage: result.Usage = field(default_factory=result.Usage, init=False)
 
@@ -378,10 +381,13 @@ class GeminiStreamStructuredResponse(StreamStructuredResponse):
             self._usage += _metadata_as_usage(r)
             candidate = r['candidates'][0]
             combined_parts.extend(candidate['content']['parts'])
-        return _process_response_from_parts(combined_parts, timestamp=self._timestamp)
+        return _process_response_from_parts(combined_parts, model_name=self._model_name, timestamp=self._timestamp)
 
     def usage(self) -> result.Usage:
         return self._usage
+
+    def model_name(self) -> str:
+        return self._model_name
 
     def timestamp(self) -> datetime:
         return self._timestamp
@@ -454,7 +460,9 @@ def _function_call_part_from_call(tool: ToolCallPart) -> _GeminiFunctionCallPart
     return _GeminiFunctionCallPart(function_call=_GeminiFunctionCall(name=tool.tool_name, args=tool.args_as_dict()))
 
 
-def _process_response_from_parts(parts: Sequence[_GeminiPartUnion], timestamp: datetime | None = None) -> ModelResponse:
+def _process_response_from_parts(
+    parts: Sequence[_GeminiPartUnion], model_name: GeminiModelName, timestamp: datetime | None = None
+) -> ModelResponse:
     items: list[ModelResponsePart] = []
     for part in parts:
         if 'text' in part:
@@ -465,7 +473,7 @@ def _process_response_from_parts(parts: Sequence[_GeminiPartUnion], timestamp: d
             raise exceptions.UnexpectedModelBehavior(
                 f'Unsupported response from Gemini, expected all parts to be function calls or text, got: {part!r}'
             )
-    return ModelResponse(items, timestamp=timestamp or _utils.now_utc())
+    return ModelResponse(items, model_name=model_name, timestamp=timestamp or _utils.now_utc())
 
 
 class _GeminiFunctionCall(TypedDict):

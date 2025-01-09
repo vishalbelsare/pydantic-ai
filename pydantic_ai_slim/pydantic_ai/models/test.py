@@ -168,7 +168,8 @@ class TestAgentModel(AgentModel):
         # if there are tools, the first thing we want to do is call all of them
         if self.tool_calls and not any(isinstance(m, ModelResponse) for m in messages):
             return ModelResponse(
-                parts=[ToolCallPart.from_raw_args(name, self.gen_tool_args(args)) for name, args in self.tool_calls]
+                parts=[ToolCallPart.from_raw_args(name, self.gen_tool_args(args)) for name, args in self.tool_calls],
+                model_name='test',
             )
 
         if messages:
@@ -194,7 +195,7 @@ class TestAgentModel(AgentModel):
                             if tool.name in new_retry_names
                         ]
                     )
-                return ModelResponse(parts=retry_parts)
+                return ModelResponse(parts=retry_parts, model_name='test')
 
         if response_text := self.result.left:
             if response_text.value is None:
@@ -206,20 +207,24 @@ class TestAgentModel(AgentModel):
                             if isinstance(part, ToolReturnPart):
                                 output[part.tool_name] = part.content
                 if output:
-                    return ModelResponse.from_text(pydantic_core.to_json(output).decode())
+                    return ModelResponse.from_text(pydantic_core.to_json(output).decode(), model_name='test')
                 else:
-                    return ModelResponse.from_text('success (no tool calls)')
+                    return ModelResponse.from_text('success (no tool calls)', model_name='test')
             else:
-                return ModelResponse.from_text(response_text.value)
+                return ModelResponse.from_text(response_text.value, model_name='test')
         else:
             assert self.result_tools, 'No result tools provided'
             custom_result_args = self.result.right
             result_tool = self.result_tools[self.seed % len(self.result_tools)]
             if custom_result_args is not None:
-                return ModelResponse(parts=[ToolCallPart.from_raw_args(result_tool.name, custom_result_args)])
+                return ModelResponse(
+                    parts=[ToolCallPart.from_raw_args(result_tool.name, custom_result_args)], model_name='test'
+                )
             else:
                 response_args = self.gen_tool_args(result_tool)
-                return ModelResponse(parts=[ToolCallPart.from_raw_args(result_tool.name, response_args)])
+                return ModelResponse(
+                    parts=[ToolCallPart.from_raw_args(result_tool.name, response_args)], model_name='test'
+                )
 
 
 @dataclass

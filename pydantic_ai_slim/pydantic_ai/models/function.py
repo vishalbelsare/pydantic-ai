@@ -170,10 +170,10 @@ class FunctionAgentModel(AgentModel):
 
         if isinstance(first, str):
             text_stream = cast(AsyncIterator[str], response_stream)
-            yield FunctionStreamTextResponse(first, text_stream)
+            yield FunctionStreamTextResponse(first, text_stream, _model_name='function')
         else:
             structured_stream = cast(AsyncIterator[DeltaToolCalls], response_stream)
-            yield FunctionStreamStructuredResponse(first, structured_stream)
+            yield FunctionStreamStructuredResponse(first, structured_stream, _model_name='function')
 
 
 @dataclass
@@ -182,6 +182,7 @@ class FunctionStreamTextResponse(StreamTextResponse):
 
     _next: str | None
     _iter: AsyncIterator[str]
+    _model_name: str
     _timestamp: datetime = field(default_factory=_utils.now_utc, init=False)
     _buffer: list[str] = field(default_factory=list, init=False)
 
@@ -199,6 +200,9 @@ class FunctionStreamTextResponse(StreamTextResponse):
     def usage(self) -> result.Usage:
         return result.Usage()
 
+    def model_name(self) -> str:
+        return self._model_name
+
     def timestamp(self) -> datetime:
         return self._timestamp
 
@@ -209,6 +213,7 @@ class FunctionStreamStructuredResponse(StreamStructuredResponse):
 
     _next: DeltaToolCalls | None
     _iter: AsyncIterator[DeltaToolCalls]
+    _model_name: str
     _delta_tool_calls: dict[int, DeltaToolCall] = field(default_factory=dict)
     _timestamp: datetime = field(default_factory=_utils.now_utc)
 
@@ -232,10 +237,13 @@ class FunctionStreamStructuredResponse(StreamStructuredResponse):
             if c.name is not None and c.json_args is not None:
                 calls.append(ToolCallPart.from_raw_args(c.name, c.json_args))
 
-        return ModelResponse(calls, timestamp=self._timestamp)
+        return ModelResponse(calls, model_name=self._model_name, timestamp=self._timestamp)
 
     def usage(self) -> result.Usage:
         return _estimate_usage([self.get()])
+
+    def model_name(self) -> str:
+        return self._model_name
 
     def timestamp(self) -> datetime:
         return self._timestamp

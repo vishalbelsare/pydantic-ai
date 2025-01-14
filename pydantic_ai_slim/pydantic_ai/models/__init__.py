@@ -14,10 +14,8 @@ from typing import TYPE_CHECKING, Literal
 
 import httpx
 
-from pydantic_ai.messages import StreamedResponse
-
 from ..exceptions import UserError
-from ..messages import ModelMessage, ModelResponse
+from ..messages import ModelMessage, ModelResponse, StreamedResponse
 from ..settings import ModelSettings
 from ..usage import Usage
 

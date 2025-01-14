@@ -10,11 +10,10 @@ import pydantic
 import pydantic_core
 from typing_extensions import Self, assert_never
 
-from pydantic_ai._parts_manager import ModelResponsePartsManager
-from pydantic_ai.usage import Usage
-
+from ._parts_manager import ModelResponsePartsManager
 from ._utils import now_utc as _now_utc
 from .exceptions import UnexpectedModelBehavior
+from .usage import Usage
 
 
 @dataclass

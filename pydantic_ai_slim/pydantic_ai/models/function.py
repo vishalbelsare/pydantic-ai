@@ -19,6 +19,7 @@ from ..messages import (
     ModelResponse,
     ModelResponseStreamEvent,
     RetryPromptPart,
+    StreamedResponse,
     SystemPromptPart,
     TextPart,
     ToolCallPart,
@@ -27,7 +28,7 @@ from ..messages import (
 )
 from ..settings import ModelSettings
 from ..tools import ToolDefinition
-from . import AgentModel, Model, StreamedResponse
+from . import AgentModel, Model
 
 
 @dataclass(init=False)

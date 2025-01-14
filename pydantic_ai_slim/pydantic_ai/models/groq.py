@@ -19,6 +19,7 @@ from ..messages import (
     ModelResponsePart,
     ModelResponseStreamEvent,
     RetryPromptPart,
+    StreamedResponse,
     SystemPromptPart,
     TextPart,
     ToolCallPart,
@@ -30,7 +31,6 @@ from ..tools import ToolDefinition
 from . import (
     AgentModel,
     Model,
-    StreamedResponse,
     cached_async_http_client,
     check_allow_model_requests,
 )

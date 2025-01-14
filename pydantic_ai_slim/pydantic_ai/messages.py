@@ -1,5 +1,7 @@
 from __future__ import annotations as _annotations
 
+from abc import ABC, abstractmethod
+from collections.abc import AsyncIterator
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from typing import Annotated, Any, Literal, Union, cast, overload
@@ -7,6 +9,9 @@ from typing import Annotated, Any, Literal, Union, cast, overload
 import pydantic
 import pydantic_core
 from typing_extensions import Self, assert_never
+
+from pydantic_ai._parts_manager import ModelResponsePartsManager
+from pydantic_ai.usage import Usage
 
 from ._utils import now_utc as _now_utc
 from .exceptions import UnexpectedModelBehavior
@@ -477,3 +482,42 @@ class PartDeltaEvent:
 
 ModelResponseStreamEvent = Annotated[Union[PartStartEvent, PartDeltaEvent], pydantic.Discriminator('event_kind')]
 """An event in the model response stream, either starting a new part or applying a delta to an existing one."""
+
+
+@dataclass
+class StreamedResponse(ABC):
+    """Streamed response from an LLM when calling a tool."""
+
+    _usage: Usage = field(default_factory=Usage, init=False)
+    _parts_manager: ModelResponsePartsManager = field(default_factory=ModelResponsePartsManager, init=False)
+    _event_iterator: AsyncIterator[ModelResponseStreamEvent] | None = field(default=None, init=False)
+
+    def __aiter__(self) -> AsyncIterator[ModelResponseStreamEvent]:
+        """Stream the response as an async iterable of [`ModelResponseStreamEvent`][pydantic_ai.messages.ModelResponseStreamEvent]s."""
+        if self._event_iterator is None:
+            self._event_iterator = self._get_event_iterator()
+        return self._event_iterator
+
+    @abstractmethod
+    async def _get_event_iterator(self) -> AsyncIterator[ModelResponseStreamEvent]:
+        """Return an async iterator of [`ModelResponseStreamEvent`][pydantic_ai.messages.ModelResponseStreamEvent]s.
+
+        This method should be implemented by subclasses to translate the vendor-specific stream of events into
+        pydantic_ai-format events.
+        """
+        raise NotImplementedError()
+        # noinspection PyUnreachableCode
+        yield
+
+    def get(self) -> ModelResponse:
+        """Build a [`ModelResponse`][pydantic_ai.messages.ModelResponse] from the data received from the stream so far."""
+        return ModelResponse(parts=self._parts_manager.get_parts(), timestamp=self.timestamp())
+
+    def usage(self) -> Usage:
+        """Get the usage of the response so far. This will not be the final usage until the stream is exhausted."""
+        return self._usage
+
+    @abstractmethod
+    def timestamp(self) -> datetime:
+        """Get the timestamp of the response."""
+        raise NotImplementedError()

@@ -10,7 +10,7 @@ from typing import Generic, Union, cast
 import logfire_api
 from typing_extensions import TypeVar
 
-from . import _result, _utils, exceptions, messages as _messages, models
+from . import _result, _utils, exceptions, messages as _messages
 from .tools import AgentDeps, RunContext
 from .usage import Usage, UsageLimits
 
@@ -169,7 +169,7 @@ class StreamedRunResult(_BaseRunResult[ResultData], Generic[AgentDeps, ResultDat
     """Result of a streamed run that returns structured data via a tool call."""
 
     _usage_limits: UsageLimits | None
-    _stream_response: models.StreamedResponse
+    _stream_response: _messages.StreamedResponse
     _result_schema: _result.ResultSchema[ResultData] | None
     _run_ctx: RunContext[AgentDeps]
     _result_validators: list[_result.ResultValidator[AgentDeps, ResultData]]

@@ -19,6 +19,7 @@ from ..messages import (
     ModelResponsePart,
     ModelResponseStreamEvent,
     RetryPromptPart,
+    StreamedResponse,
     TextPart,
     ToolCallPart,
     ToolReturnPart,
@@ -29,7 +30,6 @@ from ..tools import ToolDefinition
 from . import (
     AgentModel,
     Model,
-    StreamedResponse,
 )
 from .function import _estimate_string_tokens, _estimate_usage  # pyright: ignore[reportPrivateUsage]
 

@@ -1207,10 +1207,12 @@ class Agent(Generic[AgentDeps, ResultData]):
 
     async def _handle_streamed_response(
         self,
-        streamed_response: models.StreamedResponse,
+        streamed_response: _messages.StreamedResponse,
         run_context: RunContext[AgentDeps],
         result_schema: _result.ResultSchema[RunResultData] | None,
-    ) -> _MarkFinalResult[models.StreamedResponse] | tuple[_messages.ModelResponse, list[_messages.ModelRequestPart]]:
+    ) -> (
+        _MarkFinalResult[_messages.StreamedResponse] | tuple[_messages.ModelResponse, list[_messages.ModelRequestPart]]
+    ):
         """Process a streamed response from the model.
 
         Returns:

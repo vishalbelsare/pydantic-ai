@@ -2600,7 +2600,7 @@ requires-dist = [
     { name = "logfire-api", specifier = ">=1.2.0" },
     { name = "mistralai", marker = "extra == 'mistral'", specifier = ">=1.2.5" },
     { name = "openai", marker = "extra == 'openai'", specifier = ">=1.54.3" },
-    { name = "pydantic", specifier = ">=2.10" },
+    { name = "pydantic", specifier = ">=2.9" },
     { name = "pydantic-graph", marker = "extra == 'graph'", editable = "pydantic_graph" },
     { name = "requests", marker = "extra == 'vertexai'", specifier = ">=2.32.3" },
 ]
@@ -2730,7 +2730,7 @@ dependencies = [
 requires-dist = [
     { name = "httpx", specifier = ">=0.27.2" },
     { name = "logfire-api", specifier = ">=1.2.0" },
-    { name = "pydantic", specifier = ">=2.10" },
+    { name = "pydantic", specifier = ">=2.9" },
 ]
 
 [[package]]

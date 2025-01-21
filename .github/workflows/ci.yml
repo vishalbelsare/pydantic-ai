@@ -232,6 +232,6 @@ jobs:
       - run: uv build --all-packages
 
       - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
+        uses: pypa/gh-action-pypi-publish@v1
         with:
           skip-existing: true

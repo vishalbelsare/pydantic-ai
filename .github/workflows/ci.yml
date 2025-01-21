@@ -142,6 +142,10 @@ jobs:
         env:
           COVERAGE_FILE: coverage/.coverage.${{ runner.os }}-py${{ matrix.python-version }}-all-extras
 
+      - run: uv run --resolution lowest-direct coverage run -m pytest
+        env:
+          COVERAGE_FILE: coverage/.coverage.${{ runner.os }}-py${{ matrix.python-version }}-resolution-lowest-direct
+
       - run: uv run --all-extras python tests/import_examples.py
 
       - name: store coverage files

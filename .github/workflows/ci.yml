@@ -142,8 +142,9 @@ jobs:
         env:
           COVERAGE_FILE: coverage/.coverage.${{ runner.os }}-py${{ matrix.python-version }}-all-extras
 
-      - run: uv run --resolution lowest-direct python -c 'import pydantic;print(pydantic.__version__)'
-      - run: uv run --resolution lowest-direct coverage run -m pytest
+      - run: |
+          unset UV_FROZEN
+          uv run --resolution lowest-direct coverage run -m pytest
         env:
           COVERAGE_FILE: coverage/.coverage.${{ runner.os }}-py${{ matrix.python-version }}-resolution-lowest-direct
 

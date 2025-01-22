@@ -3,6 +3,7 @@ from __future__ import annotations as _annotations
 import asyncio
 from collections.abc import AsyncIterator
 
+import pydantic
 import pytest
 from inline_snapshot import snapshot
 
@@ -76,3 +77,8 @@ async def test_peekable_async_stream(peek_first: bool):
     assert await peekable_async_stream.is_exhausted()
     assert await peekable_async_stream.peek() is UNSET
     assert items == [1, 2, 3]
+
+
+def test_package_versions(capsys: pytest.CaptureFixture[str]):
+    with capsys.disabled():
+        print('\npydantic version:', pydantic.__version__)

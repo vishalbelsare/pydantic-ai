@@ -128,7 +128,7 @@ class VertexAIModel(Model):
 
     @property
     def model_attributes(self) -> ModelAttributes:
-        return {'model_name': self.model_name}
+        return {'model_name': self.model_name, 'base_url': str(self.http_client.base_url)}
 
     async def ainit(self) -> tuple[str, BearerTokenAuth]:
         """Initialize the model, setting the URL and auth.

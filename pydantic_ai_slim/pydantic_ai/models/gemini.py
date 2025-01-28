@@ -119,7 +119,7 @@ class GeminiModel(Model):
 
     @property
     def model_attributes(self) -> ModelAttributes:
-        return {'model_name': self.model_name}
+        return {'model_name': self.model_name, 'base_url': str(self.http_client.base_url)}
 
 
 class AuthProtocol(Protocol):

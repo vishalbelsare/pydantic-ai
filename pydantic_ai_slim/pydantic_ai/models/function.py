@@ -27,7 +27,7 @@ from ..messages import (
 )
 from ..settings import ModelSettings
 from ..tools import ToolDefinition
-from . import AgentModel, Model, StreamedResponse
+from . import AgentModel, Model, ModelAttributes, StreamedResponse
 
 
 @dataclass(init=False)
@@ -63,6 +63,10 @@ class FunctionModel(Model):
         self.function = function
         self.stream_function = stream_function
 
+        function_name = self.function.__name__ if self.function is not None else ''
+        stream_function_name = self.stream_function.__name__ if self.stream_function is not None else ''
+        self.model_name = f'function:{function_name}:{stream_function_name}'
+
     async def agent_model(
         self,
         *,
@@ -76,10 +80,9 @@ class FunctionModel(Model):
             AgentInfo(function_tools, allow_text_result, result_tools, None),
         )
 
-    def name(self) -> str:
-        function_name = self.function.__name__ if self.function is not None else ''
-        stream_function_name = self.stream_function.__name__ if self.stream_function is not None else ''
-        return f'function:{function_name}:{stream_function_name}'
+    @property
+    def model_attributes(self) -> ModelAttributes:
+        return {'model_name': self.model_name}
 
 
 @dataclass(frozen=True)

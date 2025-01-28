@@ -33,7 +33,7 @@ def test_init():
     m = OpenAIModel('llama3.2', api_key='ollama', base_url='foobar/')
     assert m.client.api_key == 'ollama'
     assert m.client.base_url == 'foobar/'
-    assert m.name() == 'ollama:llama3.2'
+    assert m.model_name == 'llama3.2'
 
 
 async def test_request_simple_success(allow_model_requests: None):

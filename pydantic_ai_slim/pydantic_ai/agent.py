@@ -278,7 +278,7 @@ class Agent(Generic[AgentDepsT, ResultDataT]):
             '{agent_name} run {prompt=}',
             prompt=user_prompt,
             agent=self,
-            model_name=model_used.name(),
+            model_attributes=model_used.model_attributes,
             agent_name=self.name or 'agent',
         ) as run_span:
             run_context = RunContext(deps, model_used, usage or _usage.Usage(), user_prompt)
@@ -509,7 +509,7 @@ class Agent(Generic[AgentDepsT, ResultDataT]):
             '{agent_name} run stream {prompt=}',
             prompt=user_prompt,
             agent=self,
-            model_name=model_used.name(),
+            model_attributes=model_used.model_attributes,
             agent_name=self.name or 'agent',
         ) as run_span:
             run_context = RunContext(deps, model_used, usage or _usage.Usage(), user_prompt)

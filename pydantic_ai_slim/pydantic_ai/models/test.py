@@ -28,6 +28,7 @@ from ..tools import ToolDefinition
 from . import (
     AgentModel,
     Model,
+    ModelAttributes,
     StreamedResponse,
 )
 from .function import _estimate_string_tokens, _estimate_usage  # pyright: ignore[reportPrivateUsage]
@@ -86,6 +87,7 @@ class TestModel(Model):
 
     This is set when the model is called, so will reflect the result tools from the last step of the last run.
     """
+    model_name: str = 'test-model'
 
     async def agent_model(
         self,
@@ -126,8 +128,9 @@ class TestModel(Model):
 
         return TestAgentModel(tool_calls, result, result_tools, self.seed)
 
-    def name(self) -> str:
-        return 'test-model'
+    @property
+    def model_attributes(self) -> ModelAttributes:
+        return {'model_name': self.model_name}
 
 
 @dataclass

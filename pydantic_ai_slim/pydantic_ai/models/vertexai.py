@@ -10,7 +10,7 @@ from httpx import AsyncClient as AsyncHTTPClient
 from .._utils import run_in_executor
 from ..exceptions import UserError
 from ..tools import ToolDefinition
-from . import Model, cached_async_http_client, check_allow_model_requests
+from . import Model, ModelAttributes, cached_async_http_client, check_allow_model_requests
 from .gemini import GeminiAgentModel, GeminiModelName
 
 try:
@@ -126,6 +126,10 @@ class VertexAIModel(Model):
             result_tools=result_tools,
         )
 
+    @property
+    def model_attributes(self) -> ModelAttributes:
+        return {'model_name': self.model_name}
+
     async def ainit(self) -> tuple[str, BearerTokenAuth]:
         """Initialize the model, setting the URL and auth.
 
@@ -163,9 +167,6 @@ class VertexAIModel(Model):
         )
         self.auth = auth = BearerTokenAuth(creds)
         return url, auth
-
-    def name(self) -> str:
-        return f'google-vertex:{self.model_name}'
 
 
 # pyright: reportUnknownMemberType=false

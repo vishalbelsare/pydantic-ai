@@ -54,15 +54,14 @@ def test_init():
     m = OpenAIModel('gpt-4o', api_key='foobar')
     assert str(m.client.base_url) == 'https://api.openai.com/v1/'
     assert m.client.api_key == 'foobar'
-    assert m.name() == 'openai:gpt-4o'
+    assert m.model_name == 'gpt-4o'
 
 
 def test_init_with_base_url():
     m = OpenAIModel('gpt-4o', base_url='https://example.com/v1', api_key='foobar')
     assert str(m.client.base_url) == 'https://example.com/v1/'
     assert m.client.api_key == 'foobar'
-    assert m.name() == 'openai:gpt-4o'
-    m.name()
+    assert m.model_name == 'gpt-4o'
 
 
 @dataclass
@@ -71,6 +70,7 @@ class MockOpenAI:
     stream: list[chat.ChatCompletionChunk] | list[list[chat.ChatCompletionChunk]] | None = None
     index: int = 0
     chat_completion_kwargs: list[dict[str, Any]] = field(default_factory=list)
+    base_url: str = 'test-base-url'
 
     @cached_property
     def chat(self) -> Any:

@@ -33,6 +33,7 @@ from ..tools import ToolDefinition
 from . import (
     AgentModel,
     Model,
+    ModelAttributes,
     StreamedResponse,
     cached_async_http_client,
     check_allow_model_requests,
@@ -116,8 +117,9 @@ class GeminiModel(Model):
             result_tools=result_tools,
         )
 
-    def name(self) -> str:
-        return f'google-gla:{self.model_name}'
+    @property
+    def model_attributes(self) -> ModelAttributes:
+        return {'model_name': self.model_name}
 
 
 class AuthProtocol(Protocol):

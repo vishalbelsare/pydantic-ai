@@ -12,9 +12,10 @@ from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime
 from functools import cache
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING
 
 import httpx
+from typing_extensions import Literal, Required, TypedDict
 
 from .._parts_manager import ModelResponsePartsManager
 from ..exceptions import UserError
@@ -198,8 +199,13 @@ class Model(ABC):
         """
         raise NotImplementedError()
 
+    @property
     @abstractmethod
-    def name(self) -> str:
+    def model_attributes(self) -> ModelAttributes:
+        """Get the model attributes for logging and debugging.
+
+        TODO: extend with more attributes as needed for logfire integrations.
+        """
         raise NotImplementedError()
 
 
@@ -269,6 +275,19 @@ class StreamedResponse(ABC):
     def timestamp(self) -> datetime:
         """Get the timestamp of the response."""
         raise NotImplementedError()
+
+
+class ModelAttributes(TypedDict, total=False):
+    """Attributes of a model relevant for logging and debugging.
+
+    TODO: extend with more attributes as needed for logfire integrations.
+    """
+
+    model_name: Required[str]
+    """The name of the model, ex: 'gpt-4o'."""
+
+    base_url: str
+    """The base URL used for requests to the model. Relevant largely for OpenAI compatible models."""
 
 
 ALLOW_MODEL_REQUESTS = True

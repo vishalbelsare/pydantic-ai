@@ -30,6 +30,7 @@ from ..tools import ToolDefinition
 from . import (
     AgentModel,
     Model,
+    ModelAttributes,
     StreamedResponse,
     cached_async_http_client,
     check_allow_model_requests,
@@ -130,8 +131,9 @@ class GroqModel(Model):
             tools,
         )
 
-    def name(self) -> str:
-        return f'groq:{self.model_name}'
+    @property
+    def model_attributes(self) -> ModelAttributes:
+        return {'model_name': self.model_name}
 
     @staticmethod
     def _map_tool_definition(f: ToolDefinition) -> chat.ChatCompletionToolParam:

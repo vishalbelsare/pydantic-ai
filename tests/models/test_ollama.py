@@ -30,7 +30,7 @@ pytestmark = [
 
 
 def test_init():
-    m = OpenAIModel('llama3.2', base_url='foobar/')
+    m = OpenAIModel('llama3.2', api_key='ollama', base_url='foobar/')
     assert m.client.api_key == 'ollama'
     assert m.client.base_url == 'foobar/'
     assert m.name() == 'ollama:llama3.2'

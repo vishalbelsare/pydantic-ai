@@ -69,6 +69,7 @@ class MockAnthropic:
     stream: list[RawMessageStreamEvent] | list[list[RawMessageStreamEvent]] | None = None
     index = 0
     chat_completion_kwargs: list[dict[str, Any]] = field(default_factory=list)
+    base_url: str = 'mock-anthropic-url'
 
     @cached_property
     def messages(self) -> Any:

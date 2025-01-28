@@ -60,6 +60,7 @@ class MockGroq:
     completions: chat.ChatCompletion | list[chat.ChatCompletion] | None = None
     stream: list[chat.ChatCompletionChunk] | list[list[chat.ChatCompletionChunk]] | None = None
     index = 0
+    base_url: str = 'https://api.openai.com/v1'
 
     @cached_property
     def chat(self) -> Any:

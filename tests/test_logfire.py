@@ -105,13 +105,14 @@ def test_logfire(get_logfire_summary: Callable[[], LogfireSummary]) -> None:
                         'agent_model_function_tools': None,
                         'agent_model_allow_text_result': None,
                         'agent_model_result_tools': None,
+                        'model_name': 'test-model',
                     },
                     'name': 'my_agent',
                     'end_strategy': 'early',
                     'model_settings': None,
                 }
             ),
-            'model_attributes': '{"model_name":"test-model"}',
+            'model_attributes': IsJson({'model_name': 'test-model'}),
             'agent_name': 'my_agent',
             'logfire.msg_template': '{agent_name} run {prompt=}',
             'logfire.msg': 'my_agent run prompt=Hello',
@@ -172,7 +173,7 @@ def test_logfire(get_logfire_summary: Callable[[], LogfireSummary]) -> None:
                                 'model': {'type': 'object', 'title': 'TestModel', 'x-python-datatype': 'dataclass'}
                             },
                         },
-                        'model_name': {},
+                        'model_attributes': {'type': 'object'},
                         'agent_name': {},
                         'all_messages': {
                             'type': 'array',

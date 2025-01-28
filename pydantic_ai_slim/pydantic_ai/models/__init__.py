@@ -202,10 +202,7 @@ class Model(ABC):
     @property
     @abstractmethod
     def model_attributes(self) -> ModelAttributes:
-        """Get the model attributes for logging and debugging.
-
-        TODO: extend with more attributes as needed for logfire integrations.
-        """
+        """Get the model attributes for logging and debugging."""
         raise NotImplementedError()
 
 
@@ -287,7 +284,9 @@ class ModelAttributes(TypedDict, total=False):
     """The name of the model, ex: 'gpt-4o'."""
 
     base_url: str
-    """The base URL used for requests to the model. Relevant largely for OpenAI compatible models."""
+    """The base URL used for requests to the model.
+
+    Currently relevant for OpenAI compatible models like Ollama and Deepseek."""
 
 
 ALLOW_MODEL_REQUESTS = True

@@ -163,6 +163,8 @@ KnownModelName = Literal[
     'openai:o1-mini-2024-09-12',
     'openai:o1-preview',
     'openai:o1-preview-2024-09-12',
+    'deepseek:deepseek-chat',
+    'deepseek:deepseek-reasoner',
     'test',
 ]
 """Known model names that can be used with the `model` parameter of [`Agent`][pydantic_ai.Agent].
@@ -309,7 +311,7 @@ def override_allow_model_requests(allow_model_requests: bool) -> Iterator[None]:
         ALLOW_MODEL_REQUESTS = old_value  # pyright: ignore[reportConstantRedefinition]
 
 
-def infer_model(model: Model | KnownModelName) -> Model:
+def infer_model(model: Model | KnownModelName) -> Model:  # noqa: C901
     """Infer the model from the name."""
     if isinstance(model, Model):
         return model
@@ -357,9 +359,9 @@ def infer_model(model: Model | KnownModelName) -> Model:
 
         return MistralModel(model[8:])
     elif model.startswith('ollama:'):
-        from .ollama import OllamaModel
+        from .openai import OpenAIModel
 
-        return OllamaModel(model[7:])
+        return OpenAIModel(model[7:], base_url='http://localhost:11434/v1/')
     elif model.startswith('anthropic'):
         from .anthropic import AnthropicModel
 
@@ -369,6 +371,10 @@ def infer_model(model: Model | KnownModelName) -> Model:
         from .anthropic import AnthropicModel
 
         return AnthropicModel(model)
+    elif model.startswith('deepseek:'):
+        from .openai import OpenAIModel
+
+        return OpenAIModel(model[9:], base_url='https://api.deepseek.com')
     else:
         raise UserError(f'Unknown model: {model}')
 

@@ -48,7 +48,7 @@ TEST_CASES = [
         'groq',
         'GroqModel',
     ),
-    ('OLLAMA_API_KEY', 'ollama:llama3', 'ollama:llama3', 'ollama', 'OllamaModel'),
+    ('OLLAMA_API_KEY', 'ollama:llama3', 'ollama:llama3', 'openai', 'OpenAIModel'),
     (
         'MISTRAL_API_KEY',
         'mistral:mistral-small-latest',

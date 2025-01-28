@@ -19,7 +19,7 @@ from ..conftest import IsNow, try_import
 with try_import() as imports_successful:
     from openai.types.chat.chat_completion_message import ChatCompletionMessage
 
-    from pydantic_ai.models.ollama import OllamaModel
+    from pydantic_ai.models.openai import OpenAIModel
 
     from .test_openai import MockOpenAI, completion_message
 
@@ -30,16 +30,16 @@ pytestmark = [
 
 
 def test_init():
-    m = OllamaModel('llama3.2', base_url='foobar/')
-    assert m.openai_model.client.api_key == 'ollama'
-    assert m.openai_model.client.base_url == 'foobar/'
+    m = OpenAIModel('llama3.2', base_url='foobar/')
+    assert m.client.api_key == 'ollama'
+    assert m.client.base_url == 'foobar/'
     assert m.name() == 'ollama:llama3.2'
 
 
 async def test_request_simple_success(allow_model_requests: None):
     c = completion_message(ChatCompletionMessage(content='world', role='assistant'))
     mock_client = MockOpenAI.create_mock(c)
-    m = OllamaModel('llama3.2', openai_client=mock_client, base_url=None)
+    m = OpenAIModel('llama3.2', openai_client=mock_client, base_url=None)
     agent = Agent(m)
 
     result = await agent.run('hello')

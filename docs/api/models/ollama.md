@@ -43,9 +43,9 @@ Usage(requests=1, request_tokens=57, response_tokens=8, total_tokens=65, details
 from pydantic import BaseModel
 
 from pydantic_ai import Agent
-from pydantic_ai.models.ollama import OllamaModel
+from pydantic_ai.models.openai import OpenAIModel
 
-ollama_model = OllamaModel(
+ollama_model = OpenAIModel(
     model_name='qwen2.5-coder:7b',  # (1)!
     base_url='http://192.168.1.74:11434/v1',  # (2)!
 )
@@ -70,6 +70,7 @@ Usage(requests=1, request_tokens=57, response_tokens=8, total_tokens=65, details
 1. The name of the model running on the remote server
 2. The url of the remote server
 
-See [`OllamaModel`][pydantic_ai.models.ollama.OllamaModel] for more information
+See [`OpenAIModel`][pydantic_ai.models.openai.OpenAIModel] for more information
+on how to configure the model.
 
-::: pydantic_ai.models.ollama
+::: pydantic_ai.models.openai

@@ -308,7 +308,7 @@ agent = Agent(model)
 
 ### Install
 
-To use ollama models, you need to either install [`pydantic-ai`](install.md), or install [`pydantic-ai-slim`](install.md#slim-install) with the `openai` optional group:
+To use Ollama models, you need to either install [`pydantic-ai`](install.md), or install [`pydantic-ai-slim`](install.md#slim-install) with the `openai` optional group:
 
 ```bash
 pip/uv-add 'pydantic-ai-slim[openai]'

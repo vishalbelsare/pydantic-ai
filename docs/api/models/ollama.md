@@ -72,5 +72,3 @@ Usage(requests=1, request_tokens=57, response_tokens=8, total_tokens=65, details
 
 See [`OpenAIModel`][pydantic_ai.models.openai.OpenAIModel] for more information
 on how to configure the model.
-
-::: pydantic_ai.models.openai

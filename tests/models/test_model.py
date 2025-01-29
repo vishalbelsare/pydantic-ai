@@ -49,7 +49,6 @@ TEST_CASES = [
         'GroqModel',
     ),
     ('OLLAMA_API_KEY', 'ollama:llama3', 'llama3', 'openai', 'OpenAIModel'),
-    ('DEEPSEEK_API_KEY', 'deepseek:deepseek-1.0', 'deepseek-1.0', 'openai', 'OpenAIModel'),
     (
         'MISTRAL_API_KEY',
         'mistral:mistral-small-latest',

@@ -8,7 +8,7 @@ PydanticAI is Model-agnostic and has built in support for the following model pr
 * [Groq](#groq)
 * [Mistral](#mistral)
 
-See [OpenAI-compatible models](#openai-compatible-models) for more examples on how to use models such as [OpenRouter](#openrouter), [Grok (xAI)](#grok-xai) and [DeepSeek](#deepseek) that support the OpenAI SDK.
+See [OpenAI-compatible models](#openai-compatible-models) for more examples on how to use models such as [OpenRouter](#openrouter), and [Grok (xAI)](#grok-xai) that support the OpenAI SDK.
 
 You can also [add support for other models](#implementing-custom-models).
 

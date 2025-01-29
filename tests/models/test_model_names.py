@@ -19,7 +19,7 @@ pytestmark = [
     pytest.mark.skipif(not imports_successful(), reason='some model package was not installed'),
 ]
 
-openai_compatible_prefixes = ('ollama', 'deepseek')
+openai_compatible_prefixes = 'ollama'
 
 
 def test_known_model_names():

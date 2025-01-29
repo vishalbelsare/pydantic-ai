@@ -15,7 +15,7 @@ from functools import cache
 from typing import TYPE_CHECKING
 
 import httpx
-from typing_extensions import Literal, Required, TypedDict
+from typing_extensions import Literal
 
 from .._parts_manager import ModelResponsePartsManager
 from ..exceptions import UserError
@@ -245,21 +245,6 @@ class StreamedResponse(ABC):
     def timestamp(self) -> datetime:
         """Get the timestamp of the response."""
         raise NotImplementedError()
-
-
-class ModelAttributes(TypedDict, total=False):
-    """Attributes of a model relevant for logging and debugging.
-
-    TODO: extend with more attributes as needed for logfire integrations.
-    """
-
-    model_name: Required[str]
-    """The name of the model, ex: 'gpt-4o'."""
-
-    base_url: str
-    """The base URL used for requests to the model.
-
-    Currently relevant for OpenAI compatible models like Ollama and Deepseek."""
 
 
 ALLOW_MODEL_REQUESTS = True

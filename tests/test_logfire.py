@@ -172,7 +172,6 @@ def test_logfire(get_logfire_summary: Callable[[], LogfireSummary]) -> None:
                                 'model': {'type': 'object', 'title': 'TestModel', 'x-python-datatype': 'dataclass'}
                             },
                         },
-                        'model_attributes': {'type': 'object'},
                         'agent_name': {},
                         'all_messages': {
                             'type': 'array',

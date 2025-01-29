@@ -27,7 +27,6 @@ from ..tools import ToolDefinition
 from . import (
     AgentModel,
     Model,
-    ModelAttributes,
     check_allow_model_requests,
 )
 
@@ -132,10 +131,6 @@ class CohereModel(Model):
             allow_text_result,
             tools,
         )
-
-    @property
-    def model_attributes(self) -> ModelAttributes:
-        return {'model_name': self.model_name}
 
     @staticmethod
     def _map_tool_definition(f: ToolDefinition) -> ToolV2:

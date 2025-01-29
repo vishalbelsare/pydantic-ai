@@ -28,7 +28,6 @@ from ..tools import ToolDefinition
 from . import (
     AgentModel,
     Model,
-    ModelAttributes,
     StreamedResponse,
 )
 from .function import _estimate_string_tokens, _estimate_usage  # pyright: ignore[reportPrivateUsage]
@@ -127,10 +126,6 @@ class TestModel(Model):
             result = _TextResult(None)
 
         return TestAgentModel(tool_calls, result, result_tools, self.seed)
-
-    @property
-    def model_attributes(self) -> ModelAttributes:
-        return {'model_name': self.model_name}
 
 
 @dataclass

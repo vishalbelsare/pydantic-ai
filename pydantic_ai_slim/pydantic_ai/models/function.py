@@ -27,7 +27,7 @@ from ..messages import (
 )
 from ..settings import ModelSettings
 from ..tools import ToolDefinition
-from . import AgentModel, Model, ModelAttributes, StreamedResponse
+from . import AgentModel, Model, StreamedResponse
 
 
 @dataclass(init=False)
@@ -79,10 +79,6 @@ class FunctionModel(Model):
             self.stream_function,
             AgentInfo(function_tools, allow_text_result, result_tools, None),
         )
-
-    @property
-    def model_attributes(self) -> ModelAttributes:
-        return {'model_name': self.model_name}
 
 
 @dataclass(frozen=True)

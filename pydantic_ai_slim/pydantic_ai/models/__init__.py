@@ -178,12 +178,6 @@ class Model(ABC):
         """
         raise NotImplementedError()
 
-    @property
-    @abstractmethod
-    def model_attributes(self) -> ModelAttributes:
-        """Get the model attributes for logging and debugging."""
-        raise NotImplementedError()
-
 
 class AgentModel(ABC):
     """Model configured for each step of an Agent run."""

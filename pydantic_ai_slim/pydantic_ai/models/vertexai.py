@@ -10,7 +10,7 @@ from httpx import AsyncClient as AsyncHTTPClient
 from .._utils import run_in_executor
 from ..exceptions import UserError
 from ..tools import ToolDefinition
-from . import Model, ModelAttributes, cached_async_http_client, check_allow_model_requests
+from . import Model, cached_async_http_client, check_allow_model_requests
 from .gemini import GeminiAgentModel, GeminiModelName
 
 try:
@@ -125,10 +125,6 @@ class VertexAIModel(Model):
             allow_text_result=allow_text_result,
             result_tools=result_tools,
         )
-
-    @property
-    def model_attributes(self) -> ModelAttributes:
-        return {'model_name': self.model_name, 'base_url': str(self.http_client.base_url)}
 
     async def ainit(self) -> tuple[str, BearerTokenAuth]:
         """Initialize the model, setting the URL and auth.

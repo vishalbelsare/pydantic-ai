@@ -112,7 +112,6 @@ def test_logfire(get_logfire_summary: Callable[[], LogfireSummary]) -> None:
                     'model_settings': None,
                 }
             ),
-            'model_attributes': IsJson({'model_name': 'test-model'}),
             'agent_name': 'my_agent',
             'logfire.msg_template': '{agent_name} run {prompt=}',
             'logfire.msg': 'my_agent run prompt=Hello',

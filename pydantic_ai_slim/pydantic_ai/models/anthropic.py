@@ -30,7 +30,6 @@ from ..tools import ToolDefinition
 from . import (
     AgentModel,
     Model,
-    ModelAttributes,
     StreamedResponse,
     cached_async_http_client,
     check_allow_model_requests,
@@ -152,10 +151,6 @@ class AnthropicModel(Model):
             allow_text_result,
             tools,
         )
-
-    @property
-    def model_attributes(self) -> ModelAttributes:
-        return {'model_name': self.model_name, 'base_url': str(self.client.base_url)}
 
     @staticmethod
     def _map_tool_definition(f: ToolDefinition) -> ToolParam:

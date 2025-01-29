@@ -33,7 +33,6 @@ from ..tools import ToolDefinition
 from . import (
     AgentModel,
     Model,
-    ModelAttributes,
     StreamedResponse,
     cached_async_http_client,
     check_allow_model_requests,
@@ -145,10 +144,6 @@ class MistralModel(Model):
             function_tools,
             result_tools,
         )
-
-    @property
-    def model_attributes(self) -> ModelAttributes:
-        return {'model_name': self.model_name}
 
 
 @dataclass

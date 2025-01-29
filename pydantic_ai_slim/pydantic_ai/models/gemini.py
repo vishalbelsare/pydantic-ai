@@ -33,7 +33,6 @@ from ..tools import ToolDefinition
 from . import (
     AgentModel,
     Model,
-    ModelAttributes,
     StreamedResponse,
     cached_async_http_client,
     check_allow_model_requests,
@@ -116,10 +115,6 @@ class GeminiModel(Model):
             allow_text_result=allow_text_result,
             result_tools=result_tools,
         )
-
-    @property
-    def model_attributes(self) -> ModelAttributes:
-        return {'model_name': self.model_name, 'base_url': str(self.http_client.base_url)}
 
 
 class AuthProtocol(Protocol):

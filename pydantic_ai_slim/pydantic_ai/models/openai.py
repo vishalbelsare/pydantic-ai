@@ -187,12 +187,11 @@ class OpenAIModel(Model):
     ) -> chat.ChatCompletion | AsyncStream[ChatCompletionChunk]:
         tools = self._get_tools(agent_request_config)
 
-        openai_messages = list(chain(*(self._map_message(m) for m in messages)))
         if model_settings.get('use_structured_response_format'):
             tools = []
             result_tools = agent_request_config.result_tools
             if len(result_tools) == 0:
-                raise ValueError('structured_output requires at least one result tool')
+                raise ValueError('structured response_format requires at least one result tool')
             elif len(result_tools) == 1:
                 json_schema = agent_request_config.result_tools[0].parameters_json_schema
             else:
@@ -208,6 +207,8 @@ class OpenAIModel(Model):
             tool_choice = 'required'
         else:
             tool_choice = 'auto'
+
+        openai_messages = list(chain(*(self._map_message(m) for m in messages)))
 
         return await self.client.chat.completions.create(
             model=self.model_name,

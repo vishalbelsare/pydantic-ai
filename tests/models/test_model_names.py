@@ -19,8 +19,6 @@ pytestmark = [
     pytest.mark.skipif(not imports_successful(), reason='some model package was not installed'),
 ]
 
-openai_compatible_prefixes = 'ollama'
-
 
 def test_known_model_names():
     def get_model_names(model_name_type: Any) -> Iterator[str]:
@@ -48,6 +46,5 @@ def test_known_model_names():
         anthropic_names + cohere_names + google_names + groq_names + mistral_names + openai_names + extra_names
     )
 
-    known_model_names = sorted([x for x in get_args(KnownModelName) if not x.startswith(openai_compatible_prefixes)])
-
+    known_model_names = sorted(get_args(KnownModelName))
     assert generated_names == known_model_names

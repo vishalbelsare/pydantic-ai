@@ -108,25 +108,6 @@ KnownModelName = Literal[
     'o1-mini-2024-09-12',
     'o1-preview',
     'o1-preview-2024-09-12',
-    'ollama:codellama',
-    'ollama:deepseek-r1',
-    'ollama:gemma',
-    'ollama:gemma2',
-    'ollama:llama3',
-    'ollama:llama3.1',
-    'ollama:llama3.2',
-    'ollama:llama3.2-vision',
-    'ollama:llama3.3',
-    'ollama:mistral',
-    'ollama:mistral-nemo',
-    'ollama:mixtral',
-    'ollama:phi3',
-    'ollama:phi4',
-    'ollama:qwen',
-    'ollama:qwen2',
-    'ollama:qwen2.5',
-    'ollama:qwq',
-    'ollama:starcoder2',
     'openai:chatgpt-4o-latest',
     'openai:gpt-3.5-turbo',
     'openai:gpt-3.5-turbo-0125',
@@ -374,10 +355,6 @@ def infer_model(model: Model | KnownModelName) -> Model:
         from .mistral import MistralModel
 
         return MistralModel(model[8:])
-    elif model.startswith('ollama:'):
-        from .openai import OpenAIModel
-
-        return OpenAIModel(model[7:], base_url='http://localhost:11434/v1/')
     elif model.startswith('anthropic'):
         from .anthropic import AnthropicModel
 

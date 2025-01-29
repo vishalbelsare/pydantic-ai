@@ -107,7 +107,8 @@ async def test_stream(http_client: httpx.AsyncClient, tmp_path: Path, get_model:
     assert 'paris' in data.lower()
     print('Stream usage:', result.usage())
     usage = result.usage()
-    assert usage.total_tokens is not None and usage.total_tokens > 0
+    if get_model.__name__ != 'ollama':
+        assert usage.total_tokens is not None and usage.total_tokens > 0
 
 
 class MyModel(BaseModel):

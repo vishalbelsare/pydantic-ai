@@ -58,7 +58,7 @@ Nodes, which are generally [`dataclass`es][dataclasses.dataclass], generally con
 Nodes are generic in:
 
 * **deps**, which must have the same type as the deps of the graph they're included in, [`DepsT`][pydantic_graph.nodes.DepsT] has a default of `None`, so if you're not using deps you can omit this generic parameter, see [dependency injection](#dependency-injection) for more information
-* **graph return type** — this only applies if the node returns [`End`][pydantic_graph.nodes.End]. [`RunEndT`][pydantic_graph.nodes.RunEndT] has a default of [Never][typing.Never] so this generic parameter can be omitted if the node doesn't return `End`, but must be included if it does.
+* **graph return type** — this only applies if the node returns [`End`][pydantic_graph.nodes.End]. [`RunEndT`][pydantic_graph.nodes.RunEndT] has a default of [`Never`][typing.Never] so this generic parameter can be omitted if the node doesn't return [`End`][pydantic_graph.nodes.End], but must be included if it does.
 
 Here's an example of a start or intermediate node in a graph — it can't end the run as it doesn't return [`End`][pydantic_graph.nodes.End]:
 
@@ -69,21 +69,21 @@ from pydantic_graph import BaseNode, GraphRunContext
 
 
 @dataclass
-class MyNode(BaseNode[MyState]):  # (1)!
+class MyNode(BaseNode):  # (1)!
     foo: int  # (2)!
 
     async def run(
         self,
-        ctx: GraphRunContext[MyState],  # (3)!
+        ctx: GraphRunContext,  # (3)!
     ) -> AnotherNode:  # (4)!
         ...
         return AnotherNode()
 ```
 
-1. State in this example is `MyState` (not shown), hence `BaseNode` is parameterized with `MyState`. This node can't end the run, so the `RunEndT` generic parameter is omitted and defaults to `Never`.
+1. This graph doesn't take deps, so the [`DepsT`][pydantic_graph.nodes.DepsT] generic is omitted (and defaults to `None`), this node can't end the run, so the [`RunEndT`][pydantic_graph.nodes.RunEndT] generic parameter is omitted (and defaults to [`Never`][typing.Never]) — hence both generics can be omitted when inheriting from [`BaseNode`][pydantic_graph.nodes.BaseNode].
 2. `MyNode` is a dataclass and has a single field `foo`, an `int`.
-3. The `run` method takes a `GraphRunContext` parameter, again parameterized with state `MyState`.
-4. The return type of the `run` method is `AnotherNode` (not shown), this is used to determine the outgoing edges of the node.
+3. The [`run`][pydantic_graph.nodes.BaseNode.run] method takes a [`GraphRunContext`][pydantic_graph.nodes.GraphRunContext] parameter.
+4. The return type of the [`run`][pydantic_graph.nodes.BaseNode.run] method is `AnotherNode` (not shown), this is used to determine the outgoing edges of the node.
 
 We could extend `MyNode` to optionally end the run if `foo` is divisible by 5:
 
@@ -94,12 +94,12 @@ from pydantic_graph import BaseNode, End, GraphRunContext
 
 
 @dataclass
-class MyNode(BaseNode[MyState, None, int]):  # (1)!
+class MyNode(BaseNode[None, int]):  # (1)!
     foo: int
 
     async def run(
         self,
-        ctx: GraphRunContext[MyState],
+        ctx: GraphRunContext,
     ) -> AnotherNode | End[int]:  # (2)!
         if self.foo % 5 == 0:
             return End(self.foo)
@@ -107,8 +107,8 @@ class MyNode(BaseNode[MyState, None, int]):  # (1)!
             return AnotherNode()
 ```
 
-1. We parameterize the node with the return type (`int` in this case) as well as state. Because generic parameters are positional-only, we have to include `None` as the second parameter representing deps.
-2. The return type of the `run` method is now a union of `AnotherNode` and `End[int]`, this allows the node to end the run if `foo` is divisible by 5.
+1. We parameterize the node with the return type (`int` in this case) as well as state. Because generic parameters are positional-only, we have to include `None` as the first parameter representing deps.
+2. The return type of the `run` method is now a union of `AnotherNode` and [`End[int]`][pydantic_graph.nodes.End], this allows the node to end the run if `foo` is divisible by 5.
 
 ### Graph
 
@@ -661,7 +661,7 @@ As with PydanticAI, `pydantic-graph` supports dependency injection via a generic
 
 As an example of dependency injection, let's modify the `DivisibleBy5` example [above](#graph) to use a [`ProcessPoolExecutor`][concurrent.futures.ProcessPoolExecutor] to run the compute load in a separate process (this is a contrived example, `ProcessPoolExecutor` wouldn't actually improve performance in this example):
 
-```py {title="deps_example.py" py="3.10" test="skip" hl_lines="4 10-12 35-37 48-49"}
+```py {title="deps_example.py" py="3.10" test="skip" hl_lines="4 10-12 35-38 49-50"}
 from __future__ import annotations
 
 import asyncio
@@ -677,12 +677,12 @@ class GraphDeps:
 
 
 @dataclass
-class DivisibleBy5(BaseNode[None, int]):
+class DivisibleBy5(BaseNode[GraphDeps, int]):
     foo: int
 
     async def run(
         self,
-        ctx: GraphRunContext,
+        ctx: GraphRunContext[GraphDeps],
     ) -> Increment | End[int]:
         if self.foo % 5 == 0:
             return End(self.foo)
@@ -694,7 +694,7 @@ class DivisibleBy5(BaseNode[None, int]):
 class Increment(BaseNode):
     foo: int
 
-    async def run(self, ctx: GraphRunContext) -> DivisibleBy5:
+    async def run(self, ctx: GraphRunContext[GraphDeps]) -> DivisibleBy5:
         loop = asyncio.get_running_loop()
         compute_result = await loop.run_in_executor(
             ctx.deps.executor,

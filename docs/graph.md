@@ -199,14 +199,14 @@ display(Image(fives_graph.mermaid_image(start_node=DivisibleBy5)))
 
 In `pydantic-graph`, the "state" of the finite state machine is encapsulated in the node instances themselves. This is in contrast with some other state machine libraries where the state exists as a separate object external to the nodes.
 
-Note that in many scenarios, the state of the overall system may contain data well beyond the necessary inputs and outputs for the execution of any individual node. In these cases, the solution is to include a consistent `state` object between all nodes, and include mutated versions as the input to the next node.
+Note that in many scenarios, the state of the overall system may contain data well beyond the necessary inputs and outputs for the execution of any individual node. In these cases, the solution is to include a consistent `state` attribute on all nodes of the graph, and pass mutated versions of this state as an input to each subsequent node.
 
 If you think of Graphs as an automotive production line, then this state is analogous to the vehicle being passed along the line and built up by each node as the graph is run.
 
 In the future, we intend to extend `pydantic-graph` to provide persistence by recording the result of running each node; see [#695](https://github.com/pydantic/pydantic-ai/issues/695).
 
 !!! note "Removed State Generic"
-    Prior to `pydantic-graph` v0.23 graphs had another generic parameter, `StateT` which could to accessed via [`GraphRunContext`][pydantic_graph.nodes.GraphRunContext]. To simplify graphs and make their state easier to persist, this parameter has been removed. If you need a consistent "state" object, you should pass it as a parameter to all nodes as shown below.
+    Prior to `pydantic-graph` v0.23 graphs, had another generic parameter, `StateT`, which could be accessed via [`GraphRunContext`][pydantic_graph.nodes.GraphRunContext]. To simplify graphs and make their state easier to persist, this parameter has been removed. If you need a consistent "state" object, you should make it as a parameter to each of your nodes as shown below.
 
 Here's an example of a graph which represents a vending machine where the user may insert coins and select a product to purchase.
 

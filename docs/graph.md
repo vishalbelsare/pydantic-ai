@@ -199,7 +199,7 @@ display(Image(fives_graph.mermaid_image(start_node=DivisibleBy5)))
 
 The "state" of a finite state machine is encapsulate in which node is currently running.
 
-In many scenarios however, the current node is alone is not sufficient to fully define the state of the sytstem. We can add more information to that state by passing data between nodes. It can sometimes be helpful to pass a consistent `state` object between all nodes, which can be mutated as nodes are run.
+In many scenarios however, the current node is alone is not sufficient to fully define the state of the system. We can add more information to that state by passing data between nodes. It can sometimes be helpful to pass a consistent `state` object between all nodes, which can be mutated as nodes are run.
 
 If you think of Graphs as an automotive production line, then your state is the vehicle being passed along the line and built up by each node as the graph is run.
 

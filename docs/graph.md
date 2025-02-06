@@ -58,7 +58,7 @@ Nodes, which are generally [`dataclass`es][dataclasses.dataclass], generally con
 Nodes are generic in:
 
 * **deps**, which must have the same type as the deps of the graph they're included in, [`DepsT`][pydantic_graph.nodes.DepsT] has a default of `None`, so if you're not using deps you can omit this generic parameter, see [dependency injection](#dependency-injection) for more information
-* **graph return type** — this only applies if the node returns [`End`][pydantic_graph.nodes.End]. [`RunEndT`][pydantic_graph.nodes.RunEndT] has a default of [`Never`][typing.Never] so this generic parameter can be omitted if the node doesn't return [`End`][pydantic_graph.nodes.End], but must be included if it does.
+* **graph return type** — this only applies if the node returns [`End`][pydantic_graph.nodes.End]. [`RunEndT`][pydantic_graph.nodes.RunEndT] has a default of [`Never`][typing.Never], so this generic parameter can be omitted if the node doesn't return [`End`][pydantic_graph.nodes.End], but must be included if it does.
 
 Here's an example of a start or intermediate node in a graph — it can't end the run as it doesn't return [`End`][pydantic_graph.nodes.End]:
 
@@ -80,10 +80,10 @@ class MyNode(BaseNode):  # (1)!
         return AnotherNode()
 ```
 
-1. This graph doesn't take deps, so the [`DepsT`][pydantic_graph.nodes.DepsT] generic is omitted (and defaults to `None`), this node can't end the run, so the [`RunEndT`][pydantic_graph.nodes.RunEndT] generic parameter is omitted (and defaults to [`Never`][typing.Never]) — hence both generics can be omitted when inheriting from [`BaseNode`][pydantic_graph.nodes.BaseNode].
+1. This graph doesn't take deps, so the [`DepsT`][pydantic_graph.nodes.DepsT] generic is omitted (and defaults to `None`). This node can't end the run, so the [`RunEndT`][pydantic_graph.nodes.RunEndT] generic parameter is omitted (and therefore defaults to [`Never`][typing.Never]). So in this case, both generics can be omitted when inheriting from [`BaseNode`][pydantic_graph.nodes.BaseNode].
 2. `MyNode` is a dataclass and has a single field `foo`, an `int`.
 3. The [`run`][pydantic_graph.nodes.BaseNode.run] method takes a [`GraphRunContext`][pydantic_graph.nodes.GraphRunContext] parameter.
-4. The return type of the [`run`][pydantic_graph.nodes.BaseNode.run] method is `AnotherNode` (not shown), this is used to determine the outgoing edges of the node.
+4. The return type of the [`run`][pydantic_graph.nodes.BaseNode.run] method is `AnotherNode` (not shown); this is used to determine the outgoing edges of the node.
 
 We could extend `MyNode` to optionally end the run if `foo` is divisible by 5:
 
@@ -107,7 +107,7 @@ class MyNode(BaseNode[None, int]):  # (1)!
             return AnotherNode()
 ```
 
-1. We parameterize the node with the return type (`int` in this case) as well as state. Because generic parameters are positional-only, we have to include `None` as the first parameter representing deps.
+1. We parameterize the node with the graph return type (`int` in this case). Because generic parameters are positional-only, we have to include `None` as the first parameter, representing the deps type.
 2. The return type of the `run` method is now a union of `AnotherNode` and [`End[int]`][pydantic_graph.nodes.End], this allows the node to end the run if `foo` is divisible by 5.
 
 ### Graph
@@ -197,13 +197,13 @@ display(Image(fives_graph.mermaid_image(start_node=DivisibleBy5)))
 
 ## Stateful Graphs
 
-The "state" of a finite state machine is encapsulate in which node is currently running.
+In `pydantic-graph`, the "state" of the finite state machine is encapsulated in the node instances themselves. This is in contrast with some other state machine libraries where the state exists as a separate object external to the nodes.
 
-In many scenarios however, the current node is alone is not sufficient to fully define the state of the system. We can add more information to that state by passing data between nodes. It can sometimes be helpful to pass a consistent `state` object between all nodes, which can be mutated as nodes are run.
+Note that in many scenarios, the state of the overall system may contain data well beyond the necessary inputs and outputs for the execution of any individual node. In these cases, the solution is to include a consistent `state` object between all nodes, and include mutated versions as the input to the next node.
 
-If you think of Graphs as an automotive production line, then your state is the vehicle being passed along the line and built up by each node as the graph is run.
+If you think of Graphs as an automotive production line, then this state is analogous to the vehicle being passed along the line and built up by each node as the graph is run.
 
-In the future, we intend to extend `pydantic-graph` to provide state persistence with the state recorded after each node is run, see [#695](https://github.com/pydantic/pydantic-ai/issues/695).
+In the future, we intend to extend `pydantic-graph` to provide persistence by recording the result of running each node; see [#695](https://github.com/pydantic/pydantic-ai/issues/695).
 
 !!! note "Removed State Generic"
     Prior to `pydantic-graph` v0.23 graphs had another generic parameter, `StateT` which could to accessed via [`GraphRunContext`][pydantic_graph.nodes.GraphRunContext]. To simplify graphs and make their state easier to persist, this parameter has been removed. If you need a consistent "state" object, you should pass it as a parameter to all nodes as shown below.

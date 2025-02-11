@@ -471,7 +471,7 @@ class FunctionToolResultEvent:
     """The result of the call to the function tool."""
     call_id: str
     """An ID used to match the result to its original call."""
-    event_kind: Literal['function_tool_result'] = field(default='function_tool_result', repr=False)
+    event_kind: Literal['function_tool_result'] = field(default='function_tool_result', init=False, repr=False)
     """Event type identifier, used as a discriminator."""
 
 

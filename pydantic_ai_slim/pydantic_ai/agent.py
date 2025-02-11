@@ -1162,7 +1162,7 @@ class AgentRun(Generic[AgentDepsT, ResultDataT]):
         return GraphRunContext(self.graph_run.state, self.graph_run.deps)
 
     def __await__(self) -> Generator[Any, Any, Self]:
-        """Run the graph until it ends, and return the final result."""
+        """Run the agent graph until it ends, and return the final result."""
 
         async def _run():
             await self.graph_run

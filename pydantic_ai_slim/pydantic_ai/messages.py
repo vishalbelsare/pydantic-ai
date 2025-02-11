@@ -454,10 +454,13 @@ class FunctionToolCallEvent:
 
     part: ToolCallPart
     """The (function) tool call to make."""
-    call_id: uuid.UUID = field(default_factory=uuid.uuid4, repr=False)
-    """An ID used to match the call to its result."""
-    event_kind: Literal['function_tool_call'] = field(default='function_tool_call', repr=False)
+    call_id: str = field(init=False)
+    """An ID used for matching details about the call to its result. If present, defaults to the part's tool_call_id."""
+    event_kind: Literal['function_tool_call'] = field(default='function_tool_call', init=False, repr=False)
     """Event type identifier, used as a discriminator."""
+
+    def __post_init__(self):
+        self.call_id = self.part.tool_call_id or str(uuid.uuid4())
 
 
 @dataclass
@@ -466,7 +469,7 @@ class FunctionToolResultEvent:
 
     result: ToolReturnPart | RetryPromptPart
     """The result of the call to the function tool."""
-    call_id: uuid.UUID = field(default_factory=uuid.uuid4, repr=False)
+    call_id: str
     """An ID used to match the result to its original call."""
     event_kind: Literal['function_tool_result'] = field(default='function_tool_result', repr=False)
     """Event type identifier, used as a discriminator."""

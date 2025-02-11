@@ -2,7 +2,6 @@ from __future__ import annotations as _annotations
 
 import asyncio
 import dataclasses
-import uuid
 from abc import ABC
 from collections.abc import AsyncIterator, Iterator
 from contextlib import asynccontextmanager, contextmanager
@@ -520,7 +519,7 @@ async def process_function_tools(
     run_context = build_run_context(ctx)
 
     calls_to_run: list[tuple[Tool[DepsT], _messages.ToolCallPart]] = []
-    call_index_to_event_id: dict[int, uuid.UUID] = {}
+    call_index_to_event_id: dict[int, str] = {}
     for call in tool_calls:
         if call.tool_name == result_tool_name and not found_used_result_tool:
             found_used_result_tool = True

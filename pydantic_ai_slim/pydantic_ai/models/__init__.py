@@ -15,7 +15,6 @@ from functools import cache
 from typing import TYPE_CHECKING
 
 import httpx
-import logfire_api
 from typing_extensions import Literal
 
 from .. import _utils, messages as _messages
@@ -27,8 +26,6 @@ from ..usage import Usage
 
 if TYPE_CHECKING:
     from ..tools import ToolDefinition
-
-_logfire = logfire_api.Logfire(otel_scope='pydantic-ai')
 
 KnownModelName = Literal[
     'anthropic:claude-3-5-haiku-latest',

@@ -12,11 +12,11 @@ from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime
 from functools import cache
-from typing import TYPE_CHECKING, Generic
+from typing import TYPE_CHECKING
 
 import httpx
 import logfire_api
-from typing_extensions import Literal, TypeVar
+from typing_extensions import Literal
 
 from .. import _utils, messages as _messages
 from .._parts_manager import ModelResponsePartsManager
@@ -166,23 +166,6 @@ KnownModelName = Literal[
 
 `KnownModelName` is provided as a concise way to specify a model.
 """
-
-ResultDataT = TypeVar('ResultDataT', covariant=True)
-
-
-@dataclass
-class MarkFinalResult(Generic[ResultDataT]):
-    """Marker class to indicate that the result is the final result.
-
-    This allows us to use `isinstance`, which wouldn't be possible if we were returning `ResultDataT` directly.
-
-    It also avoids problems in the case where the result type is itself `None`, but is set.
-    """
-
-    data: ResultDataT
-    """The final result data."""
-    tool_name: str | None
-    """Name of the final result tool, None if the result is a string."""
 
 
 @dataclass

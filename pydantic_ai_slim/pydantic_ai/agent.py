@@ -27,8 +27,7 @@ from . import (
     usage as _usage,
 )
 from ._agent_graph import EndStrategy, capture_run_messages  # imported for re-export
-from .models import MarkFinalResult
-from .result import ResultDataT, StreamedRunResult
+from .result import MarkFinalResult, ResultDataT, StreamedRunResult
 from .settings import ModelSettings, merge_model_settings
 from .tools import (
     AgentDepsT,
@@ -1041,7 +1040,7 @@ class Agent(Generic[AgentDepsT, ResultDataT]):
 
     def _build_graph(
         self, result_type: type[RunResultDataT] | None
-    ) -> Graph[_agent_graph.GraphAgentState, _agent_graph.GraphAgentDeps[AgentDepsT, Any], models.MarkFinalResult[Any]]:
+    ) -> Graph[_agent_graph.GraphAgentState, _agent_graph.GraphAgentDeps[AgentDepsT, Any], MarkFinalResult[Any]]:
         return _agent_graph.build_agent_graph(self.name, self._deps_type, result_type or self.result_type)
 
     def _prepare_result_schema(
@@ -1060,7 +1059,7 @@ class Agent(Generic[AgentDepsT, ResultDataT]):
 @dataclasses.dataclass
 class AgentRun(Generic[AgentDepsT, ResultDataT]):
     graph_run: GraphRun[
-        _agent_graph.GraphAgentState, _agent_graph.GraphAgentDeps[AgentDepsT, Any], models.MarkFinalResult[ResultDataT]
+        _agent_graph.GraphAgentState, _agent_graph.GraphAgentDeps[AgentDepsT, Any], MarkFinalResult[ResultDataT]
     ]
 
     def all_messages(self, *, result_tool_return_content: str | None = None) -> list[_messages.ModelMessage]:
@@ -1131,7 +1130,7 @@ class AgentRun(Generic[AgentDepsT, ResultDataT]):
         return self.graph_run.is_ended
 
     @property
-    def result(self) -> models.MarkFinalResult[ResultDataT]:
+    def result(self) -> MarkFinalResult[ResultDataT]:
         return self.graph_run.result
 
     @property
@@ -1147,15 +1146,15 @@ class AgentRun(Generic[AgentDepsT, ResultDataT]):
         node: BaseNode[
             _agent_graph.GraphAgentState,
             _agent_graph.GraphAgentDeps[AgentDepsT, Any],
-            models.MarkFinalResult[ResultDataT],
+            MarkFinalResult[ResultDataT],
         ],
     ) -> (
         BaseNode[
             _agent_graph.GraphAgentState,
             _agent_graph.GraphAgentDeps[AgentDepsT, Any],
-            models.MarkFinalResult[ResultDataT],
+            MarkFinalResult[ResultDataT],
         ]
-        | End[models.MarkFinalResult[ResultDataT]]
+        | End[MarkFinalResult[ResultDataT]]
     ):
         return await self.graph_run.next(node)
 
@@ -1184,9 +1183,9 @@ class AgentRun(Generic[AgentDepsT, ResultDataT]):
         BaseNode[
             _agent_graph.GraphAgentState,
             _agent_graph.GraphAgentDeps[AgentDepsT, Any],
-            models.MarkFinalResult[ResultDataT],
+            MarkFinalResult[ResultDataT],
         ]
-        | End[models.MarkFinalResult[ResultDataT]]
+        | End[MarkFinalResult[ResultDataT]]
     ]:
         return self
 
@@ -1196,9 +1195,9 @@ class AgentRun(Generic[AgentDepsT, ResultDataT]):
         BaseNode[
             _agent_graph.GraphAgentState,
             _agent_graph.GraphAgentDeps[AgentDepsT, Any],
-            models.MarkFinalResult[ResultDataT],
+            MarkFinalResult[ResultDataT],
         ]
-        | End[models.MarkFinalResult[ResultDataT]]
+        | End[MarkFinalResult[ResultDataT]]
     ):
         """Use the last returned node as the input to `Graph.next`."""
         return await self.graph_run.__anext__()

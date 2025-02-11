@@ -24,8 +24,8 @@ from . import (
     models,
     usage as _usage,
 )
-from .models import MarkFinalResult, ModelRequestParameters, StreamedResponse
-from .result import ResultDataT
+from .models import ModelRequestParameters, StreamedResponse
+from .result import MarkFinalResult, ResultDataT
 from .settings import ModelSettings, merge_model_settings
 from .tools import (
     RunContext,

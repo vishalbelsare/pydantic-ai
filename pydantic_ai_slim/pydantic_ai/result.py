@@ -291,6 +291,21 @@ class StreamedRunResult(Generic[AgentDepsT, ResultDataT]):
         await self._on_complete()
 
 
+@dataclass
+class MarkFinalResult(Generic[ResultDataT]):
+    """Marker class to indicate that the result is the final result.
+
+    This allows us to use `isinstance`, which wouldn't be possible if we were returning `ResultDataT` directly.
+
+    It also avoids problems in the case where the result type is itself `None`, but is set.
+    """
+
+    data: ResultDataT
+    """The final result data."""
+    tool_name: str | None
+    """Name of the final result tool, None if the result is a string."""
+
+
 def _get_usage_checking_stream_response(
     stream_response: AsyncIterable[_messages.ModelResponseStreamEvent],
     limits: UsageLimits | None,

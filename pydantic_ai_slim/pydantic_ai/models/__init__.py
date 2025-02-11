@@ -261,10 +261,11 @@ class StreamedResponse(ABC):
         # noinspection PyUnreachableCode
         yield
 
-    @abstractmethod
-    def timestamp(self) -> datetime:
-        """Get the timestamp of the response."""
-        raise NotImplementedError()
+    def get(self) -> ModelResponse:
+        """Build a [`ModelResponse`][pydantic_ai.messages.ModelResponse] from the data received from the stream so far."""
+        return ModelResponse(
+            parts=self._parts_manager.get_parts(), model_name=self._model_name, timestamp=self.timestamp()
+        )
 
     def model_name(self) -> str:
         """Get the model name of the response."""
@@ -274,11 +275,10 @@ class StreamedResponse(ABC):
         """Get the usage of the response so far. This will not be the final usage until the stream is exhausted."""
         return self._usage
 
-    def get(self) -> ModelResponse:
-        """Build a [`ModelResponse`][pydantic_ai.messages.ModelResponse] from the data received from the stream so far."""
-        return ModelResponse(
-            parts=self._parts_manager.get_parts(), model_name=self._model_name, timestamp=self.timestamp()
-        )
+    @abstractmethod
+    def timestamp(self) -> datetime:
+        """Get the timestamp of the response."""
+        raise NotImplementedError()
 
     async def stream_events(self) -> AsyncIterator[ModelResponseStreamEvent]:
         return self.__aiter__()

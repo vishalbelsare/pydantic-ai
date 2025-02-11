@@ -559,7 +559,8 @@ class GraphRun(Generic[StateT, DepsT, RunEndT]):
         """Note: this method behaves very similarly to an async generator's `asend` method."""
         if not self._started:
             raise exceptions.GraphRuntimeError(
-                'You must enter the GraphRun as a contextmanager before you can call `next` on it.'
+                'You must enter the GraphRun as a contextmanager (using `with ...`)'
+                ' before you can iterate over it or call `next` on it.'
             )
 
         history = self.history
@@ -611,8 +612,4 @@ class GraphRun(Generic[StateT, DepsT, RunEndT]):
         """Use the last returned node as the input to `Graph.next`."""
         if self._result:
             raise StopAsyncIteration
-        if not self._started:
-            raise exceptions.GraphRuntimeError(
-                'You must enter the GraphRun as a contextmanager before you can iterate over it.'
-            )
         return await self.next(self._next_node)

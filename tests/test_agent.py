@@ -1340,17 +1340,15 @@ def test_dynamic_false_no_reevaluate():
         [
             ModelRequest(
                 parts=[
-                    SystemPromptPart(content='Foobar', part_kind='system-prompt'),
-                    SystemPromptPart(content=dynamic_value, part_kind='system-prompt'),
-                    UserPromptPart(content='Hello', timestamp=IsNow(tz=timezone.utc), part_kind='user-prompt'),
+                    SystemPromptPart(content='Foobar'),
+                    SystemPromptPart(content=dynamic_value),
+                    UserPromptPart(content='Hello', timestamp=IsNow(tz=timezone.utc)),
                 ],
-                kind='request',
             ),
             ModelResponse(
-                parts=[TextPart(content='success (no tool calls)', part_kind='text')],
+                parts=[TextPart(content='success (no tool calls)')],
                 model_name='test',
                 timestamp=IsNow(tz=timezone.utc),
-                kind='response',
             ),
         ]
     )
@@ -1363,30 +1361,25 @@ def test_dynamic_false_no_reevaluate():
         [
             ModelRequest(
                 parts=[
-                    SystemPromptPart(content='Foobar', part_kind='system-prompt'),
+                    SystemPromptPart(content='Foobar'),
                     SystemPromptPart(
                         content='A',  # Remains the same
-                        part_kind='system-prompt',
                     ),
-                    UserPromptPart(content='Hello', timestamp=IsNow(tz=timezone.utc), part_kind='user-prompt'),
+                    UserPromptPart(content='Hello', timestamp=IsNow(tz=timezone.utc)),
                 ],
-                kind='request',
             ),
             ModelResponse(
-                parts=[TextPart(content='success (no tool calls)', part_kind='text')],
+                parts=[TextPart(content='success (no tool calls)')],
                 model_name='test',
                 timestamp=IsNow(tz=timezone.utc),
-                kind='response',
             ),
             ModelRequest(
-                parts=[UserPromptPart(content='World', timestamp=IsNow(tz=timezone.utc), part_kind='user-prompt')],
-                kind='request',
+                parts=[UserPromptPart(content='World', timestamp=IsNow(tz=timezone.utc))],
             ),
             ModelResponse(
-                parts=[TextPart(content='success (no tool calls)', part_kind='text')],
+                parts=[TextPart(content='success (no tool calls)')],
                 model_name='test',
                 timestamp=IsNow(tz=timezone.utc),
-                kind='response',
             ),
         ]
     )
@@ -1412,21 +1405,18 @@ def test_dynamic_true_reevaluate_system_prompt():
         [
             ModelRequest(
                 parts=[
-                    SystemPromptPart(content='Foobar', part_kind='system-prompt'),
+                    SystemPromptPart(content='Foobar'),
                     SystemPromptPart(
                         content=dynamic_value,
-                        part_kind='system-prompt',
                         dynamic_ref=func.__qualname__,
                     ),
-                    UserPromptPart(content='Hello', timestamp=IsNow(tz=timezone.utc), part_kind='user-prompt'),
+                    UserPromptPart(content='Hello', timestamp=IsNow(tz=timezone.utc)),
                 ],
-                kind='request',
             ),
             ModelResponse(
-                parts=[TextPart(content='success (no tool calls)', part_kind='text')],
+                parts=[TextPart(content='success (no tool calls)')],
                 model_name='test',
                 timestamp=IsNow(tz=timezone.utc),
-                kind='response',
             ),
         ]
     )
@@ -1439,31 +1429,26 @@ def test_dynamic_true_reevaluate_system_prompt():
         [
             ModelRequest(
                 parts=[
-                    SystemPromptPart(content='Foobar', part_kind='system-prompt'),
+                    SystemPromptPart(content='Foobar'),
                     SystemPromptPart(
                         content='B',
-                        part_kind='system-prompt',
                         dynamic_ref=func.__qualname__,
                     ),
-                    UserPromptPart(content='Hello', timestamp=IsNow(tz=timezone.utc), part_kind='user-prompt'),
+                    UserPromptPart(content='Hello', timestamp=IsNow(tz=timezone.utc)),
                 ],
-                kind='request',
             ),
             ModelResponse(
-                parts=[TextPart(content='success (no tool calls)', part_kind='text')],
+                parts=[TextPart(content='success (no tool calls)')],
                 model_name='test',
                 timestamp=IsNow(tz=timezone.utc),
-                kind='response',
             ),
             ModelRequest(
-                parts=[UserPromptPart(content='World', timestamp=IsNow(tz=timezone.utc), part_kind='user-prompt')],
-                kind='request',
+                parts=[UserPromptPart(content='World', timestamp=IsNow(tz=timezone.utc))],
             ),
             ModelResponse(
-                parts=[TextPart(content='success (no tool calls)', part_kind='text')],
+                parts=[TextPart(content='success (no tool calls)')],
                 model_name='test',
                 timestamp=IsNow(tz=timezone.utc),
-                kind='response',
             ),
         ]
     )

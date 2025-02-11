@@ -28,7 +28,7 @@ class SystemPromptPart:
     Only set if system prompt is dynamic, see [`system_prompt`][pydantic_ai.Agent.system_prompt] for more information.
     """
 
-    part_kind: Literal['system-prompt'] = 'system-prompt'
+    part_kind: Literal['system-prompt'] = field(default='system-prompt', init=False, repr=False)
     """Part type identifier, this is available on all parts as a discriminator."""
 
 
@@ -46,7 +46,7 @@ class UserPromptPart:
     timestamp: datetime = field(default_factory=_now_utc)
     """The timestamp of the prompt."""
 
-    part_kind: Literal['user-prompt'] = 'user-prompt'
+    part_kind: Literal['user-prompt'] = field(default='user-prompt', init=False, repr=False)
     """Part type identifier, this is available on all parts as a discriminator."""
 
 
@@ -69,7 +69,7 @@ class ToolReturnPart:
     timestamp: datetime = field(default_factory=_now_utc)
     """The timestamp, when the tool returned."""
 
-    part_kind: Literal['tool-return'] = 'tool-return'
+    part_kind: Literal['tool-return'] = field(default='tool-return', init=False, repr=False)
     """Part type identifier, this is available on all parts as a discriminator."""
 
     def model_response_str(self) -> str:
@@ -123,7 +123,7 @@ class RetryPromptPart:
     timestamp: datetime = field(default_factory=_now_utc)
     """The timestamp, when the retry was triggered."""
 
-    part_kind: Literal['retry-prompt'] = 'retry-prompt'
+    part_kind: Literal['retry-prompt'] = field(default='retry-prompt', init=False, repr=False)
     """Part type identifier, this is available on all parts as a discriminator."""
 
     def model_response(self) -> str:
@@ -149,7 +149,7 @@ class ModelRequest:
     parts: list[ModelRequestPart]
     """The parts of the user message."""
 
-    kind: Literal['request'] = 'request'
+    kind: Literal['request'] = field(default='request', init=False, repr=False)
     """Message type identifier, this is available on all parts as a discriminator."""
 
 
@@ -160,7 +160,7 @@ class TextPart:
     content: str
     """The text content of the response."""
 
-    part_kind: Literal['text'] = 'text'
+    part_kind: Literal['text'] = field(default='text', init=False, repr=False)
     """Part type identifier, this is available on all parts as a discriminator."""
 
     def has_content(self) -> bool:
@@ -184,7 +184,7 @@ class ToolCallPart:
     tool_call_id: str | None = None
     """Optional tool call identifier, this is used by some models including OpenAI."""
 
-    part_kind: Literal['tool-call'] = 'tool-call'
+    part_kind: Literal['tool-call'] = field(default='tool-call', init=False, repr=False)
     """Part type identifier, this is available on all parts as a discriminator."""
 
     def args_as_dict(self) -> dict[str, Any]:
@@ -237,7 +237,7 @@ class ModelResponse:
     If the model provides a timestamp in the response (as OpenAI does) that will be used.
     """
 
-    kind: Literal['response'] = 'response'
+    kind: Literal['response'] = field(default='response', init=False, repr=False)
     """Message type identifier, this is available on all parts as a discriminator."""
 
 
@@ -255,7 +255,7 @@ class TextPartDelta:
     content_delta: str
     """The incremental text content to add to the existing `TextPart` content."""
 
-    part_delta_kind: Literal['text'] = 'text'
+    part_delta_kind: Literal['text'] = field(default='text', init=False, repr=False)
     """Part delta type identifier, used as a discriminator."""
 
     def apply(self, part: ModelResponsePart) -> TextPart:
@@ -295,7 +295,7 @@ class ToolCallPartDelta:
     Note this is never treated as a delta — it can replace None, but otherwise if a
     non-matching value is provided an error will be raised."""
 
-    part_delta_kind: Literal['tool_call'] = 'tool_call'
+    part_delta_kind: Literal['tool_call'] = field(default='tool_call', init=False, repr=False)
     """Part delta type identifier, used as a discriminator."""
 
     def as_part(self) -> ToolCallPart | None:
@@ -426,7 +426,7 @@ class PartStartEvent:
     part: ModelResponsePart
     """The newly started `ModelResponsePart`."""
 
-    event_kind: Literal['part_start'] = 'part_start'
+    event_kind: Literal['part_start'] = field(default='part_start', init=False, repr=False)
     """Event type identifier, used as a discriminator."""
 
 
@@ -440,7 +440,7 @@ class PartDeltaEvent:
     delta: ModelResponsePartDelta
     """The delta to apply to the specified part."""
 
-    event_kind: Literal['part_delta'] = 'part_delta'
+    event_kind: Literal['part_delta'] = field(default='part_delta', init=False, repr=False)
     """Event type identifier, used as a discriminator."""
 
 

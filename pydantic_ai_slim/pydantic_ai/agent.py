@@ -230,7 +230,7 @@ class Agent(Generic[AgentDepsT, ResultDataT]):
         usage_limits: _usage.UsageLimits | None = None,
         usage: _usage.Usage | None = None,
         infer_name: bool = True,
-    ) -> AgentRun[AgentDepsT, ResultDataT]: ...
+    ) -> AgentRun[AgentDepsT, RunResultDataT]: ...
 
     def run(
         self,
@@ -244,8 +244,17 @@ class Agent(Generic[AgentDepsT, ResultDataT]):
         usage_limits: _usage.UsageLimits | None = None,
         usage: _usage.Usage | None = None,
         infer_name: bool = True,
-    ) -> AgentRun[AgentDepsT, ResultDataT]:
+    ) -> AgentRun[AgentDepsT, Any]:
         """Run the agent with a user prompt in async mode.
+
+        This method builds an internal agent graph (using system prompts, tools and result schemas) and then
+        returns an AgentRun object. The AgentRun functions as a handle that can be used to iterate over the graph and
+        obtain the final result. The AgentRun also provides methods to access the full message history, new messages,
+        and usage statistics.
+
+        The AgentRun can be awaited to get the final result of the run, or entered as a context manager to
+        obtain an iterator over the graph nodes. You can even use the AgentRun as an async generator to override the
+        execution of the graph if desired. See the documentation of AgentRun for more details.
 
         Example:
         ```python
@@ -254,9 +263,45 @@ class Agent(Generic[AgentDepsT, ResultDataT]):
         agent = Agent('openai:gpt-4o')
 
         async def main():
-            result = await agent.run('What is the capital of France?')
-            print(result.data)
+            agent_run = await agent.run('What is the capital of France?')
+            print(agent_run.data)
             #> Paris
+        ```
+
+        Example:
+        ```python
+        from pydantic_ai import Agent
+
+        agent = Agent('openai:gpt-4o')
+
+        async def main():
+            with agent.run('What is the capital of France?') as agent_run:
+                async for node in agent_run:
+                    print(node)
+                    '''
+                    ModelRequestNode(
+                        request=ModelRequest(
+                            parts=[
+                                UserPromptPart(
+                                    content='What is the capital of France?',
+                                    timestamp=datetime.datetime(...),
+                                )
+                            ]
+                        )
+                    )
+                    '''
+                    '''
+                    HandleResponseNode(
+                        model_response=ModelResponse(
+                            parts=[TextPart(content='Paris')],
+                            model_name='function:model_logic',
+                            timestamp=datetime.datetime(...),
+                        )
+                    )
+                    '''
+                    #> End(data=MarkFinalResult(data='Paris', tool_name=None))
+                print(agent_run.data)
+                #> Paris
         ```
 
         Args:
@@ -374,7 +419,7 @@ class Agent(Generic[AgentDepsT, ResultDataT]):
         usage_limits: _usage.UsageLimits | None = None,
         usage: _usage.Usage | None = None,
         infer_name: bool = True,
-    ) -> AgentRun[AgentDepsT, ResultDataT]: ...
+    ) -> AgentRun[AgentDepsT, RunResultDataT]: ...
 
     def run_sync(
         self,
@@ -388,7 +433,7 @@ class Agent(Generic[AgentDepsT, ResultDataT]):
         usage_limits: _usage.UsageLimits | None = None,
         usage: _usage.Usage | None = None,
         infer_name: bool = True,
-    ) -> AgentRun[AgentDepsT, ResultDataT]:
+    ) -> AgentRun[AgentDepsT, Any]:
         """Run the agent with a user prompt synchronously.
 
         This is a convenience method that wraps [`self.run`][pydantic_ai.Agent.run] with `loop.run_until_complete(...)`.

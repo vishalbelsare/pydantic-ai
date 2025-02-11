@@ -42,29 +42,21 @@ print(result.all_messages())
 [
     ModelRequest(
         parts=[
-            SystemPromptPart(
-                content='Be a helpful assistant.',
-                dynamic_ref=None,
-                part_kind='system-prompt',
-            ),
+            SystemPromptPart(content='Be a helpful assistant.', dynamic_ref=None),
             UserPromptPart(
                 content='Tell me a joke.',
                 timestamp=datetime.datetime(...),
-                part_kind='user-prompt',
             ),
-        ],
-        kind='request',
+        ]
     ),
     ModelResponse(
         parts=[
             TextPart(
-                content='Did you hear about the toothpaste scandal? They called it Colgate.',
-                part_kind='text',
+                content='Did you hear about the toothpaste scandal? They called it Colgate.'
             )
         ],
         model_name='function:model_logic',
         timestamp=datetime.datetime(...),
-        kind='response',
     ),
 ]
 """
@@ -88,17 +80,13 @@ async def main():
             ModelRequest(
                 parts=[
                     SystemPromptPart(
-                        content='Be a helpful assistant.',
-                        dynamic_ref=None,
-                        part_kind='system-prompt',
+                        content='Be a helpful assistant.', dynamic_ref=None
                     ),
                     UserPromptPart(
                         content='Tell me a joke.',
                         timestamp=datetime.datetime(...),
-                        part_kind='user-prompt',
                     ),
-                ],
-                kind='request',
+                ]
             )
         ]
         """
@@ -117,28 +105,22 @@ async def main():
             ModelRequest(
                 parts=[
                     SystemPromptPart(
-                        content='Be a helpful assistant.',
-                        dynamic_ref=None,
-                        part_kind='system-prompt',
+                        content='Be a helpful assistant.', dynamic_ref=None
                     ),
                     UserPromptPart(
                         content='Tell me a joke.',
                         timestamp=datetime.datetime(...),
-                        part_kind='user-prompt',
                     ),
-                ],
-                kind='request',
+                ]
             ),
             ModelResponse(
                 parts=[
                     TextPart(
-                        content='Did you hear about the toothpaste scandal? They called it Colgate.',
-                        part_kind='text',
+                        content='Did you hear about the toothpaste scandal? They called it Colgate.'
                     )
                 ],
                 model_name='function:stream_model_logic',
                 timestamp=datetime.datetime(...),
-                kind='response',
             ),
         ]
         """
@@ -173,50 +155,38 @@ print(result2.all_messages())
 [
     ModelRequest(
         parts=[
-            SystemPromptPart(
-                content='Be a helpful assistant.',
-                dynamic_ref=None,
-                part_kind='system-prompt',
-            ),
+            SystemPromptPart(content='Be a helpful assistant.', dynamic_ref=None),
             UserPromptPart(
                 content='Tell me a joke.',
                 timestamp=datetime.datetime(...),
-                part_kind='user-prompt',
             ),
-        ],
-        kind='request',
+        ]
     ),
     ModelResponse(
         parts=[
             TextPart(
-                content='Did you hear about the toothpaste scandal? They called it Colgate.',
-                part_kind='text',
+                content='Did you hear about the toothpaste scandal? They called it Colgate.'
             )
         ],
         model_name='function:model_logic',
         timestamp=datetime.datetime(...),
-        kind='response',
     ),
     ModelRequest(
         parts=[
             UserPromptPart(
                 content='Explain?',
                 timestamp=datetime.datetime(...),
-                part_kind='user-prompt',
             )
-        ],
-        kind='request',
+        ]
     ),
     ModelResponse(
         parts=[
             TextPart(
-                content='This is an excellent joke invented by Samuel Colvin, it needs no explanation.',
-                part_kind='text',
+                content='This is an excellent joke invented by Samuel Colvin, it needs no explanation.'
             )
         ],
         model_name='function:model_logic',
         timestamp=datetime.datetime(...),
-        kind='response',
     ),
 ]
 """
@@ -253,50 +223,38 @@ print(result2.all_messages())
 [
     ModelRequest(
         parts=[
-            SystemPromptPart(
-                content='Be a helpful assistant.',
-                dynamic_ref=None,
-                part_kind='system-prompt',
-            ),
+            SystemPromptPart(content='Be a helpful assistant.', dynamic_ref=None),
             UserPromptPart(
                 content='Tell me a joke.',
                 timestamp=datetime.datetime(...),
-                part_kind='user-prompt',
             ),
-        ],
-        kind='request',
+        ]
     ),
     ModelResponse(
         parts=[
             TextPart(
-                content='Did you hear about the toothpaste scandal? They called it Colgate.',
-                part_kind='text',
+                content='Did you hear about the toothpaste scandal? They called it Colgate.'
             )
         ],
         model_name='function:model_logic',
         timestamp=datetime.datetime(...),
-        kind='response',
     ),
     ModelRequest(
         parts=[
             UserPromptPart(
                 content='Explain?',
                 timestamp=datetime.datetime(...),
-                part_kind='user-prompt',
             )
-        ],
-        kind='request',
+        ]
     ),
     ModelResponse(
         parts=[
             TextPart(
-                content='This is an excellent joke invented by Samuel Colvin, it needs no explanation.',
-                part_kind='text',
+                content='This is an excellent joke invented by Samuel Colvin, it needs no explanation.'
             )
         ],
         model_name='function:model_logic',
         timestamp=datetime.datetime(...),
-        kind='response',
     ),
 ]
 """

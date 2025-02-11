@@ -137,6 +137,9 @@ class Graph(Generic[StateT, DepsT, RunEndT]):
     ) -> GraphRun[StateT, DepsT, T]:
         """Run the graph from a starting node until it ends.
 
+        The returned GraphRun can be awaited (or used as an async iterator) to drive the graph to completion.
+        TODO: Need to add a more detailed message here explaining that this can behave like a coroutine or a context manager etc.
+
         Args:
             start_node: the first node to run, since the graph definition doesn't define the entry point in the graph,
                 you need to provide the starting node.
@@ -511,6 +514,8 @@ class GraphRun(Generic[StateT, DepsT, RunEndT]):
     """A stateful run of a graph.
 
     After being entered, can be used like an async generator to listen to / modify nodes as the run is executed.
+
+    TODO: this requires some heavy weight API documentation.
     """
 
     def __init__(
@@ -588,6 +593,11 @@ class GraphRun(Generic[StateT, DepsT, RunEndT]):
         return _run().__await__()
 
     def __enter__(self) -> typing_extensions.Self:
+        """Open a span for the graph run.
+
+        Note that we _require_ that the graph run is used as a context manager when iterating over nodes
+        so that we can ensure that the span covers the time range during which the iteration happens.
+        """
         if self._started:
             raise exceptions.GraphRuntimeError('A GraphRun can only be started once.')
 

@@ -245,18 +245,26 @@ class Agent(Generic[AgentDepsT, ResultDataT]):
         usage: _usage.Usage | None = None,
         infer_name: bool = True,
     ) -> AgentRun[AgentDepsT, Any]:
-        """Run the agent with a user prompt in async mode.
+        """Run the agent with a user prompt.
 
         This method builds an internal agent graph (using system prompts, tools and result schemas) and then
-        returns an AgentRun object. The AgentRun functions as a handle that can be used to iterate over the graph and
-        obtain the final result. The AgentRun also provides methods to access the full message history, new messages,
-        and usage statistics.
+        returns an `AgentRun` object. The `AgentRun` functions as a handle that can be used to iterate over the graph
+        and obtain the final result. The AgentRun also provides methods to access the full message history,
+        new messages, and usage statistics.
 
-        The AgentRun can be awaited to get the final result of the run, or entered as a context manager to
-        obtain an iterator over the graph nodes. You can even use the AgentRun as an async generator to override the
-        execution of the graph if desired. See the documentation of AgentRun for more details.
+        The returned `AgentRun` object should always be immediately used in one of two ways:
+        * Via `await` (i.e., `await agent.run(...)`), which will execute the graph run and return the final result
+            * This is the API you should use if you just want the end result and are not interested in the execution details
+            or consuming streaming updates
+        * As a context manager (i.e., `with agent.run(...) as agent_run:`), which will return an async iterator over
+        the graph nodes, and which can also be used as an async generator to override the execution of the graph.
+            * This is the API you should use if you want to consume the graph execution in a streaming manner,
+            or if you want to consume the stream of events coming from individual requests to the LLM, or the stream
+            of events coming from the execution of tools.
 
-        Example:
+        For more details, see the documentation of `AgentRun`.
+
+        Example (with `await`):
         ```python
         from pydantic_ai import Agent
 
@@ -268,7 +276,7 @@ class Agent(Generic[AgentDepsT, ResultDataT]):
             #> Paris
         ```
 
-        Example:
+        Example (with a context manager):
         ```python
         from pydantic_ai import Agent
 
@@ -381,7 +389,6 @@ class Agent(Generic[AgentDepsT, ResultDataT]):
             system_prompt_dynamic_functions=self._system_prompt_dynamic_functions,
         )
 
-        # Actually run
         return AgentRun(
             graph.run(
                 start_node,
@@ -577,7 +584,7 @@ class Agent(Generic[AgentDepsT, ResultDataT]):
             while True:
                 if isinstance(node, _agent_graph.ModelRequestNode):
                     node = cast(_agent_graph.ModelRequestNode[AgentDepsT, Any], node)
-                    graph_ctx = agent_run.graph_ctx()
+                    graph_ctx = agent_run.get_graph_ctx()
                     async with node.stream(graph_ctx) as streamed_response:
 
                         async def stream_to_final(
@@ -1201,13 +1208,15 @@ class AgentRun(Generic[AgentDepsT, ResultDataT]):
         ]
         | End[MarkFinalResult[ResultDataT]]
     ):
+        # TODO: It would be nice to expose a synchronous interface for this, to be able to
+        #   synchronously iterate over the agent graph. I don't think this would be hard to do,
+        #   but I'm having a hard time coming up with an API that fits nicely along side the current `run_sync`.
+        #   The use of `await` provides an easy way to signal that you just want the result, but it's less
+        #   clear to me what the analogous thing should be for synchronous code.
         return await self.graph_run.next(node)
 
-    def graph_ctx(self) -> GraphRunContext[_agent_graph.GraphAgentState, _agent_graph.GraphAgentDeps[AgentDepsT, Any]]:
-        return GraphRunContext(self.graph_run.state, self.graph_run.deps)
-
     def __await__(self) -> Generator[Any, Any, Self]:
-        """Run the agent graph until it ends, and return the final result."""
+        """Run the agent graph until it ends, and return self."""
 
         async def _run():
             await self.graph_run
@@ -1246,3 +1255,8 @@ class AgentRun(Generic[AgentDepsT, ResultDataT]):
     ):
         """Use the last returned node as the input to `Graph.next`."""
         return await self.graph_run.__anext__()
+
+    def get_graph_ctx(
+        self,
+    ) -> GraphRunContext[_agent_graph.GraphAgentState, _agent_graph.GraphAgentDeps[AgentDepsT, Any]]:
+        return GraphRunContext(self.graph_run.state, self.graph_run.deps)

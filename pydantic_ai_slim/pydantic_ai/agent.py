@@ -10,10 +10,10 @@ from types import FrameType
 from typing import Any, Callable, Generic, cast, final, overload
 
 import logfire_api
-from typing_extensions import Self, TypeVar, deprecated
+from typing_extensions import TypeVar, deprecated
 
-from pydantic_graph import BaseNode, Graph, GraphRun, GraphRunContext
-from pydantic_graph.nodes import End
+from pydantic_graph import BaseNode, End, Graph, GraphRun, GraphRunContext, GraphRunner
+from pydantic_graph.graph import GraphRunResult
 
 from . import (
     _agent_graph,
@@ -215,7 +215,7 @@ class Agent(Generic[AgentDepsT, ResultDataT]):
         usage_limits: _usage.UsageLimits | None = None,
         usage: _usage.Usage | None = None,
         infer_name: bool = True,
-    ) -> AgentRun[AgentDepsT, ResultDataT]: ...
+    ) -> AgentRunner[AgentDepsT, ResultDataT]: ...
 
     @overload
     def run(
@@ -230,7 +230,7 @@ class Agent(Generic[AgentDepsT, ResultDataT]):
         usage_limits: _usage.UsageLimits | None = None,
         usage: _usage.Usage | None = None,
         infer_name: bool = True,
-    ) -> AgentRun[AgentDepsT, RunResultDataT]: ...
+    ) -> AgentRunner[AgentDepsT, RunResultDataT]: ...
 
     def run(
         self,
@@ -244,7 +244,7 @@ class Agent(Generic[AgentDepsT, ResultDataT]):
         usage_limits: _usage.UsageLimits | None = None,
         usage: _usage.Usage | None = None,
         infer_name: bool = True,
-    ) -> AgentRun[AgentDepsT, Any]:
+    ) -> AgentRunner[AgentDepsT, Any]:
         """Run the agent with a user prompt.
 
         This method builds an internal agent graph (using system prompts, tools and result schemas) and then
@@ -313,7 +313,7 @@ class Agent(Generic[AgentDepsT, ResultDataT]):
                 End(data=MarkFinalResult(data='Paris', tool_name=None)),
             ]
             '''
-            print(agent_run.data)
+            print(agent_run.final_result.data)
             #> Paris
         ```
 
@@ -394,7 +394,7 @@ class Agent(Generic[AgentDepsT, ResultDataT]):
             system_prompt_dynamic_functions=self._system_prompt_dynamic_functions,
         )
 
-        return AgentRun(
+        return AgentRunner(
             graph.run(
                 start_node,
                 state=state,
@@ -416,7 +416,7 @@ class Agent(Generic[AgentDepsT, ResultDataT]):
         usage_limits: _usage.UsageLimits | None = None,
         usage: _usage.Usage | None = None,
         infer_name: bool = True,
-    ) -> AgentRun[AgentDepsT, ResultDataT]: ...
+    ) -> AgentRunResult[AgentDepsT, ResultDataT]: ...
 
     @overload
     def run_sync(
@@ -431,7 +431,7 @@ class Agent(Generic[AgentDepsT, ResultDataT]):
         usage_limits: _usage.UsageLimits | None = None,
         usage: _usage.Usage | None = None,
         infer_name: bool = True,
-    ) -> AgentRun[AgentDepsT, RunResultDataT]: ...
+    ) -> AgentRunResult[AgentDepsT, RunResultDataT]: ...
 
     def run_sync(
         self,
@@ -445,7 +445,7 @@ class Agent(Generic[AgentDepsT, ResultDataT]):
         usage_limits: _usage.UsageLimits | None = None,
         usage: _usage.Usage | None = None,
         infer_name: bool = True,
-    ) -> AgentRun[AgentDepsT, Any]:
+    ) -> AgentRunResult[AgentDepsT, Any]:
         """Run the agent with a user prompt synchronously.
 
         This is a convenience method that wraps [`self.run`][pydantic_ai.Agent.run] with `loop.run_until_complete(...)`.
@@ -1114,127 +1114,40 @@ class Agent(Generic[AgentDepsT, ResultDataT]):
 
 
 @dataclasses.dataclass
-class AgentRun(Generic[AgentDepsT, ResultDataT]):
-    graph_run: GraphRun[
+class AgentRunner(Generic[AgentDepsT, ResultDataT]):
+    graph_runner: GraphRunner[
         _agent_graph.GraphAgentState, _agent_graph.GraphAgentDeps[AgentDepsT, Any], MarkFinalResult[ResultDataT]
     ]
 
-    def all_messages(self, *, result_tool_return_content: str | None = None) -> list[_messages.ModelMessage]:
-        if result_tool_return_content is not None:
-            return self._set_result_tool_return(result_tool_return_content)
-        else:
-            return self.graph_run.state.message_history
-
-    def all_messages_json(self, *, result_tool_return_content: str | None = None) -> bytes:
-        """Return all messages from [`all_messages`][pydantic_ai.result._BaseRunResult.all_messages] as JSON bytes.
-
-        Args:
-            result_tool_return_content: The return content of the tool call to set in the last message.
-                This provides a convenient way to modify the content of the result tool call if you want to continue
-                the conversation and want to set the response to the result tool call. If `None`, the last message will
-                not be modified.
-
-        Returns:
-            JSON bytes representing the messages.
-        """
-        return _messages.ModelMessagesTypeAdapter.dump_json(
-            self.all_messages(result_tool_return_content=result_tool_return_content)
-        )
-
-    @property
-    def _new_message_index(self) -> int:
-        return self.graph_run.deps.new_message_index
-
-    def new_messages(self, *, result_tool_return_content: str | None = None) -> list[_messages.ModelMessage]:
-        return self.all_messages(result_tool_return_content=result_tool_return_content)[self._new_message_index :]
-
-    def new_messages_json(self, *, result_tool_return_content: str | None = None) -> bytes:
-        """Return new messages from [`new_messages`][pydantic_ai.result._BaseRunResult.new_messages] as JSON bytes.
-
-        Args:
-            result_tool_return_content: The return content of the tool call to set in the last message.
-                This provides a convenient way to modify the content of the result tool call if you want to continue
-                the conversation and want to set the response to the result tool call. If `None`, the last message will
-                not be modified.
-
-        Returns:
-            JSON bytes representing the new messages.
-        """
-        return _messages.ModelMessagesTypeAdapter.dump_json(
-            self.new_messages(result_tool_return_content=result_tool_return_content)
-        )
-
-    def usage(self) -> _usage.Usage:
-        return self.graph_run.state.usage
-
-    def _set_result_tool_return(self, return_content: str) -> list[_messages.ModelMessage]:
-        """Set return content for the result tool.
-
-        Useful if you want to continue the conversation and want to set the response to the result tool call.
-        """
-        if not self.result.tool_name:
-            raise ValueError('Cannot set result tool return content when the return type is `str`.')
-        messages = deepcopy(self.graph_run.state.message_history)
-        last_message = messages[-1]
-        for part in last_message.parts:
-            if isinstance(part, _messages.ToolReturnPart) and part.tool_name == self.result.tool_name:
-                part.content = return_content
-                return messages
-        raise LookupError(f'No tool call found with tool name {self.result.tool_name!r}.')
-
-    @property
-    def is_ended(self) -> bool:
-        return self.graph_run.is_ended
-
-    @property
-    def result(self) -> MarkFinalResult[ResultDataT]:
-        return self.graph_run.result
-
-    @property
-    def _result_tool_name(self) -> str | None:
-        return self.graph_run.result.tool_name
-
-    @property
-    def data(self) -> ResultDataT:
-        return self.result.data
-
-    async def next(
-        self,
-        node: BaseNode[
-            _agent_graph.GraphAgentState,
-            _agent_graph.GraphAgentDeps[AgentDepsT, Any],
-            MarkFinalResult[ResultDataT],
-        ],
-    ) -> (
-        BaseNode[
-            _agent_graph.GraphAgentState,
-            _agent_graph.GraphAgentDeps[AgentDepsT, Any],
-            MarkFinalResult[ResultDataT],
-        ]
-        | End[MarkFinalResult[ResultDataT]]
-    ):
-        # TODO: It would be nice to expose a synchronous interface for this, to be able to
-        #   synchronously iterate over the agent graph. I don't think this would be hard to do,
-        #   but I'm having a hard time coming up with an API that fits nicely along side the current `run_sync`.
-        #   The use of `await` provides an easy way to signal that you just want the result, but it's less
-        #   clear to me what the analogous thing should be for synchronous code.
-        return await self.graph_run.next(node)
-
-    def __await__(self) -> Generator[Any, Any, Self]:
+    def __await__(self) -> Generator[Any, Any, AgentRunResult[AgentDepsT, ResultDataT]]:
         """Run the agent graph until it ends, and return self."""
 
         async def _run():
-            await self.graph_run
-            return self
+            graph_run_result = await self.graph_runner
+            return AgentRunResult(graph_run_result)
 
         return _run().__await__()
 
-    def __enter__(self) -> Self:
-        self.graph_run.__enter__()
-        return self
+    def __enter__(self) -> AgentRun[AgentDepsT, ResultDataT]:
+        graph_run = self.graph_runner.__enter__()
+        return AgentRun(graph_run)
 
     def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
-        self.graph_run.__exit__(exc_type, exc_val, exc_tb)
+        self.graph_runner.__exit__(exc_type, exc_val, exc_tb)
+
+
+@dataclasses.dataclass
+class AgentRun(Generic[AgentDepsT, ResultDataT]):
+    """A stateful, iterable run of an agent."""
+
+    _graph_run: GraphRun[
+        _agent_graph.GraphAgentState, _agent_graph.GraphAgentDeps[AgentDepsT, Any], MarkFinalResult[ResultDataT]
+    ]
+
+    @property
+    def final_result(self) -> AgentRunResult[AgentDepsT, ResultDataT]:
+        graph_run_result = self._graph_run.final_result
+        return AgentRunResult(graph_run_result)
 
     def __aiter__(
         self,
@@ -1259,9 +1172,120 @@ class AgentRun(Generic[AgentDepsT, ResultDataT]):
         | End[MarkFinalResult[ResultDataT]]
     ):
         """Use the last returned node as the input to `Graph.next`."""
-        return await self.graph_run.__anext__()
+        return await self._graph_run.__anext__()
+
+    async def next(
+        self,
+        node: BaseNode[
+            _agent_graph.GraphAgentState,
+            _agent_graph.GraphAgentDeps[AgentDepsT, Any],
+            MarkFinalResult[ResultDataT],
+        ],
+    ) -> (
+        BaseNode[
+            _agent_graph.GraphAgentState,
+            _agent_graph.GraphAgentDeps[AgentDepsT, Any],
+            MarkFinalResult[ResultDataT],
+        ]
+        | End[MarkFinalResult[ResultDataT]]
+    ):
+        # TODO: It would be nice to expose a synchronous interface for this, to be able to
+        #   synchronously iterate over the agent graph. I don't think this would be hard to do,
+        #   but I'm having a hard time coming up with an API that fits nicely along side the current `run_sync`.
+        #   The use of `await` provides an easy way to signal that you just want the result, but it's less
+        #   clear to me what the analogous thing should be for synchronous code.
+        return await self._graph_run.next(node)
+
+    def usage(self) -> _usage.Usage:
+        return self._graph_run.state.usage
 
     def get_graph_ctx(
         self,
     ) -> GraphRunContext[_agent_graph.GraphAgentState, _agent_graph.GraphAgentDeps[AgentDepsT, Any]]:
-        return GraphRunContext(self.graph_run.state, self.graph_run.deps)
+        return GraphRunContext[_agent_graph.GraphAgentState, _agent_graph.GraphAgentDeps[AgentDepsT, Any]](
+            self._graph_run.state, self._graph_run.deps
+        )
+
+
+@dataclasses.dataclass
+class AgentRunResult(Generic[AgentDepsT, ResultDataT]):
+    """The final result of an agent run."""
+
+    graph_run_result: GraphRunResult[
+        _agent_graph.GraphAgentState, _agent_graph.GraphAgentDeps[AgentDepsT, Any], MarkFinalResult[ResultDataT]
+    ]
+
+    @property
+    def result(self) -> MarkFinalResult[ResultDataT]:
+        return self.graph_run_result.result
+
+    @property
+    def data(self) -> ResultDataT:
+        return self.result.data
+
+    @property
+    def _result_tool_name(self) -> str | None:
+        return self.result.tool_name
+
+    def _set_result_tool_return(self, return_content: str) -> list[_messages.ModelMessage]:
+        """Set return content for the result tool.
+
+        Useful if you want to continue the conversation and want to set the response to the result tool call.
+        """
+        if not self.result.tool_name:
+            raise ValueError('Cannot set result tool return content when the return type is `str`.')
+        messages = deepcopy(self.graph_run_result.state.message_history)
+        last_message = messages[-1]
+        for part in last_message.parts:
+            if isinstance(part, _messages.ToolReturnPart) and part.tool_name == self.result.tool_name:
+                part.content = return_content
+                return messages
+        raise LookupError(f'No tool call found with tool name {self.result.tool_name!r}.')
+
+    def all_messages(self, *, result_tool_return_content: str | None = None) -> list[_messages.ModelMessage]:
+        if result_tool_return_content is not None:
+            return self._set_result_tool_return(result_tool_return_content)
+        else:
+            return self.graph_run_result.state.message_history
+
+    def all_messages_json(self, *, result_tool_return_content: str | None = None) -> bytes:
+        """Return all messages from [`all_messages`][pydantic_ai.result._BaseRunResult.all_messages] as JSON bytes.
+
+        Args:
+            result_tool_return_content: The return content of the tool call to set in the last message.
+                This provides a convenient way to modify the content of the result tool call if you want to continue
+                the conversation and want to set the response to the result tool call. If `None`, the last message will
+                not be modified.
+
+        Returns:
+            JSON bytes representing the messages.
+        """
+        return _messages.ModelMessagesTypeAdapter.dump_json(
+            self.all_messages(result_tool_return_content=result_tool_return_content)
+        )
+
+    @property
+    def _new_message_index(self) -> int:
+        return self.graph_run_result.deps.new_message_index
+
+    def new_messages(self, *, result_tool_return_content: str | None = None) -> list[_messages.ModelMessage]:
+        return self.all_messages(result_tool_return_content=result_tool_return_content)[self._new_message_index :]
+
+    def new_messages_json(self, *, result_tool_return_content: str | None = None) -> bytes:
+        """Return new messages from [`new_messages`][pydantic_ai.result._BaseRunResult.new_messages] as JSON bytes.
+
+        Args:
+            result_tool_return_content: The return content of the tool call to set in the last message.
+                This provides a convenient way to modify the content of the result tool call if you want to continue
+                the conversation and want to set the response to the result tool call. If `None`, the last message will
+                not be modified.
+
+        Returns:
+            JSON bytes representing the new messages.
+        """
+        return _messages.ModelMessagesTypeAdapter.dump_json(
+            self.new_messages(result_tool_return_content=result_tool_return_content)
+        )
+
+    def usage(self) -> _usage.Usage:
+        return self.graph_run_result.state.usage

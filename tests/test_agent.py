@@ -279,7 +279,7 @@ def test_plain_response_then_tuple():
             ),
         ]
     )
-    assert result.graph_run.result.tool_name == 'final_result'
+    assert result.result.tool_name == 'final_result'
     assert result.all_messages(result_tool_return_content='foobar')[-1] == snapshot(
         ModelRequest(
             parts=[ToolReturnPart(tool_name='final_result', content='foobar', timestamp=IsNow(tz=timezone.utc))]
@@ -312,7 +312,7 @@ def test_result_tool_return_content_no_tool():
 
     result = agent.run_sync('Hello')
     assert result.data == 0
-    result.graph_run.result.tool_name = 'wrong'
+    result.result.tool_name = 'wrong'
     with pytest.raises(LookupError, match=re.escape("No tool call found with tool name 'wrong'.")):
         result.all_messages(result_tool_return_content='foobar')
 

@@ -472,17 +472,23 @@ with capture_run_messages() as messages:  # (2)!
                     UserPromptPart(
                         content='Please get me the volume of a box with size 6.',
                         timestamp=datetime.datetime(...),
+                        part_kind='user-prompt',
                     )
-                ]
+                ],
+                kind='request',
             ),
             ModelResponse(
                 parts=[
                     ToolCallPart(
-                        tool_name='calc_volume', args={'size': 6}, tool_call_id=None
+                        tool_name='calc_volume',
+                        args={'size': 6},
+                        tool_call_id=None,
+                        part_kind='tool-call',
                     )
                 ],
                 model_name='function:model_logic',
                 timestamp=datetime.datetime(...),
+                kind='response',
             ),
             ModelRequest(
                 parts=[
@@ -491,17 +497,23 @@ with capture_run_messages() as messages:  # (2)!
                         tool_name='calc_volume',
                         tool_call_id=None,
                         timestamp=datetime.datetime(...),
+                        part_kind='retry-prompt',
                     )
-                ]
+                ],
+                kind='request',
             ),
             ModelResponse(
                 parts=[
                     ToolCallPart(
-                        tool_name='calc_volume', args={'size': 6}, tool_call_id=None
+                        tool_name='calc_volume',
+                        args={'size': 6},
+                        tool_call_id=None,
+                        part_kind='tool-call',
                     )
                 ],
                 model_name='function:model_logic',
                 timestamp=datetime.datetime(...),
+                kind='response',
             ),
         ]
         """

@@ -28,8 +28,10 @@ async def model_function(
                 UserPromptPart(
                     content='Testing my agent...',
                     timestamp=datetime.datetime(...),
+                    part_kind='user-prompt',
                 )
-            ]
+            ],
+            kind='request',
         )
     ]
     """

@@ -283,33 +283,38 @@ class Agent(Generic[AgentDepsT, ResultDataT]):
         agent = Agent('openai:gpt-4o')
 
         async def main():
+            nodes = []
             with agent.run('What is the capital of France?') as agent_run:
                 async for node in agent_run:
-                    print(node)
-                    '''
-                    ModelRequestNode(
-                        request=ModelRequest(
-                            parts=[
-                                UserPromptPart(
-                                    content='What is the capital of France?',
-                                    timestamp=datetime.datetime(...),
-                                )
-                            ]
-                        )
+                    nodes.append(node)
+            print(nodes)
+            '''
+            [
+                ModelRequestNode(
+                    request=ModelRequest(
+                        parts=[
+                            UserPromptPart(
+                                content='What is the capital of France?',
+                                timestamp=datetime.datetime(...),
+                                part_kind='user-prompt',
+                            )
+                        ],
+                        kind='request',
                     )
-                    '''
-                    '''
-                    HandleResponseNode(
-                        model_response=ModelResponse(
-                            parts=[TextPart(content='Paris')],
-                            model_name='function:model_logic',
-                            timestamp=datetime.datetime(...),
-                        )
+                ),
+                HandleResponseNode(
+                    model_response=ModelResponse(
+                        parts=[TextPart(content='Paris', part_kind='text')],
+                        model_name='function:model_logic',
+                        timestamp=datetime.datetime(...),
+                        kind='response',
                     )
-                    '''
-                    #> End(data=MarkFinalResult(data='Paris', tool_name=None))
-                print(agent_run.data)
-                #> Paris
+                ),
+                End(data=MarkFinalResult(data='Paris', tool_name=None)),
+            ]
+            '''
+            print(agent_run.data)
+            #> Paris
         ```
 
         Args:

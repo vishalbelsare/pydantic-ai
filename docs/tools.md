@@ -73,17 +73,25 @@ print(dice_result.all_messages())
             SystemPromptPart(
                 content="You're a dice game, you should roll the die and see if the number you get back matches the user's guess. If so, tell them they're a winner. Use the player's name in the response.",
                 dynamic_ref=None,
+                part_kind='system-prompt',
             ),
             UserPromptPart(
                 content='My guess is 4',
                 timestamp=datetime.datetime(...),
+                part_kind='user-prompt',
             ),
-        ]
+        ],
+        kind='request',
     ),
     ModelResponse(
-        parts=[ToolCallPart(tool_name='roll_die', args={}, tool_call_id=None)],
+        parts=[
+            ToolCallPart(
+                tool_name='roll_die', args={}, tool_call_id=None, part_kind='tool-call'
+            )
+        ],
         model_name='function:model_logic',
         timestamp=datetime.datetime(...),
+        kind='response',
     ),
     ModelRequest(
         parts=[
@@ -92,13 +100,23 @@ print(dice_result.all_messages())
                 content='4',
                 tool_call_id=None,
                 timestamp=datetime.datetime(...),
+                part_kind='tool-return',
             )
-        ]
+        ],
+        kind='request',
     ),
     ModelResponse(
-        parts=[ToolCallPart(tool_name='get_player_name', args={}, tool_call_id=None)],
+        parts=[
+            ToolCallPart(
+                tool_name='get_player_name',
+                args={},
+                tool_call_id=None,
+                part_kind='tool-call',
+            )
+        ],
         model_name='function:model_logic',
         timestamp=datetime.datetime(...),
+        kind='response',
     ),
     ModelRequest(
         parts=[
@@ -107,17 +125,21 @@ print(dice_result.all_messages())
                 content='Anne',
                 tool_call_id=None,
                 timestamp=datetime.datetime(...),
+                part_kind='tool-return',
             )
-        ]
+        ],
+        kind='request',
     ),
     ModelResponse(
         parts=[
             TextPart(
-                content="Congratulations Anne, you guessed correctly! You're a winner!"
+                content="Congratulations Anne, you guessed correctly! You're a winner!",
+                part_kind='text',
             )
         ],
         model_name='function:model_logic',
         timestamp=datetime.datetime(...),
+        kind='response',
     ),
 ]
 """

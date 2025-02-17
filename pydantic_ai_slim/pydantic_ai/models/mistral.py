@@ -134,9 +134,6 @@ class MistralModel(Model):
             api_key = os.getenv('MISTRAL_API_KEY') if api_key is None else api_key
             self.client = Mistral(api_key=api_key, async_client=http_client or cached_async_http_client())
 
-    def name(self) -> str:
-        return f'mistral:{self._model_name}'
-
     async def request(
         self,
         messages: list[ModelMessage],
@@ -164,6 +161,16 @@ class MistralModel(Model):
         )
         async with response:
             yield await self._process_streamed_response(model_request_parameters.result_tools, response)
+
+    @property
+    def model_name(self) -> MistralModelName:
+        """The model name."""
+        return self._model_name
+
+    @property
+    def system(self) -> str | None:
+        """The system / model provider."""
+        return self._system
 
     async def _completions_create(
         self,
@@ -461,6 +468,7 @@ MistralToolCallId = Union[str, None]
 class MistralStreamedResponse(StreamedResponse):
     """Implementation of `StreamedResponse` for Mistral models."""
 
+    _model_name: MistralModelName
     _response: AsyncIterable[MistralCompletionEvent]
     _timestamp: datetime
     _result_tools: dict[str, ToolDefinition]
@@ -502,7 +510,14 @@ class MistralStreamedResponse(StreamedResponse):
                     vendor_part_id=index, tool_name=dtc.function.name, args=dtc.function.arguments, tool_call_id=dtc.id
                 )
 
+    @property
+    def model_name(self) -> MistralModelName:
+        """Get the model name of the response."""
+        return self._model_name
+
+    @property
     def timestamp(self) -> datetime:
+        """Get the timestamp of the response."""
         return self._timestamp
 
     @staticmethod

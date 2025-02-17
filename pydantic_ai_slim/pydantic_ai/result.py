@@ -246,7 +246,7 @@ class StreamedRunResult(Generic[AgentDepsT, ResultDataT]):
 
     def timestamp(self) -> datetime:
         """Get the timestamp of the response."""
-        return self._stream_response.timestamp()
+        return self._stream_response.timestamp
 
     async def validate_structured_result(
         self, message: _messages.ModelResponse, *, allow_partial: bool = False

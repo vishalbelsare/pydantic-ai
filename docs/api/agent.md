@@ -7,5 +7,5 @@
             - AgentRun
             - AgentRunResult
             - EndStrategy
-            - RunResultData
+            - RunResultDataT
             - capture_run_messages

@@ -1375,13 +1375,13 @@ class AgentRun(Generic[AgentDepsT, ResultDataT]):
 class AgentRunResult(Generic[AgentDepsT, ResultDataT]):
     """The final result of an agent run."""
 
-    graph_run_result: GraphRunResult[
+    _graph_run_result: GraphRunResult[
         _agent_graph.GraphAgentState, _agent_graph.GraphAgentDeps[AgentDepsT, Any], FinalResult[ResultDataT]
     ]
 
     @property
     def _result(self) -> FinalResult[ResultDataT]:
-        return self.graph_run_result.result
+        return self._graph_run_result.result
 
     @property
     def data(self) -> ResultDataT:
@@ -1398,7 +1398,7 @@ class AgentRunResult(Generic[AgentDepsT, ResultDataT]):
         """
         if not self._result.tool_name:
             raise ValueError('Cannot set result tool return content when the return type is `str`.')
-        messages = deepcopy(self.graph_run_result.state.message_history)
+        messages = deepcopy(self._graph_run_result.state.message_history)
         last_message = messages[-1]
         for part in last_message.parts:
             if isinstance(part, _messages.ToolReturnPart) and part.tool_name == self._result.tool_name:
@@ -1421,7 +1421,7 @@ class AgentRunResult(Generic[AgentDepsT, ResultDataT]):
         if result_tool_return_content is not None:
             return self._set_result_tool_return(result_tool_return_content)
         else:
-            return self.graph_run_result.state.message_history
+            return self._graph_run_result.state.message_history
 
     def all_messages_json(self, *, result_tool_return_content: str | None = None) -> bytes:
         """Return all messages from [`all_messages`][pydantic_ai.agent.AgentRunResult.all_messages] as JSON bytes.
@@ -1441,7 +1441,7 @@ class AgentRunResult(Generic[AgentDepsT, ResultDataT]):
 
     @property
     def _new_message_index(self) -> int:
-        return self.graph_run_result.deps.new_message_index
+        return self._graph_run_result.deps.new_message_index
 
     def new_messages(self, *, result_tool_return_content: str | None = None) -> list[_messages.ModelMessage]:
         """Return new messages associated with this run.
@@ -1477,4 +1477,4 @@ class AgentRunResult(Generic[AgentDepsT, ResultDataT]):
 
     def usage(self) -> _usage.Usage:
         """Return the usage of the whole run."""
-        return self.graph_run_result.state.usage
+        return self._graph_run_result.state.usage

@@ -12,7 +12,7 @@ from typing import Any, Callable, Generic, cast, final, overload
 import logfire_api
 from typing_extensions import TypeVar, deprecated
 
-from pydantic_graph import BaseNode, End, Graph, GraphRun, GraphRunContext, GraphRuntimeError
+from pydantic_graph import BaseNode, End, Graph, GraphRun, GraphRunContext
 from pydantic_graph.graph import GraphRunResult
 
 from . import (
@@ -245,7 +245,10 @@ class Agent(Generic[AgentDepsT, ResultDataT]):
         usage: _usage.Usage | None = None,
         infer_name: bool = True,
     ) -> AgentRunResult[AgentDepsT, Any]:
-        """Run the agent with a user prompt.
+        """Run the agent with a user prompt in async mode.
+
+        This method builds an internal agent graph (using system prompts, tools and result schemas) and then
+        runs the graph to completion. The result of the run is returned.
 
         Example:
         ```python
@@ -260,9 +263,9 @@ class Agent(Generic[AgentDepsT, ResultDataT]):
         ```
 
         Args:
+            user_prompt: User input to start/continue the conversation.
             result_type: Custom result type to use for this run, `result_type` may only be used if the agent has no
                 result validators since result validators would expect an argument that matches the agent's result type.
-            user_prompt: User input to start/continue the conversation.
             message_history: History of the conversation so far.
             model: Optional model to use for this run, required if `model` was not set when creating the agent.
             deps: Optional dependencies to use for this run.
@@ -288,7 +291,9 @@ class Agent(Generic[AgentDepsT, ResultDataT]):
         ) as agent_run:
             async for _ in agent_run:
                 pass
-        return agent_run.final_result
+        final_result = agent_run.final_result
+        assert final_result is not None, 'The graph run should have ended with a final result'
+        return final_result
 
     @contextmanager
     def iter(
@@ -304,17 +309,15 @@ class Agent(Generic[AgentDepsT, ResultDataT]):
         usage: _usage.Usage | None = None,
         infer_name: bool = True,
     ) -> Iterator[AgentRun[AgentDepsT, Any]]:
-        """Get an AgentRun for the agent with a user prompt which can be iterated over.
+        """A contextmanager which can be used to iterate over the agent graph's nodes as they are executed.
 
-        This method builds an internal agent graph (using system prompts, tools and result schemas) and then
-        returns an `AgentRun` object. The `AgentRun` functions as a handle that can be used to iterate over the graph
-        and obtain the final result. The AgentRun also provides methods to access the full message history,
-        new messages, and usage statistics.
+        This method builds an internal agent graph (using system prompts, tools and result schemas) and then returns an
+        `AgentRun` object. The `AgentRun` can be used to (async) iterate over the nodes of the graph as they are
+        executed. This is the API to use if you want to consume the outputs coming from each LLM model response, or the
+        stream of events coming from the execution of tools.
 
-        The returned `AgentRun` object can be async iterated over to get the nodes of the graph as they are executed.:
-        This is the API you should use if you want to consume the graph execution in a streaming manner,
-        or if you want to consume the stream of events coming from individual requests to the LLM, or the stream
-        of events coming from the execution of tools.
+        The `AgentRun` also provides methods to access the full message history, new messages, and usage statistics,
+        and the final result of the run once it has completed.
 
         For more details, see the documentation of `AgentRun`.
 
@@ -360,9 +363,9 @@ class Agent(Generic[AgentDepsT, ResultDataT]):
         ```
 
         Args:
+            user_prompt: User input to start/continue the conversation.
             result_type: Custom result type to use for this run, `result_type` may only be used if the agent has no
                 result validators since result validators would expect an argument that matches the agent's result type.
-            user_prompt: User input to start/continue the conversation.
             message_history: History of the conversation so far.
             model: Optional model to use for this run, required if `model` was not set when creating the agent.
             deps: Optional dependencies to use for this run.
@@ -487,7 +490,7 @@ class Agent(Generic[AgentDepsT, ResultDataT]):
         usage: _usage.Usage | None = None,
         infer_name: bool = True,
     ) -> AgentRunResult[AgentDepsT, Any]:
-        """Run the agent with a user prompt synchronously.
+        """Synchronously run the agent with a user prompt.
 
         This is a convenience method that wraps [`self.run`][pydantic_ai.Agent.run] with `loop.run_until_complete(...)`.
         You therefore can't use this method inside async code or if there's an active event loop.
@@ -504,9 +507,9 @@ class Agent(Generic[AgentDepsT, ResultDataT]):
         ```
 
         Args:
+            user_prompt: User input to start/continue the conversation.
             result_type: Custom result type to use for this run, `result_type` may only be used if the agent has no
                 result validators since result validators would expect an argument that matches the agent's result type.
-            user_prompt: User input to start/continue the conversation.
             message_history: History of the conversation so far.
             model: Optional model to use for this run, required if `model` was not set when creating the agent.
             deps: Optional dependencies to use for this run.
@@ -565,7 +568,7 @@ class Agent(Generic[AgentDepsT, ResultDataT]):
     ) -> AbstractAsyncContextManager[result.StreamedRunResult[AgentDepsT, RunResultDataT]]: ...
 
     @asynccontextmanager
-    async def run_stream(  # noqa
+    async def run_stream(  # noqa C901
         self,
         user_prompt: str,
         *,
@@ -593,9 +596,9 @@ class Agent(Generic[AgentDepsT, ResultDataT]):
         ```
 
         Args:
+            user_prompt: User input to start/continue the conversation.
             result_type: Custom result type to use for this run, `result_type` may only be used if the agent has no
                 result validators since result validators would expect an argument that matches the agent's result type.
-            user_prompt: User input to start/continue the conversation.
             message_history: History of the conversation so far.
             model: Optional model to use for this run, required if `model` was not set when creating the agent.
             deps: Optional dependencies to use for this run.
@@ -607,6 +610,8 @@ class Agent(Generic[AgentDepsT, ResultDataT]):
         Returns:
             The result of the run.
         """
+        # TODO: We need to deprecate this now that we have the `iter` method.
+        #   Before that, though, we should add an event for when we reach the final result of the stream.
         if infer_name and self.name is None:
             # f_back because `asynccontextmanager` adds one frame
             if frame := inspect.currentframe():  # pragma: no branch
@@ -630,7 +635,7 @@ class Agent(Generic[AgentDepsT, ResultDataT]):
             while True:
                 if isinstance(node, _agent_graph.ModelRequestNode):
                     node = cast(_agent_graph.ModelRequestNode[AgentDepsT, Any], node)
-                    graph_ctx = agent_run.get_graph_ctx()
+                    graph_ctx = agent_run.ctx
                     async with node.stream(graph_ctx) as streamed_response:
 
                         async def stream_to_final(
@@ -1156,15 +1161,28 @@ class Agent(Generic[AgentDepsT, ResultDataT]):
 
 @dataclasses.dataclass(repr=False)
 class AgentRun(Generic[AgentDepsT, ResultDataT]):
-    """A stateful, iterable run of an agent."""
+    """A stateful, iterable run of an agent.
+
+    TODO: Add API documentation here.
+    """
 
     _graph_run: GraphRun[
         _agent_graph.GraphAgentState, _agent_graph.GraphAgentDeps[AgentDepsT, Any], FinalResult[ResultDataT]
     ]
 
     @property
-    def final_result(self) -> AgentRunResult[AgentDepsT, ResultDataT]:
+    def ctx(self) -> GraphRunContext[_agent_graph.GraphAgentState, _agent_graph.GraphAgentDeps[AgentDepsT, Any]]:
+        """The current context of the agent run."""
+        return GraphRunContext[_agent_graph.GraphAgentState, _agent_graph.GraphAgentDeps[AgentDepsT, Any]](
+            self._graph_run.state, self._graph_run.deps
+        )
+
+    @property
+    def final_result(self) -> AgentRunResult[AgentDepsT, ResultDataT] | None:
+        """The final result of the agent run."""
         graph_run_result = self._graph_run.final_result
+        if graph_run_result is None:
+            return None
         return AgentRunResult(graph_run_result)
 
     def __aiter__(
@@ -1217,20 +1235,10 @@ class AgentRun(Generic[AgentDepsT, ResultDataT]):
     def usage(self) -> _usage.Usage:
         return self._graph_run.state.usage
 
-    def get_graph_ctx(
-        self,
-    ) -> GraphRunContext[_agent_graph.GraphAgentState, _agent_graph.GraphAgentDeps[AgentDepsT, Any]]:
-        return GraphRunContext[_agent_graph.GraphAgentState, _agent_graph.GraphAgentDeps[AgentDepsT, Any]](
-            self._graph_run.state, self._graph_run.deps
-        )
-
     def __repr__(self):
-        try:
-            result_repr = repr(self._graph_run.final_result.result)
-        except GraphRuntimeError:
-            result_repr = '<not yet available>'
-        usage = self.usage()
-        kws = [f'result={result_repr}', f'usage={usage}']
+        final_result = self._graph_run.final_result
+        result_repr = '<run not finished>' if final_result is None else repr(final_result.result)
+        kws = [f'result={result_repr}', f'usage={self.usage()}']
         return '<{} {}>'.format(type(self).__name__, ' '.join(kws))
 
 

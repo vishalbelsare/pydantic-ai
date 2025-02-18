@@ -219,7 +219,7 @@ class StreamedRunResult(Generic[AgentDepsT, ResultDataT]):
 
             msg = self._stream_response.get()
             yield msg, True
-            # TODO: Should this now be `final_response` instead of `structured_response`?
+
             lf_span.set_attribute('structured_response', msg)
             await self._marked_completed(msg)
 
@@ -231,7 +231,6 @@ class StreamedRunResult(Generic[AgentDepsT, ResultDataT]):
 
         async for _ in usage_checking_stream:
             pass
-
         message = self._stream_response.get()
         await self._marked_completed(message)
         return await self.validate_structured_result(message)
@@ -293,17 +292,12 @@ class StreamedRunResult(Generic[AgentDepsT, ResultDataT]):
 
 @dataclass
 class FinalResult(Generic[ResultDataT]):
-    """Marker class to indicate that the result is the final result.
-
-    This allows us to use `isinstance`, which wouldn't be possible if we were returning `ResultDataT` directly.
-
-    It also avoids problems in the case where the result type is itself `None`, but is set.
-    """
+    """Marker class storing the final result of an agent run and associated metadata."""
 
     data: ResultDataT
     """The final result data."""
     tool_name: str | None
-    """Name of the final result tool, None if the result is a string."""
+    """Name of the final result tool; `None` if the result came from unstructured text content."""
 
 
 def _get_usage_checking_stream_response(

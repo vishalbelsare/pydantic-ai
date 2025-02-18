@@ -143,10 +143,11 @@ class Graph(Generic[StateT, DepsT, RunEndT]):
             state: The initial state of the graph.
             deps: The dependencies of the graph.
             infer_name: Whether to infer the graph name from the calling frame.
-            span: The span to use for the graph run. If not provided, a new span will be created.
+            span: The span to use for the graph run. If not provided, a span will be created depending on the value of
+                the `_auto_instrument` field.
 
         Returns:
-            The result type from ending the run and the history of the run.
+            A `GraphRunResult` containing information about the run, including its final result.
 
         Here's an example of running the graph from [above][pydantic_graph.graph.Graph]:
 
@@ -155,17 +156,17 @@ class Graph(Generic[StateT, DepsT, RunEndT]):
 
         async def main():
             state = MyState(1)
-            graph_run = await never_42_graph.run(Increment(), state=state)
+            graph_run_result = await never_42_graph.run(Increment(), state=state)
             print(state)
             #> MyState(number=2)
-            print(len(graph_run.history))
+            print(len(graph_run_result.history))
             #> 3
 
             state = MyState(41)
-            graph_run = await never_42_graph.run(Increment(), state=state)
+            graph_run_result = await never_42_graph.run(Increment(), state=state)
             print(state)
             #> MyState(number=43)
-            print(len(graph_run.history))
+            print(len(graph_run_result.history))
             #> 5
         ```
         """
@@ -176,7 +177,9 @@ class Graph(Generic[StateT, DepsT, RunEndT]):
             async for _node in graph_run:
                 pass
 
-        return graph_run.final_result
+        final_result = graph_run.final_result
+        assert final_result is not None, 'GraphRun should have a final result'
+        return final_result
 
     @contextmanager
     def iter(
@@ -188,10 +191,19 @@ class Graph(Generic[StateT, DepsT, RunEndT]):
         infer_name: bool = True,
         span: LogfireSpan | None = None,
     ) -> Iterator[GraphRun[StateT, DepsT, T]]:
-        """A contextmanager that yields a GraphRun that can be async iterated over to drive the graph to completion.
+        """A contextmanager which can be used to iterate over the graph's nodes as they are executed.
+
+        This method returns a `GraphRun` object which can be used to (async) iterate over the nodes of this `Graph` as
+        they are executed. This is the API to use if you want to record or interact with the nodes as the graph
+        execution unfolds.
+
+        The `GraphRun` provides access to the full run history, state, deps, and the final result of the run once
+        it has completed.
+
+        For more details, see the documentation of `GraphRun`.
 
         Args:
-            start_node: the first node to run, since the graph definition doesn't define the entry point in the graph,
+            start_node: the first node to run. Since the graph definition doesn't define the entry point in the graph,
                 you need to provide the starting node.
             state: The initial state of the graph.
             deps: The dependencies of the graph.
@@ -201,8 +213,32 @@ class Graph(Generic[StateT, DepsT, RunEndT]):
         Yields:
             A GraphRun that can be async iterated over to drive the graph to completion.
 
-        Here's an example of running the graph from [above][pydantic_graph.graph.Graph]:
-        # TODO: Need to add an example here akin to that from `Graph.run` above
+        Here's an example of iterating over the graph from [above][pydantic_graph.graph.Graph]:
+
+        ```py {title="run_never_42.py" noqa="I001" py="3.10"}
+        from never_42 import Increment, MyState, never_42_graph
+
+        async def main():
+            state = MyState(1)
+            nodes = []
+            with never_42_graph.iter(Increment(), state=state) as graph_run:
+                async for node in graph_run:
+                    nodes.append(node)
+            print(nodes)
+            #> [Check42(), End(data=2)]
+            print(state)
+            #> MyState(number=2)
+
+            state = MyState(41)
+            nodes = []
+            with never_42_graph.iter(Increment(), state=state) as graph_run:
+                async for node in graph_run:
+                    nodes.append(node)
+            print(nodes)
+            #> [Check42(), Increment(), Check42(), End(data=43)]
+            print(state)
+            #> MyState(number=43)
+        ```
         """
         if infer_name and self.name is None:
             self._infer_name(inspect.currentframe())
@@ -231,7 +267,7 @@ class Graph(Generic[StateT, DepsT, RunEndT]):
         deps: DepsT = None,
         infer_name: bool = True,
     ) -> GraphRunResult[StateT, DepsT, T]:
-        """Run the graph synchronously.
+        """Synchronously run the graph.
 
         This is a convenience method that wraps [`self.run`][pydantic_graph.Graph.run] with `loop.run_until_complete(...)`.
         You therefore can't use this method inside async code or if there's an active event loop.
@@ -553,7 +589,7 @@ class GraphRun(Generic[StateT, DepsT, RunEndT]):
 
     After being entered, can be used like an async generator to listen to / modify nodes as the run is executed.
 
-    TODO: this requires some heavy weight API documentation.
+    TODO: this requires some heavy weight API documentation. Docstring
     """
 
     def __init__(
@@ -577,9 +613,10 @@ class GraphRun(Generic[StateT, DepsT, RunEndT]):
         self._next_node: BaseNode[StateT, DepsT, RunEndT] | End[RunEndT] = start_node
 
     @property
-    def final_result(self) -> GraphRunResult[StateT, DepsT, RunEndT]:
+    def final_result(self) -> GraphRunResult[StateT, DepsT, RunEndT] | None:
+        """The final result of the agent run if the run is completed, otherwise `None`."""
         if not isinstance(self._next_node, End):
-            raise exceptions.GraphRuntimeError('This GraphRun has not finished running.')
+            return None  # The GraphRun has not finished running
         return GraphRunResult(
             self._next_node.data, graph=self.graph, history=self.history, state=self.state, deps=self.deps
         )

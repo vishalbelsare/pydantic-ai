@@ -24,32 +24,56 @@ def test_handle_text_deltas(vendor_part_id: str | None):
     assert manager.get_parts() == []
 
     event = manager.handle_text_delta(vendor_part_id=vendor_part_id, content='hello ')
-    assert event == snapshot(PartStartEvent(index=0, part=TextPart(content='hello ')))
-    assert manager.get_parts() == snapshot([TextPart(content='hello ')])
+    assert event == snapshot(
+        PartStartEvent(index=0, part=TextPart(content='hello ', part_kind='text'), event_kind='part_start')
+    )
+    assert manager.get_parts() == snapshot([TextPart(content='hello ', part_kind='text')])
 
     event = manager.handle_text_delta(vendor_part_id=vendor_part_id, content='world')
-    assert event == snapshot(PartDeltaEvent(index=0, delta=TextPartDelta(content_delta='world')))
-    assert manager.get_parts() == snapshot([TextPart(content='hello world')])
+    assert event == snapshot(
+        PartDeltaEvent(
+            index=0, delta=TextPartDelta(content_delta='world', part_delta_kind='text'), event_kind='part_delta'
+        )
+    )
+    assert manager.get_parts() == snapshot([TextPart(content='hello world', part_kind='text')])
 
 
 def test_handle_dovetailed_text_deltas():
     manager = ModelResponsePartsManager()
 
     event = manager.handle_text_delta(vendor_part_id='first', content='hello ')
-    assert event == snapshot(PartStartEvent(index=0, part=TextPart(content='hello ')))
-    assert manager.get_parts() == snapshot([TextPart(content='hello ')])
+    assert event == snapshot(
+        PartStartEvent(index=0, part=TextPart(content='hello ', part_kind='text'), event_kind='part_start')
+    )
+    assert manager.get_parts() == snapshot([TextPart(content='hello ', part_kind='text')])
 
     event = manager.handle_text_delta(vendor_part_id='second', content='goodbye ')
-    assert event == snapshot(PartStartEvent(index=1, part=TextPart(content='goodbye ')))
-    assert manager.get_parts() == snapshot([TextPart(content='hello '), TextPart(content='goodbye ')])
+    assert event == snapshot(
+        PartStartEvent(index=1, part=TextPart(content='goodbye ', part_kind='text'), event_kind='part_start')
+    )
+    assert manager.get_parts() == snapshot(
+        [TextPart(content='hello ', part_kind='text'), TextPart(content='goodbye ', part_kind='text')]
+    )
 
     event = manager.handle_text_delta(vendor_part_id='first', content='world')
-    assert event == snapshot(PartDeltaEvent(index=0, delta=TextPartDelta(content_delta='world')))
-    assert manager.get_parts() == snapshot([TextPart(content='hello world'), TextPart(content='goodbye ')])
+    assert event == snapshot(
+        PartDeltaEvent(
+            index=0, delta=TextPartDelta(content_delta='world', part_delta_kind='text'), event_kind='part_delta'
+        )
+    )
+    assert manager.get_parts() == snapshot(
+        [TextPart(content='hello world', part_kind='text'), TextPart(content='goodbye ', part_kind='text')]
+    )
 
     event = manager.handle_text_delta(vendor_part_id='second', content='Samuel')
-    assert event == snapshot(PartDeltaEvent(index=1, delta=TextPartDelta(content_delta='Samuel')))
-    assert manager.get_parts() == snapshot([TextPart(content='hello world'), TextPart(content='goodbye Samuel')])
+    assert event == snapshot(
+        PartDeltaEvent(
+            index=1, delta=TextPartDelta(content_delta='Samuel', part_delta_kind='text'), event_kind='part_delta'
+        )
+    )
+    assert manager.get_parts() == snapshot(
+        [TextPart(content='hello world', part_kind='text'), TextPart(content='goodbye Samuel', part_kind='text')]
+    )
 
 
 def test_handle_tool_call_deltas():
@@ -65,33 +89,36 @@ def test_handle_tool_call_deltas():
     assert event == snapshot(
         PartStartEvent(
             index=0,
-            part=ToolCallPart(tool_name='tool', args='{"arg1":', tool_call_id=None),
+            part=ToolCallPart(tool_name='tool', args='{"arg1":', tool_call_id=None, part_kind='tool-call'),
+            event_kind='part_start',
         )
     )
-    assert manager.get_parts() == snapshot([ToolCallPart(tool_name='tool', args='{"arg1":', tool_call_id=None)])
+    assert manager.get_parts() == snapshot(
+        [ToolCallPart(tool_name='tool', args='{"arg1":', tool_call_id=None, part_kind='tool-call')]
+    )
 
     event = manager.handle_tool_call_delta(vendor_part_id='first', tool_name='1', args=None, tool_call_id=None)
     assert event == snapshot(
         PartDeltaEvent(
             index=0,
             delta=ToolCallPartDelta(
-                tool_name_delta='1',
-                args_delta=None,
-                tool_call_id=None,
+                tool_name_delta='1', args_delta=None, tool_call_id=None, part_delta_kind='tool_call'
             ),
+            event_kind='part_delta',
         )
     )
-    assert manager.get_parts() == snapshot([ToolCallPart(tool_name='tool1', args='{"arg1":', tool_call_id=None)])
+    assert manager.get_parts() == snapshot(
+        [ToolCallPart(tool_name='tool1', args='{"arg1":', tool_call_id=None, part_kind='tool-call')]
+    )
 
     event = manager.handle_tool_call_delta(vendor_part_id='first', tool_name=None, args='"value1"}', tool_call_id=None)
     assert event == snapshot(
         PartDeltaEvent(
             index=0,
             delta=ToolCallPartDelta(
-                tool_name_delta=None,
-                args_delta='"value1"}',
-                tool_call_id=None,
+                tool_name_delta=None, args_delta='"value1"}', tool_call_id=None, part_delta_kind='tool_call'
             ),
+            event_kind='part_delta',
         )
     )
     assert manager.get_parts() == snapshot(
@@ -100,6 +127,7 @@ def test_handle_tool_call_deltas():
                 tool_name='tool1',
                 args='{"arg1":"value1"}',
                 tool_call_id=None,
+                part_kind='tool-call',
             )
         ]
     )
@@ -116,6 +144,7 @@ def test_handle_tool_call_deltas_without_vendor_id():
                 tool_name='tool1',
                 args='{"arg1":"value1"}',
                 tool_call_id=None,
+                part_kind='tool-call',
             )
         ]
     )
@@ -126,8 +155,8 @@ def test_handle_tool_call_deltas_without_vendor_id():
     manager.handle_tool_call_delta(vendor_part_id=None, tool_name='tool2', args='"value1"}', tool_call_id=None)
     assert manager.get_parts() == snapshot(
         [
-            ToolCallPart(tool_name='tool2', args='{"arg1":', tool_call_id=None),
-            ToolCallPart(tool_name='tool2', args='"value1"}', tool_call_id=None),
+            ToolCallPart(tool_name='tool2', args='{"arg1":', tool_call_id=None, part_kind='tool-call'),
+            ToolCallPart(tool_name='tool2', args='"value1"}', tool_call_id=None, part_kind='tool-call'),
         ]
     )
 
@@ -140,20 +169,23 @@ def test_handle_tool_call_part():
     assert event == snapshot(
         PartStartEvent(
             index=0,
-            part=ToolCallPart(tool_name='tool1', args='{"arg1":', tool_call_id=None),
+            part=ToolCallPart(tool_name='tool1', args='{"arg1":', tool_call_id=None, part_kind='tool-call'),
+            event_kind='part_start',
         )
     )
 
     # Add a delta
     manager.handle_tool_call_delta(vendor_part_id='second', tool_name='tool1', args=None, tool_call_id=None)
-    assert manager.get_parts() == snapshot([ToolCallPart(tool_name='tool1', args='{"arg1":', tool_call_id=None)])
+    assert manager.get_parts() == snapshot(
+        [ToolCallPart(tool_name='tool1', args='{"arg1":', tool_call_id=None, part_kind='tool-call')]
+    )
 
     # Override it with handle_tool_call_part
     manager.handle_tool_call_part(vendor_part_id='second', tool_name='tool1', args='{}', tool_call_id=None)
     assert manager.get_parts() == snapshot(
         [
-            ToolCallPart(tool_name='tool1', args='{"arg1":', tool_call_id=None),
-            ToolCallPart(tool_name='tool1', args='{}', tool_call_id=None),
+            ToolCallPart(tool_name='tool1', args='{"arg1":', tool_call_id=None, part_kind='tool-call'),
+            ToolCallPart(tool_name='tool1', args='{}', tool_call_id=None, part_kind='tool-call'),
         ]
     )
 
@@ -162,10 +194,9 @@ def test_handle_tool_call_part():
         PartDeltaEvent(
             index=0,
             delta=ToolCallPartDelta(
-                tool_name_delta=None,
-                args_delta='"value1"}',
-                tool_call_id=None,
+                tool_name_delta=None, args_delta='"value1"}', tool_call_id=None, part_delta_kind='tool_call'
             ),
+            event_kind='part_delta',
         )
     )
     assert manager.get_parts() == snapshot(
@@ -174,8 +205,9 @@ def test_handle_tool_call_part():
                 tool_name='tool1',
                 args='{"arg1":"value1"}',
                 tool_call_id=None,
+                part_kind='tool-call',
             ),
-            ToolCallPart(tool_name='tool1', args='{}', tool_call_id=None),
+            ToolCallPart(tool_name='tool1', args='{}', tool_call_id=None, part_kind='tool-call'),
         ]
     )
 
@@ -184,7 +216,8 @@ def test_handle_tool_call_part():
     assert event == snapshot(
         PartStartEvent(
             index=2,
-            part=ToolCallPart(tool_name='tool1', args='{}', tool_call_id=None),
+            part=ToolCallPart(tool_name='tool1', args='{}', tool_call_id=None, part_kind='tool-call'),
+            event_kind='part_start',
         )
     )
     assert manager.get_parts() == snapshot(
@@ -193,9 +226,10 @@ def test_handle_tool_call_part():
                 tool_name='tool1',
                 args='{"arg1":"value1"}',
                 tool_call_id=None,
+                part_kind='tool-call',
             ),
-            ToolCallPart(tool_name='tool1', args='{}', tool_call_id=None),
-            ToolCallPart(tool_name='tool1', args='{}', tool_call_id=None),
+            ToolCallPart(tool_name='tool1', args='{}', tool_call_id=None, part_kind='tool-call'),
+            ToolCallPart(tool_name='tool1', args='{}', tool_call_id=None, part_kind='tool-call'),
         ]
     )
 
@@ -206,8 +240,10 @@ def test_handle_mixed_deltas_without_text_part_id(text_vendor_part_id: str | Non
     manager = ModelResponsePartsManager()
 
     event = manager.handle_text_delta(vendor_part_id=text_vendor_part_id, content='hello ')
-    assert event == snapshot(PartStartEvent(index=0, part=TextPart(content='hello ')))
-    assert manager.get_parts() == snapshot([TextPart(content='hello ')])
+    assert event == snapshot(
+        PartStartEvent(index=0, part=TextPart(content='hello ', part_kind='text'), event_kind='part_start')
+    )
+    assert manager.get_parts() == snapshot([TextPart(content='hello ', part_kind='text')])
 
     event = manager.handle_tool_call_delta(
         vendor_part_id=tool_vendor_part_id, tool_name='tool1', args='{"arg1":', tool_call_id='abc'
@@ -215,7 +251,8 @@ def test_handle_mixed_deltas_without_text_part_id(text_vendor_part_id: str | Non
     assert event == snapshot(
         PartStartEvent(
             index=1,
-            part=ToolCallPart(tool_name='tool1', args='{"arg1":', tool_call_id='abc'),
+            part=ToolCallPart(tool_name='tool1', args='{"arg1":', tool_call_id='abc', part_kind='tool-call'),
+            event_kind='part_start',
         )
     )
 
@@ -224,22 +261,27 @@ def test_handle_mixed_deltas_without_text_part_id(text_vendor_part_id: str | Non
         assert event == snapshot(
             PartStartEvent(
                 index=2,
-                part=TextPart(content='world'),
+                part=TextPart(content='world', part_kind='text'),
+                event_kind='part_start',
             )
         )
         assert manager.get_parts() == snapshot(
             [
-                TextPart(content='hello '),
-                ToolCallPart(tool_name='tool1', args='{"arg1":', tool_call_id='abc'),
-                TextPart(content='world'),
+                TextPart(content='hello ', part_kind='text'),
+                ToolCallPart(tool_name='tool1', args='{"arg1":', tool_call_id='abc', part_kind='tool-call'),
+                TextPart(content='world', part_kind='text'),
             ]
         )
     else:
-        assert event == snapshot(PartDeltaEvent(index=0, delta=TextPartDelta(content_delta='world')))
+        assert event == snapshot(
+            PartDeltaEvent(
+                index=0, delta=TextPartDelta(content_delta='world', part_delta_kind='text'), event_kind='part_delta'
+            )
+        )
         assert manager.get_parts() == snapshot(
             [
-                TextPart(content='hello world'),
-                ToolCallPart(tool_name='tool1', args='{"arg1":', tool_call_id='abc'),
+                TextPart(content='hello world', part_kind='text'),
+                ToolCallPart(tool_name='tool1', args='{"arg1":', tool_call_id='abc', part_kind='tool-call'),
             ]
         )
 
@@ -271,6 +313,7 @@ def test_tool_call_id_delta():
                 tool_name='tool1',
                 args='{"arg1":',
                 tool_call_id=None,
+                part_kind='tool-call',
             )
         ]
     )
@@ -282,6 +325,7 @@ def test_tool_call_id_delta():
                 tool_name='tool1',
                 args='{"arg1":"value1"}',
                 tool_call_id='id2',
+                part_kind='tool-call',
             )
         ]
     )
@@ -302,6 +346,7 @@ def test_tool_call_id_delta_failure(apply_to_delta: bool):
                 tool_name='tool1',
                 args='{"arg1":',
                 tool_call_id='id1',
+                part_kind='tool-call',
             )
         ]
     )

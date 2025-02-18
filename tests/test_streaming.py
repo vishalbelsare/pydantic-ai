@@ -592,8 +592,10 @@ async def test_early_strategy_with_final_result_in_middle():
                     UserPromptPart(
                         content='test early strategy with final ' 'result in middle',
                         timestamp=IsNow(tz=datetime.timezone.utc),
+                        part_kind='user-prompt',
                     )
                 ],
+                kind='request',
             ),
             ModelResponse(
                 parts=[
@@ -601,25 +603,30 @@ async def test_early_strategy_with_final_result_in_middle():
                         tool_name='regular_tool',
                         args='{"x": 1}',
                         tool_call_id=None,
+                        part_kind='tool-call',
                     ),
                     ToolCallPart(
                         tool_name='final_result',
                         args='{"value": "final"}',
                         tool_call_id=None,
+                        part_kind='tool-call',
                     ),
                     ToolCallPart(
                         tool_name='another_tool',
                         args='{"y": 2}',
                         tool_call_id=None,
+                        part_kind='tool-call',
                     ),
                     ToolCallPart(
                         tool_name='unknown_tool',
                         args='{"value": "???"}',
                         tool_call_id=None,
+                        part_kind='tool-call',
                     ),
                 ],
                 model_name='function:sf',
                 timestamp=IsNow(tz=datetime.timezone.utc),
+                kind='response',
             ),
             ModelRequest(
                 parts=[
@@ -628,18 +635,21 @@ async def test_early_strategy_with_final_result_in_middle():
                         content='Tool not executed - a final ' 'result was already processed.',
                         tool_call_id=None,
                         timestamp=IsNow(tz=datetime.timezone.utc),
+                        part_kind='tool-return',
                     ),
                     ToolReturnPart(
                         tool_name='final_result',
                         content='Final result processed.',
                         tool_call_id=None,
                         timestamp=IsNow(tz=datetime.timezone.utc),
+                        part_kind='tool-return',
                     ),
                     ToolReturnPart(
                         tool_name='another_tool',
                         content='Tool not executed - a final ' 'result was already processed.',
                         tool_call_id=None,
                         timestamp=IsNow(tz=datetime.timezone.utc),
+                        part_kind='tool-return',
                     ),
                     RetryPromptPart(
                         content='Unknown tool name: '
@@ -649,8 +659,10 @@ async def test_early_strategy_with_final_result_in_middle():
                         tool_name=None,
                         tool_call_id=None,
                         timestamp=IsNow(tz=datetime.timezone.utc),
+                        part_kind='retry-prompt',
                     ),
                 ],
+                kind='request',
             ),
         ]
     )

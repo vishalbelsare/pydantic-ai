@@ -21,10 +21,10 @@ from . import (
     exceptions,
     messages as _messages,
     models,
+    result,
     usage as _usage,
 )
-from .models import ModelRequestParameters, StreamedResponse
-from .result import FinalResult, ResultDataT
+from .result import ResultDataT
 from .settings import ModelSettings, merge_model_settings
 from .tools import (
     RunContext,
@@ -228,8 +228,9 @@ class ModelRequestNode(BaseNode[GraphAgentState, GraphAgentDeps[DepsT, Any], Nod
 
     @asynccontextmanager
     async def stream(
-        self, ctx: GraphRunContext[GraphAgentState, GraphAgentDeps[DepsT, Any]]
-    ) -> AsyncIterator[StreamedResponse]:
+        self,
+        ctx: GraphRunContext[GraphAgentState, GraphAgentDeps[DepsT, Any]],
+    ) -> AsyncIterator[models.StreamedResponse]:
         if self._did_stream:
             raise exceptions.AgentRunError('stream() can only be called once')
 
@@ -272,7 +273,7 @@ class ModelRequestNode(BaseNode[GraphAgentState, GraphAgentDeps[DepsT, Any], Nod
 
     async def _prepare_request(
         self, ctx: GraphRunContext[GraphAgentState, GraphAgentDeps[DepsT, NodeRunEndT]]
-    ) -> tuple[ModelSettings | None, ModelRequestParameters]:
+    ) -> tuple[ModelSettings | None, models.ModelRequestParameters]:
         ctx.state.message_history.append(self.request)
 
         # Check usage
@@ -309,19 +310,20 @@ class ModelRequestNode(BaseNode[GraphAgentState, GraphAgentDeps[DepsT, Any], Nod
 
 @dataclasses.dataclass
 class HandleResponseNode(BaseNode[GraphAgentState, GraphAgentDeps[DepsT, Any], NodeRunEndT]):
-    """Process the response from a model, decide whether to end the run or make a new request."""
+    """Process a model response, and decide whether to end the run or make a new request."""
 
     model_response: _messages.ModelResponse
 
     _stream: AsyncIterator[_messages.HandleResponseEvent] | None = field(default=None, repr=False)
-    _next_node: ModelRequestNode[DepsT, NodeRunEndT] | End[FinalResult[NodeRunEndT]] | None = field(
+    _next_node: ModelRequestNode[DepsT, NodeRunEndT] | End[result.FinalResult[NodeRunEndT]] | None = field(
         default=None, repr=False
     )
     _tool_responses: list[_messages.ModelRequestPart] = field(default_factory=list, repr=False)
 
     async def run(
         self, ctx: GraphRunContext[GraphAgentState, GraphAgentDeps[DepsT, NodeRunEndT]]
-    ) -> Union[ModelRequestNode[DepsT, NodeRunEndT], End[FinalResult[NodeRunEndT]]]:  # noqa UP007
+    ) -> Union[ModelRequestNode[DepsT, NodeRunEndT], End[result.FinalResult[NodeRunEndT]]]:  # noqa UP007
+        """TODO: Docstring?"""
         async with self.stream(ctx):
             pass
 
@@ -332,6 +334,7 @@ class HandleResponseNode(BaseNode[GraphAgentState, GraphAgentDeps[DepsT, Any], N
     async def stream(
         self, ctx: GraphRunContext[GraphAgentState, GraphAgentDeps[DepsT, Any]]
     ) -> AsyncIterator[AsyncIterator[_messages.HandleResponseEvent]]:
+        """TODO: Docstring."""
         with _logfire.span('handle model response', run_step=ctx.state.run_step) as handle_span:
             stream = self._run_stream(ctx)
             yield stream
@@ -398,7 +401,7 @@ class HandleResponseNode(BaseNode[GraphAgentState, GraphAgentDeps[DepsT, Any], N
         result_schema = ctx.deps.result_schema
 
         # first look for the result tool call
-        final_result: FinalResult[NodeRunEndT] | None = None
+        final_result: result.FinalResult[NodeRunEndT] | None = None
         parts: list[_messages.ModelRequestPart] = []
         if result_schema is not None:
             if match := result_schema.find_tool(tool_calls):
@@ -412,7 +415,7 @@ class HandleResponseNode(BaseNode[GraphAgentState, GraphAgentDeps[DepsT, Any], N
                     ctx.state.increment_retries(ctx.deps.max_result_retries)
                     parts.append(e.tool_retry)
                 else:
-                    final_result = FinalResult(result_data, call.tool_name)
+                    final_result = result.FinalResult(result_data, call.tool_name)
 
         # Then build the other request parts based on end strategy
         tool_responses: list[_messages.ModelRequestPart] = self._tool_responses
@@ -431,9 +434,9 @@ class HandleResponseNode(BaseNode[GraphAgentState, GraphAgentDeps[DepsT, Any], N
     def _handle_final_result(
         self,
         ctx: GraphRunContext[GraphAgentState, GraphAgentDeps[DepsT, NodeRunEndT]],
-        final_result: FinalResult[NodeRunEndT],
+        final_result: result.FinalResult[NodeRunEndT],
         tool_responses: list[_messages.ModelRequestPart],
-    ) -> End[FinalResult[NodeRunEndT]]:
+    ) -> End[result.FinalResult[NodeRunEndT]]:
         run_span = ctx.deps.run_span
         usage = ctx.state.usage
         messages = ctx.state.message_history
@@ -452,7 +455,7 @@ class HandleResponseNode(BaseNode[GraphAgentState, GraphAgentDeps[DepsT, Any], N
         self,
         ctx: GraphRunContext[GraphAgentState, GraphAgentDeps[DepsT, NodeRunEndT]],
         texts: list[str],
-    ) -> ModelRequestNode[DepsT, NodeRunEndT] | End[FinalResult[NodeRunEndT]]:
+    ) -> ModelRequestNode[DepsT, NodeRunEndT] | End[result.FinalResult[NodeRunEndT]]:
         result_schema = ctx.deps.result_schema
 
         text = '\n\n'.join(texts)
@@ -465,7 +468,7 @@ class HandleResponseNode(BaseNode[GraphAgentState, GraphAgentDeps[DepsT, Any], N
                 return ModelRequestNode[DepsT, NodeRunEndT](_messages.ModelRequest(parts=[e.tool_retry]))
             else:
                 # The following cast is safe because we know `str` is an allowed result type
-                return self._handle_final_result(ctx, FinalResult(result_data, tool_name=None), [])
+                return self._handle_final_result(ctx, result.FinalResult(result_data, tool_name=None), [])
         else:
             ctx.state.increment_retries(ctx.deps.max_result_retries)
             return ModelRequestNode[DepsT, NodeRunEndT](
@@ -480,6 +483,7 @@ class HandleResponseNode(BaseNode[GraphAgentState, GraphAgentDeps[DepsT, Any], N
 
 
 def build_run_context(ctx: GraphRunContext[GraphAgentState, GraphAgentDeps[DepsT, Any]]) -> RunContext[DepsT]:
+    """TODO: Docstring."""
     return RunContext[DepsT](
         deps=ctx.deps.user_deps,
         model=ctx.deps.model,
@@ -496,11 +500,11 @@ async def process_function_tools(
     ctx: GraphRunContext[GraphAgentState, GraphAgentDeps[DepsT, NodeRunEndT]],
     output_parts: list[_messages.ModelRequestPart],
 ) -> AsyncIterator[_messages.HandleResponseEvent]:
-    """Process function (non-result) tool calls in parallel.
+    """Process function (i.e., non-result) tool calls in parallel.
 
     Also add stub return parts for any other tools that need it.
 
-    Because async iterators can't have return values, we use `parts` as an output argument.
+    Because async iterators can't have return values, we use `output_parts` as an output argument.
     """
     stub_function_tools = bool(result_tool_name) and ctx.deps.end_strategy == 'early'
     result_schema = ctx.deps.result_schema
@@ -603,6 +607,7 @@ async def _validate_result(
 
 
 def allow_text_result(result_schema: _result.ResultSchema[Any] | None) -> bool:
+    """TODO: Docstring."""
     return result_schema is None or result_schema.allow_text_result
 
 
@@ -656,18 +661,19 @@ def get_captured_run_messages() -> _RunMessages:
 
 def build_agent_graph(
     name: str | None, deps_type: type[DepsT], result_type: type[ResultT]
-) -> Graph[GraphAgentState, GraphAgentDeps[DepsT, Any], FinalResult[ResultT]]:
+) -> Graph[GraphAgentState, GraphAgentDeps[DepsT, Any], result.FinalResult[ResultT]]:
+    """TODO: Docstring."""
     # We'll define the known node classes:
     nodes = (
         UserPromptNode[DepsT],
         ModelRequestNode[DepsT],
         HandleResponseNode[DepsT],
     )
-    graph = Graph[GraphAgentState, GraphAgentDeps[DepsT, Any], FinalResult[ResultT]](
+    graph = Graph[GraphAgentState, GraphAgentDeps[DepsT, Any], result.FinalResult[ResultT]](
         nodes=nodes,
         name=name or 'Agent',
         state_type=GraphAgentState,
-        run_end_type=FinalResult[result_type],
+        run_end_type=result.FinalResult[result_type],
         auto_instrument=False,
     )
     return graph

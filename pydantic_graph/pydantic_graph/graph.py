@@ -561,7 +561,7 @@ class Graph(Generic[StateT, DepsT, RunEndT]):
 
 
 class GraphRun(Generic[StateT, DepsT, RunEndT]):
-    """A stateful, async-iterable run of a [`Graph`][pydantic_ai.graph.Graph].
+    """A stateful, async-iterable run of a [`Graph`][pydantic_graph.graph.Graph].
 
     You typically get a `GraphRun` instance from calling
     `with [my_graph.iter(...)][pydantic_graph.graph.Graph.iter] as graph_run:`. That gives you the ability to iterate

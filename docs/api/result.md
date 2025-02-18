@@ -2,4 +2,6 @@
 
 ::: pydantic_ai.result
     options:
-      inherited_members: true
+        inherited_members: true
+        members:
+            - StreamedRunResult

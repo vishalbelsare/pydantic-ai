@@ -4,6 +4,8 @@
     options:
         members:
             - Agent
+            - AgentRun
+            - AgentRunResult
             - EndStrategy
             - RunResultData
             - capture_run_messages

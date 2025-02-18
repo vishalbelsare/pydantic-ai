@@ -98,7 +98,7 @@ class StreamedRunResult(Generic[AgentDepsT, ResultDataT]):
         return self._all_messages
 
     def all_messages_json(self, *, result_tool_return_content: str | None = None) -> bytes:
-        """Return all messages from [`all_messages`][pydantic_ai.result._BaseRunResult.all_messages] as JSON bytes.
+        """Return all messages from [`all_messages`][pydantic_ai.result.StreamedRunResult.all_messages] as JSON bytes.
 
         Args:
             result_tool_return_content: The return content of the tool call to set in the last message.
@@ -130,7 +130,7 @@ class StreamedRunResult(Generic[AgentDepsT, ResultDataT]):
         return self.all_messages(result_tool_return_content=result_tool_return_content)[self._new_message_index :]
 
     def new_messages_json(self, *, result_tool_return_content: str | None = None) -> bytes:
-        """Return new messages from [`new_messages`][pydantic_ai.result._BaseRunResult.new_messages] as JSON bytes.
+        """Return new messages from [`new_messages`][pydantic_ai.result.StreamedRunResult.new_messages] as JSON bytes.
 
         Args:
             result_tool_return_content: The return content of the tool call to set in the last message.

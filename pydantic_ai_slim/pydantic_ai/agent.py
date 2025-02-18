@@ -41,7 +41,7 @@ from .tools import (
     ToolPrepareFunc,
 )
 
-__all__ = 'Agent', 'capture_run_messages', 'EndStrategy'
+__all__ = 'Agent', 'AgentRun', 'AgentRunResult', 'capture_run_messages', 'EndStrategy'
 
 _logfire = logfire_api.Logfire(otel_scope='pydantic-ai')
 
@@ -1377,13 +1377,24 @@ class AgentRunResult(Generic[AgentDepsT, ResultDataT]):
         raise LookupError(f'No tool call found with tool name {self._result.tool_name!r}.')
 
     def all_messages(self, *, result_tool_return_content: str | None = None) -> list[_messages.ModelMessage]:
+        """Return the history of _messages.
+
+        Args:
+            result_tool_return_content: The return content of the tool call to set in the last message.
+                This provides a convenient way to modify the content of the result tool call if you want to continue
+                the conversation and want to set the response to the result tool call. If `None`, the last message will
+                not be modified.
+
+        Returns:
+            List of messages.
+        """
         if result_tool_return_content is not None:
             return self._set_result_tool_return(result_tool_return_content)
         else:
             return self.graph_run_result.state.message_history
 
     def all_messages_json(self, *, result_tool_return_content: str | None = None) -> bytes:
-        """Return all messages from [`all_messages`][pydantic_ai.result._BaseRunResult.all_messages] as JSON bytes.
+        """Return all messages from [`all_messages`][pydantic_ai.agent.AgentRunResult.all_messages] as JSON bytes.
 
         Args:
             result_tool_return_content: The return content of the tool call to set in the last message.
@@ -1403,10 +1414,23 @@ class AgentRunResult(Generic[AgentDepsT, ResultDataT]):
         return self.graph_run_result.deps.new_message_index
 
     def new_messages(self, *, result_tool_return_content: str | None = None) -> list[_messages.ModelMessage]:
+        """Return new messages associated with this run.
+
+        Messages from older runs are excluded.
+
+        Args:
+            result_tool_return_content: The return content of the tool call to set in the last message.
+                This provides a convenient way to modify the content of the result tool call if you want to continue
+                the conversation and want to set the response to the result tool call. If `None`, the last message will
+                not be modified.
+
+        Returns:
+            List of new messages.
+        """
         return self.all_messages(result_tool_return_content=result_tool_return_content)[self._new_message_index :]
 
     def new_messages_json(self, *, result_tool_return_content: str | None = None) -> bytes:
-        """Return new messages from [`new_messages`][pydantic_ai.result._BaseRunResult.new_messages] as JSON bytes.
+        """Return new messages from [`new_messages`][pydantic_ai.agent.AgentRunResult.new_messages] as JSON bytes.
 
         Args:
             result_tool_return_content: The return content of the tool call to set in the last message.
@@ -1422,4 +1446,5 @@ class AgentRunResult(Generic[AgentDepsT, ResultDataT]):
         )
 
     def usage(self) -> _usage.Usage:
+        """Return the usage of the whole run."""
         return self.graph_run_result.state.usage

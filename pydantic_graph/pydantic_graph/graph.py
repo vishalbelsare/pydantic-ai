@@ -639,20 +639,12 @@ class GraphRun(Generic[StateT, DepsT, RunEndT]):
         return await self.next(self._next_node)
 
 
+@dataclass
 class GraphRunResult(Generic[StateT, DepsT, RunEndT]):
     """The final result of running a graph."""
 
-    def __init__(
-        self,
-        result: RunEndT,
-        *,
-        graph: Graph[StateT, DepsT, RunEndT],
-        history: list[HistoryStep[StateT, RunEndT]],
-        state: StateT,
-        deps: DepsT,
-    ):
-        self.result = result
-        self.graph = graph
-        self.history = history
-        self.state = state
-        self.deps = deps
+    result: RunEndT
+    graph: Graph[StateT, DepsT, RunEndT]
+    history: list[HistoryStep[StateT, RunEndT]]
+    state: StateT
+    deps: DepsT

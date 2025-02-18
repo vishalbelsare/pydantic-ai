@@ -7,12 +7,12 @@ from collections.abc import AsyncIterator, Awaitable, Generator, Iterator, Seque
 from contextlib import AbstractAsyncContextManager, asynccontextmanager, contextmanager
 from copy import deepcopy
 from types import FrameType
-from typing import Any, Callable, Generic, cast, final, overload
+from typing import Any, Callable, Generic, NoReturn, cast, final, overload
 
 import logfire_api
 from typing_extensions import TypeVar, deprecated
 
-from pydantic_graph import BaseNode, End, Graph, GraphRun, GraphRunContext, GraphRunner
+from pydantic_graph import BaseNode, End, Graph, GraphRun, GraphRunContext, GraphRunner, GraphRuntimeError
 from pydantic_graph.graph import GraphRunResult
 
 from . import (
@@ -1136,7 +1136,7 @@ class AgentRunner(Generic[AgentDepsT, ResultDataT]):
         self.graph_runner.__exit__(exc_type, exc_val, exc_tb)
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(repr=False)
 class AgentRun(Generic[AgentDepsT, ResultDataT]):
     """A stateful, iterable run of an agent."""
 
@@ -1205,6 +1205,15 @@ class AgentRun(Generic[AgentDepsT, ResultDataT]):
         return GraphRunContext[_agent_graph.GraphAgentState, _agent_graph.GraphAgentDeps[AgentDepsT, Any]](
             self._graph_run.state, self._graph_run.deps
         )
+
+    def __repr__(self):
+        try:
+            result_repr = repr(self._graph_run.final_result.result)
+        except GraphRuntimeError:
+            result_repr = '<not yet available>'
+        usage = self.usage()
+        kws = [f'result={result_repr}', f'usage={usage}']
+        return '<{} {}>'.format(type(self).__name__, ' '.join(kws))
 
 
 @dataclasses.dataclass
@@ -1289,3 +1298,93 @@ class AgentRunResult(Generic[AgentDepsT, ResultDataT]):
 
     def usage(self) -> _usage.Usage:
         return self.graph_run_result.state.usage
+
+
+# PyCharm doesn't respect `if not TYPE_CHECKING:`, so it's harder to add behaviors that we
+# don't want picked up by type-checking. In order to ensure that PyCharm doesn't think that
+# it's allowed to iterate over an `AgentRunResult`, we add this `__aiter__` implementation
+# via setattr on the class, which ensures it is not caught by any type-checkers.
+
+
+def _agent_run_result_aiter(self: AgentRunResult[Any, Any]) -> NoReturn:
+    raise TypeError(
+        'Did you try `async for result in await agent.run(...)`?\n'
+        'If so, you need to drop the `await` keyword and use `with` to access the agent run.\n'
+        'You can fix this error by changing `async for result in await agent.run(...):` to \n'
+        '\n'
+        'with agent.run(...) as agent_run:\n'
+        '    async for node in agent_run:\n'
+        '        ...'
+    ) from TypeError(f"'async for' requires an object with __aiter__ method, got {type(self).__name__}")
+
+
+def _agent_run_result_iter(self: AgentRunResult[Any, Any]) -> NoReturn:
+    raise TypeError(
+        'Did you try `for result in await agent.run(...)`?\n'
+        'If so, you need to drop the `await` keyword, use `with` to access the agent run, and use `async for` to iterate.\n'
+        'You can fix this by changing `for result in await agent.run(...):` to \n'
+        '\n'
+        'with agent.run(...) as agent_run:\n'
+        '    async for node in agent_run:\n'
+        '        ...'
+    ) from TypeError(f"'{type(self).__name__}' object is not iterable")
+
+
+def _agent_run_result_aenter(self: AgentRunResult[Any, Any]) -> NoReturn:
+    raise TypeError(
+        'Did you try `async with await agent.run(...):`?\n'
+        'If so, you need to drop the `await` keyword and drop the `async` in `async with`.\n'
+        'You can fix this error by changing `async with await agent.run(...):` to `with agent.run(...):`.'
+    ) from AttributeError('__aenter__')
+
+
+def _agent_run_result_enter(self: AgentRunResult[Any, Any]) -> NoReturn:
+    raise TypeError(
+        'Did you try `with await agent.run(...):`?\n'
+        'If so, you need to drop the `await` keyword.\n'
+        'You can fix this error by changing `with await agent.run(...):` to `with agent.run(...):`.'
+    ) from AttributeError('__enter__')
+
+
+def _agent_runner_aiter(self: AgentRunner[Any, Any]) -> NoReturn:
+    raise TypeError(
+        'Did you try `async for node in agent.run(...):`?\n'
+        'If so, you need to use `with` to access the agent run.\n'
+        'You can fix this error by changing `async for node in agent.run(...):` to \n'
+        '\n'
+        'with agent.run(...) as agent_run:\n'
+        '    async for result in agent_run:\n'
+        '        ...'
+    ) from TypeError(f"'async for' requires an object with __aiter__ method, got {type(self).__name__}")
+
+
+def _agent_runner_iter(self: AgentRunner[Any, Any]) -> NoReturn:
+    raise TypeError(
+        'Did you try `for node in agent.run(...):`?\n'
+        'If so, you need to use `with` to access the agent run, and `async for` to iterate over it.\n'
+        'You can fix this error by changing `for node in agent.run(...):` to \n'
+        '\n'
+        'with agent.run(...) as agent_run:\n'
+        '    async for result in agent_run:\n'
+        '        ...'
+    ) from TypeError(f"'{type(self).__name__}' object is not iterable")
+
+
+def _agent_runner_aenter(self: AgentRunner[Any, Any]) -> NoReturn:
+    raise TypeError(
+        'Did you try `async with agent.run(...):`?\n'
+        'If so, you need to drop the `async` in `async with`.\n'
+        'You can fix this error by changing `async with agent.run(...):` to `with agent.run(...):`.'
+    ) from AttributeError('__aenter__')
+
+
+setattr(AgentRunResult, '__aiter__', _agent_run_result_aiter)
+setattr(AgentRunResult, '__iter__', _agent_run_result_iter)
+setattr(AgentRunResult, '__aenter__', _agent_run_result_aenter)
+setattr(AgentRunResult, '__aexit__', lambda *args, **kwargs: None)  # pyright: ignore[reportUnknownLambdaType]
+setattr(AgentRunResult, '__enter__', _agent_run_result_enter)
+setattr(AgentRunResult, '__exit__', lambda *args, **kwargs: None)  # pyright: ignore[reportUnknownLambdaType]
+setattr(AgentRunner, '__aiter__', _agent_runner_aiter)
+setattr(AgentRunner, '__iter__', _agent_runner_iter)
+setattr(AgentRunner, '__aenter__', _agent_runner_aenter)
+setattr(AgentRunner, '__aexit__', lambda *args, **kwargs: None)  # pyright: ignore[reportUnknownLambdaType]

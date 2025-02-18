@@ -325,8 +325,7 @@ class HandleResponseNode(BaseNode[GraphAgentState, GraphAgentDeps[DepsT, Any], N
         async with self.stream(ctx):
             pass
 
-        # the stream should set `self._next_node` before it ends:
-        assert (next_node := self._next_node) is not None
+        assert (next_node := self._next_node) is not None, 'the stream should set `self._next_node` before it ends'
         return next_node
 
     @asynccontextmanager

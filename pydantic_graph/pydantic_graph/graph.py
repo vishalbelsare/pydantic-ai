@@ -585,11 +585,12 @@ class Graph(Generic[StateT, DepsT, RunEndT]):
 
 
 class GraphRun(Generic[StateT, DepsT, RunEndT]):
-    """A stateful, iterable run of a graph.
+    """A stateful, (async) iterable run of a graph.
 
-    After being entered, can be used like an async generator to listen to / modify nodes as the run is executed.
+    You can use `async for` to iterate over the nodes without any modification to the run, or you can use the `next()`
+    method to iteratively drive the run with the ability to manipulate the node at any point before continuing on.
 
-    TODO: this requires some heavy weight API documentation. Docstring
+    TODO: Add API documentation here. Docstring.
     """
 
     def __init__(

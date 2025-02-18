@@ -1161,9 +1161,12 @@ class Agent(Generic[AgentDepsT, ResultDataT]):
 
 @dataclasses.dataclass(repr=False)
 class AgentRun(Generic[AgentDepsT, ResultDataT]):
-    """A stateful, iterable run of an agent.
+    """A stateful, (async) iterable run of an agent.
 
-    TODO: Add API documentation here.
+    You can use `async for` to iterate over the nodes without any modification to the run, or you can use the `next()`
+    method to iteratively drive the run with the ability to manipulate the node at any point before continuing on.
+
+    TODO: Add API documentation here. Docstring.
     """
 
     _graph_run: GraphRun[

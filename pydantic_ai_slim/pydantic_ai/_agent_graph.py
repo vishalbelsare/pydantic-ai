@@ -323,7 +323,6 @@ class HandleResponseNode(BaseNode[GraphAgentState, GraphAgentDeps[DepsT, Any], N
     async def run(
         self, ctx: GraphRunContext[GraphAgentState, GraphAgentDeps[DepsT, NodeRunEndT]]
     ) -> Union[ModelRequestNode[DepsT, NodeRunEndT], End[result.FinalResult[NodeRunEndT]]]:  # noqa UP007
-        """TODO: Docstring?"""
         async with self.stream(ctx):
             pass
 
@@ -334,7 +333,7 @@ class HandleResponseNode(BaseNode[GraphAgentState, GraphAgentDeps[DepsT, Any], N
     async def stream(
         self, ctx: GraphRunContext[GraphAgentState, GraphAgentDeps[DepsT, Any]]
     ) -> AsyncIterator[AsyncIterator[_messages.HandleResponseEvent]]:
-        """TODO: Docstring."""
+        """Process the model response and yield events for the start and end of each function tool call."""
         with _logfire.span('handle model response', run_step=ctx.state.run_step) as handle_span:
             stream = self._run_stream(ctx)
             yield stream
@@ -483,7 +482,7 @@ class HandleResponseNode(BaseNode[GraphAgentState, GraphAgentDeps[DepsT, Any], N
 
 
 def build_run_context(ctx: GraphRunContext[GraphAgentState, GraphAgentDeps[DepsT, Any]]) -> RunContext[DepsT]:
-    """TODO: Docstring."""
+    """Build a `RunContext` object from the current agent graph run context."""
     return RunContext[DepsT](
         deps=ctx.deps.user_deps,
         model=ctx.deps.model,
@@ -607,7 +606,7 @@ async def _validate_result(
 
 
 def allow_text_result(result_schema: _result.ResultSchema[Any] | None) -> bool:
-    """TODO: Docstring."""
+    """Check if the result schema allows text results."""
     return result_schema is None or result_schema.allow_text_result
 
 
@@ -662,8 +661,7 @@ def get_captured_run_messages() -> _RunMessages:
 def build_agent_graph(
     name: str | None, deps_type: type[DepsT], result_type: type[ResultT]
 ) -> Graph[GraphAgentState, GraphAgentDeps[DepsT, Any], result.FinalResult[ResultT]]:
-    """TODO: Docstring."""
-    # We'll define the known node classes:
+    """Build the execution [Graph][pydantic_graph.Graph] for a given agent."""
     nodes = (
         UserPromptNode[DepsT],
         ModelRequestNode[DepsT],

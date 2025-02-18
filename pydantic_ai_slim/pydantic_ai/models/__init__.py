@@ -263,19 +263,19 @@ class StreamedResponse(ABC):
         raise NotImplementedError()
 
     async def stream_events(self) -> AsyncIterator[ModelResponseStreamEvent]:
-        """TODO: Docstring."""
+        """Stream the response as an async iterable of [`ModelResponseStreamEvent`][pydantic_ai.messages.ModelResponseStreamEvent]s."""
         return self.__aiter__()
 
     async def stream_debounced_events(
         self, *, debounce_by: float | None = 0.1
     ) -> AsyncIterator[list[ModelResponseStreamEvent]]:
-        """TODO: Docstring."""
+        """Stream the response as an async iterable of debounced lists of [`ModelResponseStreamEvent`][pydantic_ai.messages.ModelResponseStreamEvent]s."""
         async with _utils.group_by_temporal(self, debounce_by) as group_iter:
             async for items in group_iter:
                 yield items
 
     async def stream_structured(self, *, debounce_by: float | None = 0.1) -> AsyncIterator[_messages.ModelResponse]:
-        """TODO: Docstring."""
+        """Stream the response as an async iterable of [`ModelResponse`][pydantic_ai.messages.ModelResponse]s."""
 
         async def _stream_structured_ungrouped() -> AsyncIterator[None]:
             # yield None  # TODO: Might want to yield right away to ensure we can eagerly emit a ModelResponse even if we are waiting
@@ -287,7 +287,7 @@ class StreamedResponse(ABC):
                 yield self.get()  # current state of the response
 
     async def stream_text(self, *, delta: bool = False, debounce_by: float | None = 0.1) -> AsyncIterator[str]:
-        """TODO: Docstring."""
+        """Stream the response as an async iterable of text."""
 
         # Define a "merged" version of the iterator that will yield items that have already been retrieved
         # and items that we receive while streaming. We define a dedicated async iterator for this so we can

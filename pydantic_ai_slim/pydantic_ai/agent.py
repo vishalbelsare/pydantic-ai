@@ -1243,31 +1243,31 @@ class AgentRunResult(Generic[AgentDepsT, ResultDataT]):
     ]
 
     @property
-    def result(self) -> FinalResult[ResultDataT]:
+    def _result(self) -> FinalResult[ResultDataT]:
         return self.graph_run_result.result
 
     @property
     def data(self) -> ResultDataT:
-        return self.result.data
+        return self._result.data
 
     @property
     def _result_tool_name(self) -> str | None:
-        return self.result.tool_name
+        return self._result.tool_name
 
     def _set_result_tool_return(self, return_content: str) -> list[_messages.ModelMessage]:
         """Set return content for the result tool.
 
         Useful if you want to continue the conversation and want to set the response to the result tool call.
         """
-        if not self.result.tool_name:
+        if not self._result.tool_name:
             raise ValueError('Cannot set result tool return content when the return type is `str`.')
         messages = deepcopy(self.graph_run_result.state.message_history)
         last_message = messages[-1]
         for part in last_message.parts:
-            if isinstance(part, _messages.ToolReturnPart) and part.tool_name == self.result.tool_name:
+            if isinstance(part, _messages.ToolReturnPart) and part.tool_name == self._result.tool_name:
                 part.content = return_content
                 return messages
-        raise LookupError(f'No tool call found with tool name {self.result.tool_name!r}.')
+        raise LookupError(f'No tool call found with tool name {self._result.tool_name!r}.')
 
     def all_messages(self, *, result_tool_return_content: str | None = None) -> list[_messages.ModelMessage]:
         if result_tool_return_content is not None:

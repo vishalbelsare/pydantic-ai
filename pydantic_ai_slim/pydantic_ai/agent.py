@@ -1308,9 +1308,9 @@ class AgentRunResult(Generic[AgentDepsT, ResultDataT]):
 
 def _agent_run_result_aiter(self: AgentRunResult[Any, Any]) -> NoReturn:
     raise TypeError(
-        'Did you try `async for result in await agent.run(...)`?\n'
+        'Did you try `async for node in await agent.run(...)`?\n'
         'If so, you need to drop the `await` keyword and use `with` to access the agent run.\n'
-        'You can fix this error by changing `async for result in await agent.run(...):` to \n'
+        'You can fix this error by changing `async for node in await agent.run(...):` to \n'
         '\n'
         'with agent.run(...) as agent_run:\n'
         '    async for node in agent_run:\n'
@@ -1320,9 +1320,9 @@ def _agent_run_result_aiter(self: AgentRunResult[Any, Any]) -> NoReturn:
 
 def _agent_run_result_iter(self: AgentRunResult[Any, Any]) -> NoReturn:
     raise TypeError(
-        'Did you try `for result in await agent.run(...)`?\n'
+        'Did you try `for node in await agent.run(...)`?\n'
         'If so, you need to drop the `await` keyword, use `with` to access the agent run, and use `async for` to iterate.\n'
-        'You can fix this by changing `for result in await agent.run(...):` to \n'
+        'You can fix this by changing `for node in await agent.run(...):` to \n'
         '\n'
         'with agent.run(...) as agent_run:\n'
         '    async for node in agent_run:\n'
@@ -1353,7 +1353,7 @@ def _agent_runner_aiter(self: AgentRunner[Any, Any]) -> NoReturn:
         'You can fix this error by changing `async for node in agent.run(...):` to \n'
         '\n'
         'with agent.run(...) as agent_run:\n'
-        '    async for result in agent_run:\n'
+        '    async for node in agent_run:\n'
         '        ...'
     ) from TypeError(f"'async for' requires an object with __aiter__ method, got {type(self).__name__}")
 
@@ -1365,7 +1365,7 @@ def _agent_runner_iter(self: AgentRunner[Any, Any]) -> NoReturn:
         'You can fix this error by changing `for node in agent.run(...):` to \n'
         '\n'
         'with agent.run(...) as agent_run:\n'
-        '    async for result in agent_run:\n'
+        '    async for node in agent_run:\n'
         '        ...'
     ) from TypeError(f"'{type(self).__name__}' object is not iterable")
 

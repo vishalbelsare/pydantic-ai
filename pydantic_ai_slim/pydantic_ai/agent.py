@@ -1357,7 +1357,7 @@ class AgentRun(Generic[AgentDepsT, ResultDataT]):
             the run has completed.
         """
         # Note: It might be nice to expose a synchronous interface for iteration, but we shouldn't do it
-        # on this class or IDEs won't warn you if you accidentally use `for` instead of `async for` to iterate.
+        # on this class, or else IDEs won't warn you if you accidentally use `for` instead of `async for` to iterate.
         return await self._graph_run.next(node)
 
     def usage(self) -> _usage.Usage:

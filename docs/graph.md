@@ -679,14 +679,14 @@ count_down_graph = Graph(nodes=[CountDown])
 
 async def main():
     state = CountDownState(counter=3)
-    with count_down_graph.iter(CountDown(), state=state) as run:
-        async for node in run:
+    with count_down_graph.iter(CountDown(), state=state) as run:  # (1)!
+        async for node in run:  # (2)!
             print('Node:', node)
             #> Node: CountDown()
             #> Node: CountDown()
             #> Node: CountDown()
             #> Node: End(data=0)
-    print('Final result:', run.final_result.result)
+    print('Final result:', run.final_result.result)  # (3)!
     #> Final result: 0
     print('History snapshots:', [step.data_snapshot() for step in run.history])
     """
@@ -695,9 +695,9 @@ async def main():
     """
 ```
 
-- `Graph.iter(...)` returns a `GraphRun`.
-- You can `async for node in run` to step through each node as it is executed.
-- Once the graph returns an [`End`][pydantic_graph.nodes.End], the loop ends, and `run.final_result` becomes a [`GraphRunResult`][pydantic_graph.graph.GraphRunResult] containing the final outcome (`0` here).
+1. `Graph.iter(...)` returns a [`GraphRun`][pydantic_graph.graph.GraphRun].
+2. Here, we step through each node as it is executed.
+3. Once the graph returns an [`End`][pydantic_graph.nodes.End], the loop ends, and `run.final_result` becomes a [`GraphRunResult`][pydantic_graph.graph.GraphRunResult] containing the final outcome (`0` here).
 
 ### Using `GraphRun.next(node)` manually
 
@@ -713,34 +713,33 @@ from count_down import CountDown, CountDownState, count_down_graph
 async def main():
     state = CountDownState(counter=5)
     with count_down_graph.iter(CountDown(), state=state) as run:
-        node = run.next_node  # start with the first node
-        while not isinstance(node, End):
+        node = run.next_node  # (1)!
+        while not isinstance(node, End):  # (2)!
             print('Node:', node)
             #> Node: CountDown()
             #> Node: CountDown()
             #> Node: CountDown()
             #> Node: CountDown()
             if state.counter == 2:
-                # Let's forcibly end the run early
-                break
-            # run the node we got, which might produce a new node or End
-            node = await run.next(node)
+                break  # (3)!
+            node = await run.next(node)  # (4)!
 
-        # Because the run ended early, we have no final result:
-        assert run.final_result is None
+        print(run.final_result)  # (5)!
+        #> None
 
-        # The run still has partial history though
-        for step in run.history:
-            print('History Step:', step.data_snapshot())
-            #> History Step: CountDown()
-            #> History Step: CountDown()
-            #> History Step: CountDown()
+        for step in run.history:  # (6)!
+            print('History Step:', step.data_snapshot(), step.state)
+            #> History Step: CountDown() CountDownState(counter=4)
+            #> History Step: CountDown() CountDownState(counter=3)
+            #> History Step: CountDown() CountDownState(counter=2)
 ```
 
-- We grab the first node via `run.next_node`.
-- At each step, we call `await run.next(node)` to run it and get the next node (or an `End`).
-- If the user decides to stop early, we break out of the loop. The graph run won't have a real final result in that case (`run.final_result` remains `None`).
-- The run's history is still populated with the steps we executed so far.
+1. We start by grabbing the first node that will be run in the agent's graph.
+2. The agent run is finished once an `End` node has been produced; instances of `End` cannot be passed to `next`.
+3. If the user decides to stop early, we break out of the loop. The graph run won't have a real final result in that case (`run.final_result` remains `None`).
+4. At each step, we call `await run.next(node)` to run it and get the next node (or an `End`).
+5. Because the run was ended early, we have no final result:
+6. The run's history is still populated with the steps we executed so far.
 
 ## Dependency Injection
 

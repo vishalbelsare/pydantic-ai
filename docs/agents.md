@@ -164,16 +164,14 @@ agent = Agent('openai:gpt-4o')
 
 async def main():
     with agent.iter('What is the capital of France?') as agent_run:
-        node = agent_run.next_node  # start with the first node
+        node = agent_run.next_node  # (1)!
 
-        # Keep track of nodes here
         all_nodes = [node]
 
-        # Drive the iteration manually
-        while not isinstance(node, End):
-            # You could inspect or mutate the node here as needed
-            node = await agent_run.next(node)
-            all_nodes.append(node)
+        # Drive the iteration manually:
+        while not isinstance(node, End):  # (2)!
+            node = await agent_run.next(node)  # (3)!
+            all_nodes.append(node)  # (4)!
 
         print(all_nodes)
         """
@@ -209,8 +207,10 @@ async def main():
         """
 ```
 
-- When you call `await agent_run.next(node)`, it executes that node in the agent's graph, updates the run's history, and returns the *next* node to run.
-- The agent run is finished once an `End` node has been produced; instances of `End` cannot be passed to `next`.
+1. We start by grabbing the first node that will be run in the agent's graph.
+2. The agent run is finished once an `End` node has been produced; instances of `End` cannot be passed to `next`.
+3. When you call `await agent_run.next(node)`, it executes that node in the agent's graph, updates the run's history, and returns the *next* node to run.
+4. You could also inspect or mutate the new `node` here as needed.
 
 #### Accessing usage and the final result
 

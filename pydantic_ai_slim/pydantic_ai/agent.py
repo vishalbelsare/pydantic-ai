@@ -629,8 +629,8 @@ class Agent(Generic[AgentDepsT, ResultDataT]):
             usage=usage,
             infer_name=False,
         ) as agent_run:
-            first_node = await agent_run.__anext__()
-            assert isinstance(first_node, _agent_graph.ModelRequestNode)  # the first node should be a request node
+            first_node = agent_run.next_node  # start with the first node
+            assert isinstance(first_node, _agent_graph.UserPromptNode)  # the first node should be a user prompt node
             node: BaseNode[Any, Any, Any] = cast(BaseNode[Any, Any, Any], first_node)
             while True:
                 if isinstance(node, _agent_graph.ModelRequestNode):
@@ -1227,6 +1227,19 @@ class AgentRun(Generic[AgentDepsT, ResultDataT]):
         )
 
     @property
+    def next_node(
+        self,
+    ) -> (
+        BaseNode[_agent_graph.GraphAgentState, _agent_graph.GraphAgentDeps[AgentDepsT, Any], FinalResult[ResultDataT]]
+        | End[FinalResult[ResultDataT]]
+    ):
+        """The next node that will be run in the agent graph.
+
+        This is the next node that will be used during async iteration, or if a node is not passed to `self.next(...)`.
+        """
+        return self._graph_run.next_node
+
+    @property
     def final_result(self) -> AgentRunResult[AgentDepsT, ResultDataT] | None:
         """The final result of the run if it has ended, otherwise `None`.
 
@@ -1293,10 +1306,9 @@ class AgentRun(Generic[AgentDepsT, ResultDataT]):
         agent = Agent('openai:gpt-4o')
 
         async def main():
-            nodes = []
             with agent.iter('What is the capital of France?') as agent_run:
-                # The first node can be retrieved via __anext__(), or you might already have it.
-                next_node = await agent_run.__anext__()
+                next_node = agent_run.next_node  # start with the first node
+                nodes = [next_node]
                 while not isinstance(next_node, End):
                     next_node = await agent_run.next(next_node)
                     nodes.append(next_node)
@@ -1304,6 +1316,24 @@ class AgentRun(Generic[AgentDepsT, ResultDataT]):
                 print(nodes)
                 '''
                 [
+                    UserPromptNode(
+                        user_prompt='What is the capital of France?',
+                        system_prompts=(),
+                        system_prompt_functions=[],
+                        system_prompt_dynamic_functions={},
+                    ),
+                    ModelRequestNode(
+                        request=ModelRequest(
+                            parts=[
+                                UserPromptPart(
+                                    content='What is the capital of France?',
+                                    timestamp=datetime.datetime(...),
+                                    part_kind='user-prompt',
+                                )
+                            ],
+                            kind='request',
+                        )
+                    ),
                     HandleResponseNode(
                         model_response=ModelResponse(
                             parts=[TextPart(content='Paris', part_kind='text')],

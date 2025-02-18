@@ -287,6 +287,12 @@ class Graph(Generic[StateT, DepsT, RunEndT]):
         """
         if infer_name and self.name is None:
             self._infer_name(inspect.currentframe())
+
+        if isinstance(node, End):
+            # While technically this is not compatible with the documented method signature, it's an easy mistake to
+            # make, and we should eagerly provide a more helpful error message than you'd get otherwise.
+            raise exceptions.GraphRuntimeError(f'Cannot call `next` with an `End` node: {node!r}.')
+
         node_id = node.get_id()
         if node_id not in self.node_defs:
             raise exceptions.GraphRuntimeError(f'Node `{node}` is not in the graph.')
@@ -574,27 +580,34 @@ class GraphRun(Generic[StateT, DepsT, RunEndT]):
 
     async def main():
         state = MyState(1)
-        node_states = []
         with never_42_graph.iter(Increment(), state=state) as graph_run:
+            node_states = [(graph_run.next_node, deepcopy(graph_run.state))]
             async for node in graph_run:
                 node_states.append((node, deepcopy(graph_run.state)))
-        print(node_states)
-        #> [(Check42(), MyState(number=2)), (End(data=2), MyState(number=2))]
+            print(node_states)
+            '''
+            [
+                (Increment(), MyState(number=1)),
+                (Check42(), MyState(number=2)),
+                (End(data=2), MyState(number=2)),
+            ]
+            '''
 
         state = MyState(41)
-        node_states = []
         with never_42_graph.iter(Increment(), state=state) as graph_run:
+            node_states = [(graph_run.next_node, deepcopy(graph_run.state))]
             async for node in graph_run:
                 node_states.append((node, deepcopy(graph_run.state)))
-        print(node_states)
-        '''
-        [
-            (Check42(), MyState(number=42)),
-            (Increment(), MyState(number=42)),
-            (Check42(), MyState(number=43)),
-            (End(data=43), MyState(number=43)),
-        ]
-        '''
+            print(node_states)
+            '''
+            [
+                (Increment(), MyState(number=41)),
+                (Check42(), MyState(number=42)),
+                (Increment(), MyState(number=42)),
+                (Check42(), MyState(number=43)),
+                (End(data=43), MyState(number=43)),
+            ]
+            '''
     ```
 
     See the [`GraphRun.next` documentation][pydantic_graph.graph.GraphRun.next] for an example of how to manually
@@ -638,6 +651,14 @@ class GraphRun(Generic[StateT, DepsT, RunEndT]):
         self._next_node: BaseNode[StateT, DepsT, RunEndT] | End[RunEndT] = start_node
 
     @property
+    def next_node(self) -> BaseNode[StateT, DepsT, RunEndT] | End[RunEndT]:
+        """The next node that will be run in the graph.
+
+        This is the next node that will be used during async iteration, or if a node is not passed to `self.next(...)`.
+        """
+        return self._next_node
+
+    @property
     def final_result(self) -> GraphRunResult[StateT, DepsT, RunEndT] | None:
         """The final result of the graph run if the run is completed, otherwise `None`."""
         if not isinstance(self._next_node, End):
@@ -647,7 +668,7 @@ class GraphRun(Generic[StateT, DepsT, RunEndT]):
         )
 
     async def next(
-        self: GraphRun[StateT, DepsT, T], node: BaseNode[StateT, DepsT, T]
+        self: GraphRun[StateT, DepsT, T], node: BaseNode[StateT, DepsT, T] | None = None
     ) -> BaseNode[StateT, DepsT, T] | End[T]:
         """Manually drive the graph run by passing in the node you want to run next.
 
@@ -661,28 +682,42 @@ class GraphRun(Generic[StateT, DepsT, RunEndT]):
         from never_42 import Increment, MyState, never_42_graph
 
         async def main():
-            node_states = []
             state = MyState(48)
             with never_42_graph.iter(Increment(), state=state) as graph_run:
-                next_node = await graph_run.__anext__()
+                next_node = graph_run.next_node  # start with the first node
+                node_states = [(next_node, deepcopy(graph_run.state))]
+
                 while not isinstance(next_node, End):
                     if graph_run.state.number == 50:
                         graph_run.state.number = 42
-                    node_states.append((next_node, deepcopy(graph_run.state)))
                     next_node = await graph_run.next(next_node)
-                node_states.append((next_node, deepcopy(graph_run.state)))
+                    node_states.append((next_node, deepcopy(graph_run.state)))
 
-            print(node_states)
-            #> [(Check42(), MyState(number=49)), (End(data=49), MyState(number=49))]
+                print(node_states)
+                '''
+                [
+                    (Increment(), MyState(number=48)),
+                    (Check42(), MyState(number=49)),
+                    (End(data=49), MyState(number=49)),
+                ]
+                '''
         ```
 
         Args:
-            node: The node to run next in the graph.
+            node: The node to run next in the graph. If not specified, uses `self.next_node`, which is initialized to
+                the `start_node` of the run and updated each time a new node is returned.
 
         Returns:
             The next node returned by the graph logic, or an [`End`][pydantic_graph.nodes.End] node if
             the run has completed.
         """
+        if node is None:
+            if isinstance(self._next_node, End):
+                # Note: we could alternatively just return `self._next_node` here, but it's easier to start with an
+                # error and relax the behavior later, than vice versa.
+                raise exceptions.GraphRuntimeError('This graph run has already ended.')
+            node = self._next_node
+
         history = self.history
         state = self.state
         deps = self.deps

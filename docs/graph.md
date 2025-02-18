@@ -713,9 +713,10 @@ from count_down import CountDown, CountDownState, count_down_graph
 async def main():
     state = CountDownState(counter=5)
     with count_down_graph.iter(CountDown(), state=state) as run:
-        node = await run.__anext__()  # first node
+        node = run.next_node  # start with the first node
         while not isinstance(node, End):
             print('Node:', node)
+            #> Node: CountDown()
             #> Node: CountDown()
             #> Node: CountDown()
             #> Node: CountDown()
@@ -736,7 +737,7 @@ async def main():
             #> History Step: CountDown()
 ```
 
-- We grab the first node with `await run.__anext__()`.
+- We grab the first node via `run.next_node`.
 - At each step, we call `await run.next(node)` to run it and get the next node (or an `End`).
 - If the user decides to stop early, we break out of the loop. The graph run won't have a real final result in that case (`run.final_result` remains `None`).
 - The run's history is still populated with the steps we executed so far.

@@ -67,7 +67,7 @@ There are four ways to run an agent:
 1. [`agent.run()`][pydantic_ai.Agent.run] — a coroutine which returns a [`RunResult`][pydantic_ai.agent.AgentRunResult] containing a completed response.
 2. [`agent.run_sync()`][pydantic_ai.Agent.run_sync] — a plain, synchronous function which returns a [`RunResult`][pydantic_ai.agent.AgentRunResult] containing a completed response (internally, this just calls `loop.run_until_complete(self.run())`).
 3. [`agent.run_stream()`][pydantic_ai.Agent.run_stream] — a coroutine which returns a [`StreamedRunResult`][pydantic_ai.result.StreamedRunResult], which contains methods to stream a response as an async iterable.
-4. [`agent.iter()`][pydantic_ai.Agent.iter] — a context manager which returns an [`AgentRun`][pydantic_ai.agent.AgentRun], an async-iterable over the nodes of the agent's graph.
+4. [`agent.iter()`][pydantic_ai.Agent.iter] — a context manager which returns an [`AgentRun`][pydantic_ai.agent.AgentRun], an async-iterable over the nodes of the agent's underlying [`Graph`][pydantic_graph.graph.Graph].
 
 Here's a simple example demonstrating the first three:
 
@@ -94,17 +94,18 @@ _(This example is complete, it can be run "as is" — you'll need to add `asynci
 
 You can also pass messages from previous runs to continue a conversation or provide context, as described in [Messages and Chat History](message-history.md).
 
----
 
 ### Iterating Over an Agent's Graph
 
-In more advanced scenarios, you may want to inspect or manipulate the agent's workflow as it runs. For example, you may want to collect data at each step of the run or manually decide how to proceed based on the node returned. In these situations, you can use the [`Agent.iter`][pydantic_ai.Agent.iter] method, a context manager which returns an [`AgentRun`][pydantic_ai.agent.AgentRun].
+Under the hood, each `Agent` in PydanticAI uses [pydantic-graph][pydantic_graph] to manage its execution flow. **pydantic-graph** is a generic, type-centric library for building and running finite state machines in Python. It doesn't actually depend on PydanticAI — you can use it standalone for workflows that have nothing to do with GenAI — but PydanticAI makes use of it to orchestrate the handling of model requests and model responses in an agent's run.
+
+In many scenarios, you don't need to worry about pydantic-graph at all; calling `agent.run(...)` simply traverses the underlying graph from start to finish. However, if you need deeper insight or control — for example to capture each tool invocation, or to inject your own logic at specific stages — PydanticAI exposes the lower-level iteration process via [`Agent.iter`][pydantic_ai.Agent.iter]. This method returns an [`AgentRun`][pydantic_ai.agent.AgentRun], which you can async-iterate over, or manually drive node-by-node via the [`next`][pydantic_ai.agent.AgentRun.next] method. Once the agent's graph returns an [`End`][pydantic_graph.nodes.End], you have the final result along with a detailed history of all steps.
 
 #### `async for` iteration
 
 Here's an example of using `async for` with `iter` to record each node the agent executes:
 
-```python
+```python {title="agent_iter_async_for.py"}
 from pydantic_ai import Agent
 
 agent = Agent('openai:gpt-4o')
@@ -152,9 +153,9 @@ async def main():
 
 #### Using `.next(...)` manually
 
-You can also drive the iteration manually by passing the node you want to run next to the `AgentRun.next(...)` method. This allows you to inspect or modify the node before it executes or skip nodes based on your own logic:
+You can also drive the iteration manually by passing the node you want to run next to the `AgentRun.next(...)` method. This allows you to inspect or modify the node before it executes or skip nodes based on your own logic, and to catch errors in `next()` more easily:
 
-```python
+```python {title="agent_iter_next.py"}
 from pydantic_ai import Agent
 from pydantic_graph import End
 
@@ -163,8 +164,7 @@ agent = Agent('openai:gpt-4o')
 
 async def main():
     with agent.iter('What is the capital of France?') as agent_run:
-        # You can get the first node by calling __anext__ once
-        node = await agent_run.__anext__()
+        node = agent_run.next_node  # start with the first node
 
         # Keep track of nodes here
         all_nodes = [node]
@@ -178,6 +178,12 @@ async def main():
         print(all_nodes)
         """
         [
+            UserPromptNode(
+                user_prompt='What is the capital of France?',
+                system_prompts=(),
+                system_prompt_functions=[],
+                system_prompt_dynamic_functions={},
+            ),
             ModelRequestNode(
                 request=ModelRequest(
                     parts=[
@@ -561,7 +567,7 @@ If models behave unexpectedly (e.g., the retry limit is exceeded, or their API r
 
 In these cases, [`capture_run_messages`][pydantic_ai.capture_run_messages] can be used to access the messages exchanged during the run to help diagnose the issue.
 
-```python
+```python {title="agent_model_errors.py"}
 from pydantic_ai import Agent, ModelRetry, UnexpectedModelBehavior, capture_run_messages
 
 agent = Agent('openai:gpt-4o')

@@ -1478,3 +1478,7 @@ class AgentRunResult(Generic[AgentDepsT, ResultDataT]):
     def usage(self) -> _usage.Usage:
         """Return the usage of the whole run."""
         return self._graph_run_result.state.usage
+
+    def __repr__(self):
+        kws = [f'data={self.data!r}', f'usage={self.usage()}']
+        return '<{} {}>'.format(type(self).__name__, ' '.join(kws))

@@ -741,7 +741,7 @@ class GraphRunResult(Generic[StateT, DepsT, RunEndT]):
     """The final result of running a graph."""
 
     result: RunEndT
-    graph: Graph[StateT, DepsT, RunEndT]
+    graph: Graph[StateT, DepsT, RunEndT] = field(repr=False)
     history: list[HistoryStep[StateT, RunEndT]]
     state: StateT
     deps: DepsT

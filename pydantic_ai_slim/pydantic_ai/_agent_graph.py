@@ -24,7 +24,7 @@ from . import (
     usage as _usage,
 )
 from .models import ModelRequestParameters, StreamedResponse
-from .result import MarkFinalResult, ResultDataT
+from .result import FinalResult, ResultDataT
 from .settings import ModelSettings, merge_model_settings
 from .tools import (
     RunContext,
@@ -314,14 +314,14 @@ class HandleResponseNode(BaseNode[GraphAgentState, GraphAgentDeps[DepsT, Any], N
     model_response: _messages.ModelResponse
 
     _stream: AsyncIterator[_messages.HandleResponseEvent] | None = field(default=None, repr=False)
-    _next_node: ModelRequestNode[DepsT, NodeRunEndT] | End[MarkFinalResult[NodeRunEndT]] | None = field(
+    _next_node: ModelRequestNode[DepsT, NodeRunEndT] | End[FinalResult[NodeRunEndT]] | None = field(
         default=None, repr=False
     )
     _tool_responses: list[_messages.ModelRequestPart] = field(default_factory=list, repr=False)
 
     async def run(
         self, ctx: GraphRunContext[GraphAgentState, GraphAgentDeps[DepsT, NodeRunEndT]]
-    ) -> Union[ModelRequestNode[DepsT, NodeRunEndT], End[MarkFinalResult[NodeRunEndT]]]:  # noqa UP007
+    ) -> Union[ModelRequestNode[DepsT, NodeRunEndT], End[FinalResult[NodeRunEndT]]]:  # noqa UP007
         async with self.stream(ctx):
             pass
 
@@ -398,7 +398,7 @@ class HandleResponseNode(BaseNode[GraphAgentState, GraphAgentDeps[DepsT, Any], N
         result_schema = ctx.deps.result_schema
 
         # first look for the result tool call
-        final_result: MarkFinalResult[NodeRunEndT] | None = None
+        final_result: FinalResult[NodeRunEndT] | None = None
         parts: list[_messages.ModelRequestPart] = []
         if result_schema is not None:
             if match := result_schema.find_tool(tool_calls):
@@ -412,7 +412,7 @@ class HandleResponseNode(BaseNode[GraphAgentState, GraphAgentDeps[DepsT, Any], N
                     ctx.state.increment_retries(ctx.deps.max_result_retries)
                     parts.append(e.tool_retry)
                 else:
-                    final_result = MarkFinalResult(result_data, call.tool_name)
+                    final_result = FinalResult(result_data, call.tool_name)
 
         # Then build the other request parts based on end strategy
         tool_responses: list[_messages.ModelRequestPart] = self._tool_responses
@@ -431,9 +431,9 @@ class HandleResponseNode(BaseNode[GraphAgentState, GraphAgentDeps[DepsT, Any], N
     def _handle_final_result(
         self,
         ctx: GraphRunContext[GraphAgentState, GraphAgentDeps[DepsT, NodeRunEndT]],
-        final_result: MarkFinalResult[NodeRunEndT],
+        final_result: FinalResult[NodeRunEndT],
         tool_responses: list[_messages.ModelRequestPart],
-    ) -> End[MarkFinalResult[NodeRunEndT]]:
+    ) -> End[FinalResult[NodeRunEndT]]:
         run_span = ctx.deps.run_span
         usage = ctx.state.usage
         messages = ctx.state.message_history
@@ -452,7 +452,7 @@ class HandleResponseNode(BaseNode[GraphAgentState, GraphAgentDeps[DepsT, Any], N
         self,
         ctx: GraphRunContext[GraphAgentState, GraphAgentDeps[DepsT, NodeRunEndT]],
         texts: list[str],
-    ) -> ModelRequestNode[DepsT, NodeRunEndT] | End[MarkFinalResult[NodeRunEndT]]:
+    ) -> ModelRequestNode[DepsT, NodeRunEndT] | End[FinalResult[NodeRunEndT]]:
         result_schema = ctx.deps.result_schema
 
         text = '\n\n'.join(texts)
@@ -465,7 +465,7 @@ class HandleResponseNode(BaseNode[GraphAgentState, GraphAgentDeps[DepsT, Any], N
                 return ModelRequestNode[DepsT, NodeRunEndT](_messages.ModelRequest(parts=[e.tool_retry]))
             else:
                 # The following cast is safe because we know `str` is an allowed result type
-                return self._handle_final_result(ctx, MarkFinalResult(result_data, tool_name=None), [])
+                return self._handle_final_result(ctx, FinalResult(result_data, tool_name=None), [])
         else:
             ctx.state.increment_retries(ctx.deps.max_result_retries)
             return ModelRequestNode[DepsT, NodeRunEndT](
@@ -656,18 +656,18 @@ def get_captured_run_messages() -> _RunMessages:
 
 def build_agent_graph(
     name: str | None, deps_type: type[DepsT], result_type: type[ResultT]
-) -> Graph[GraphAgentState, GraphAgentDeps[DepsT, Any], MarkFinalResult[ResultT]]:
+) -> Graph[GraphAgentState, GraphAgentDeps[DepsT, Any], FinalResult[ResultT]]:
     # We'll define the known node classes:
     nodes = (
         UserPromptNode[DepsT],
         ModelRequestNode[DepsT],
         HandleResponseNode[DepsT],
     )
-    graph = Graph[GraphAgentState, GraphAgentDeps[DepsT, Any], MarkFinalResult[ResultT]](
+    graph = Graph[GraphAgentState, GraphAgentDeps[DepsT, Any], FinalResult[ResultT]](
         nodes=nodes,
         name=name or 'Agent',
         state_type=GraphAgentState,
-        run_end_type=MarkFinalResult[result_type],
+        run_end_type=FinalResult[result_type],
         auto_instrument=False,
     )
     return graph

@@ -27,7 +27,7 @@ from . import (
     usage as _usage,
 )
 from ._agent_graph import EndStrategy, capture_run_messages  # imported for re-export
-from .result import MarkFinalResult, ResultDataT, StreamedRunResult
+from .result import FinalResult, ResultDataT, StreamedRunResult
 from .settings import ModelSettings, merge_model_settings
 from .tools import (
     AgentDepsT,
@@ -310,7 +310,7 @@ class Agent(Generic[AgentDepsT, ResultDataT]):
                         kind='response',
                     )
                 ),
-                End(data=MarkFinalResult(data='Paris', tool_name=None)),
+                End(data=FinalResult(data='Paris', tool_name=None)),
             ]
             '''
             print(agent_run.final_result.data)
@@ -594,18 +594,18 @@ class Agent(Generic[AgentDepsT, ResultDataT]):
 
                         async def stream_to_final(
                             s: models.StreamedResponse,
-                        ) -> MarkFinalResult[models.StreamedResponse] | None:
+                        ) -> FinalResult[models.StreamedResponse] | None:
                             result_schema = graph_ctx.deps.result_schema
                             async for maybe_part_event in streamed_response:
                                 if isinstance(maybe_part_event, _messages.PartStartEvent):
                                     new_part = maybe_part_event.part
                                     if isinstance(new_part, _messages.TextPart):
                                         if _agent_graph.allow_text_result(result_schema):
-                                            return MarkFinalResult(s, None)
+                                            return FinalResult(s, None)
                                     elif isinstance(new_part, _messages.ToolCallPart):
                                         if result_schema is not None and (match := result_schema.find_tool([new_part])):
                                             call, _ = match
-                                            return MarkFinalResult(s, call.tool_name)
+                                            return FinalResult(s, call.tool_name)
                             return None
 
                         final_result_details = await stream_to_final(streamed_response)
@@ -1097,7 +1097,7 @@ class Agent(Generic[AgentDepsT, ResultDataT]):
 
     def _build_graph(
         self, result_type: type[RunResultDataT] | None
-    ) -> Graph[_agent_graph.GraphAgentState, _agent_graph.GraphAgentDeps[AgentDepsT, Any], MarkFinalResult[Any]]:
+    ) -> Graph[_agent_graph.GraphAgentState, _agent_graph.GraphAgentDeps[AgentDepsT, Any], FinalResult[Any]]:
         return _agent_graph.build_agent_graph(self.name, self._deps_type, result_type or self.result_type)
 
     def _prepare_result_schema(
@@ -1116,7 +1116,7 @@ class Agent(Generic[AgentDepsT, ResultDataT]):
 @dataclasses.dataclass
 class AgentRunner(Generic[AgentDepsT, ResultDataT]):
     graph_runner: GraphRunner[
-        _agent_graph.GraphAgentState, _agent_graph.GraphAgentDeps[AgentDepsT, Any], MarkFinalResult[ResultDataT]
+        _agent_graph.GraphAgentState, _agent_graph.GraphAgentDeps[AgentDepsT, Any], FinalResult[ResultDataT]
     ]
 
     def __await__(self) -> Generator[Any, Any, AgentRunResult[AgentDepsT, ResultDataT]]:
@@ -1141,7 +1141,7 @@ class AgentRun(Generic[AgentDepsT, ResultDataT]):
     """A stateful, iterable run of an agent."""
 
     _graph_run: GraphRun[
-        _agent_graph.GraphAgentState, _agent_graph.GraphAgentDeps[AgentDepsT, Any], MarkFinalResult[ResultDataT]
+        _agent_graph.GraphAgentState, _agent_graph.GraphAgentDeps[AgentDepsT, Any], FinalResult[ResultDataT]
     ]
 
     @property
@@ -1155,9 +1155,9 @@ class AgentRun(Generic[AgentDepsT, ResultDataT]):
         BaseNode[
             _agent_graph.GraphAgentState,
             _agent_graph.GraphAgentDeps[AgentDepsT, Any],
-            MarkFinalResult[ResultDataT],
+            FinalResult[ResultDataT],
         ]
-        | End[MarkFinalResult[ResultDataT]]
+        | End[FinalResult[ResultDataT]]
     ]:
         return self
 
@@ -1167,9 +1167,9 @@ class AgentRun(Generic[AgentDepsT, ResultDataT]):
         BaseNode[
             _agent_graph.GraphAgentState,
             _agent_graph.GraphAgentDeps[AgentDepsT, Any],
-            MarkFinalResult[ResultDataT],
+            FinalResult[ResultDataT],
         ]
-        | End[MarkFinalResult[ResultDataT]]
+        | End[FinalResult[ResultDataT]]
     ):
         """Use the last returned node as the input to `Graph.next`."""
         return await self._graph_run.__anext__()
@@ -1179,15 +1179,15 @@ class AgentRun(Generic[AgentDepsT, ResultDataT]):
         node: BaseNode[
             _agent_graph.GraphAgentState,
             _agent_graph.GraphAgentDeps[AgentDepsT, Any],
-            MarkFinalResult[ResultDataT],
+            FinalResult[ResultDataT],
         ],
     ) -> (
         BaseNode[
             _agent_graph.GraphAgentState,
             _agent_graph.GraphAgentDeps[AgentDepsT, Any],
-            MarkFinalResult[ResultDataT],
+            FinalResult[ResultDataT],
         ]
-        | End[MarkFinalResult[ResultDataT]]
+        | End[FinalResult[ResultDataT]]
     ):
         # TODO: It would be nice to expose a synchronous interface for this, to be able to
         #   synchronously iterate over the agent graph. I don't think this would be hard to do,
@@ -1221,11 +1221,11 @@ class AgentRunResult(Generic[AgentDepsT, ResultDataT]):
     """The final result of an agent run."""
 
     graph_run_result: GraphRunResult[
-        _agent_graph.GraphAgentState, _agent_graph.GraphAgentDeps[AgentDepsT, Any], MarkFinalResult[ResultDataT]
+        _agent_graph.GraphAgentState, _agent_graph.GraphAgentDeps[AgentDepsT, Any], FinalResult[ResultDataT]
     ]
 
     @property
-    def result(self) -> MarkFinalResult[ResultDataT]:
+    def result(self) -> FinalResult[ResultDataT]:
         return self.graph_run_result.result
 
     @property

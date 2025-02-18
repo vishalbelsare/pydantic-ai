@@ -292,7 +292,7 @@ class StreamedRunResult(Generic[AgentDepsT, ResultDataT]):
 
 
 @dataclass
-class MarkFinalResult(Generic[ResultDataT]):
+class FinalResult(Generic[ResultDataT]):
     """Marker class to indicate that the result is the final result.
 
     This allows us to use `isinstance`, which wouldn't be possible if we were returning `ResultDataT` directly.

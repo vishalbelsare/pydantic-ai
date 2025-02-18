@@ -3,16 +3,16 @@ from __future__ import annotations as _annotations
 import asyncio
 import dataclasses
 import inspect
-from collections.abc import AsyncIterator, Awaitable, Generator, Iterator, Sequence
+from collections.abc import AsyncIterator, Awaitable, Iterator, Sequence
 from contextlib import AbstractAsyncContextManager, asynccontextmanager, contextmanager
 from copy import deepcopy
 from types import FrameType
-from typing import Any, Callable, Generic, NoReturn, cast, final, overload
+from typing import Any, Callable, Generic, cast, final, overload
 
 import logfire_api
 from typing_extensions import TypeVar, deprecated
 
-from pydantic_graph import BaseNode, End, Graph, GraphRun, GraphRunContext, GraphRunner, GraphRuntimeError
+from pydantic_graph import BaseNode, End, Graph, GraphRun, GraphRunContext, GraphRuntimeError
 from pydantic_graph.graph import GraphRunResult
 
 from . import (
@@ -203,7 +203,7 @@ class Agent(Generic[AgentDepsT, ResultDataT]):
                 self._register_tool(Tool(tool))
 
     @overload
-    def run(
+    async def run(
         self,
         user_prompt: str,
         *,
@@ -215,10 +215,10 @@ class Agent(Generic[AgentDepsT, ResultDataT]):
         usage_limits: _usage.UsageLimits | None = None,
         usage: _usage.Usage | None = None,
         infer_name: bool = True,
-    ) -> AgentRunner[AgentDepsT, ResultDataT]: ...
+    ) -> AgentRunResult[AgentDepsT, ResultDataT]: ...
 
     @overload
-    def run(
+    async def run(
         self,
         user_prompt: str,
         *,
@@ -230,9 +230,9 @@ class Agent(Generic[AgentDepsT, ResultDataT]):
         usage_limits: _usage.UsageLimits | None = None,
         usage: _usage.Usage | None = None,
         infer_name: bool = True,
-    ) -> AgentRunner[AgentDepsT, RunResultDataT]: ...
+    ) -> AgentRunResult[AgentDepsT, RunResultDataT]: ...
 
-    def run(
+    async def run(
         self,
         user_prompt: str,
         *,
@@ -244,27 +244,10 @@ class Agent(Generic[AgentDepsT, ResultDataT]):
         usage_limits: _usage.UsageLimits | None = None,
         usage: _usage.Usage | None = None,
         infer_name: bool = True,
-    ) -> AgentRunner[AgentDepsT, Any]:
+    ) -> AgentRunResult[AgentDepsT, Any]:
         """Run the agent with a user prompt.
 
-        This method builds an internal agent graph (using system prompts, tools and result schemas) and then
-        returns an `AgentRun` object. The `AgentRun` functions as a handle that can be used to iterate over the graph
-        and obtain the final result. The AgentRun also provides methods to access the full message history,
-        new messages, and usage statistics.
-
-        The returned `AgentRun` object should always be immediately used in one of two ways:
-        * Via `await` (i.e., `await agent.run(...)`), which will execute the graph run and return the final result
-            * This is the API you should use if you just want the end result and are not interested in the execution details
-            or consuming streaming updates
-        * As a context manager (i.e., `with agent.run(...) as agent_run:`), which will return an async iterator over
-        the graph nodes, and which can also be used as an async generator to override the execution of the graph.
-            * This is the API you should use if you want to consume the graph execution in a streaming manner,
-            or if you want to consume the stream of events coming from individual requests to the LLM, or the stream
-            of events coming from the execution of tools.
-
-        For more details, see the documentation of `AgentRun`.
-
-        Example (with `await`):
+        Example:
         ```python
         from pydantic_ai import Agent
 
@@ -276,7 +259,66 @@ class Agent(Generic[AgentDepsT, ResultDataT]):
             #> Paris
         ```
 
-        Example (with a context manager):
+        Args:
+            result_type: Custom result type to use for this run, `result_type` may only be used if the agent has no
+                result validators since result validators would expect an argument that matches the agent's result type.
+            user_prompt: User input to start/continue the conversation.
+            message_history: History of the conversation so far.
+            model: Optional model to use for this run, required if `model` was not set when creating the agent.
+            deps: Optional dependencies to use for this run.
+            model_settings: Optional settings to use for this model's request.
+            usage_limits: Optional limits on model request count or token usage.
+            usage: Optional usage to start with, useful for resuming a conversation or agents used in tools.
+            infer_name: Whether to try to infer the agent name from the call frame if it's not set.
+
+        Returns:
+            The result of the run.
+        """
+        if infer_name and self.name is None:
+            self._infer_name(inspect.currentframe())
+        with self.iter(
+            user_prompt=user_prompt,
+            result_type=result_type,
+            message_history=message_history,
+            model=model,
+            deps=deps,
+            model_settings=model_settings,
+            usage_limits=usage_limits,
+            usage=usage,
+        ) as agent_run:
+            async for _ in agent_run:
+                pass
+        return agent_run.final_result
+
+    @contextmanager
+    def iter(
+        self,
+        user_prompt: str,
+        *,
+        result_type: type[RunResultDataT] | None = None,
+        message_history: list[_messages.ModelMessage] | None = None,
+        model: models.Model | models.KnownModelName | None = None,
+        deps: AgentDepsT = None,
+        model_settings: ModelSettings | None = None,
+        usage_limits: _usage.UsageLimits | None = None,
+        usage: _usage.Usage | None = None,
+        infer_name: bool = True,
+    ) -> Iterator[AgentRun[AgentDepsT, Any]]:
+        """Get an AgentRun for the agent with a user prompt which can be iterated over.
+
+        This method builds an internal agent graph (using system prompts, tools and result schemas) and then
+        returns an `AgentRun` object. The `AgentRun` functions as a handle that can be used to iterate over the graph
+        and obtain the final result. The AgentRun also provides methods to access the full message history,
+        new messages, and usage statistics.
+
+        The returned `AgentRun` object can be async iterated over to get the nodes of the graph as they are executed.:
+        This is the API you should use if you want to consume the graph execution in a streaming manner,
+        or if you want to consume the stream of events coming from individual requests to the LLM, or the stream
+        of events coming from the execution of tools.
+
+        For more details, see the documentation of `AgentRun`.
+
+        Example:
         ```python
         from pydantic_ai import Agent
 
@@ -284,7 +326,7 @@ class Agent(Generic[AgentDepsT, ResultDataT]):
 
         async def main():
             nodes = []
-            with agent.run('What is the capital of France?') as agent_run:
+            with agent.iter('What is the capital of France?') as agent_run:
                 async for node in agent_run:
                     nodes.append(node)
             print(nodes)
@@ -394,15 +436,14 @@ class Agent(Generic[AgentDepsT, ResultDataT]):
             system_prompt_dynamic_functions=self._system_prompt_dynamic_functions,
         )
 
-        return AgentRunner(
-            graph.run(
-                start_node,
-                state=state,
-                deps=graph_deps,
-                infer_name=False,
-                span=run_span,
-            )
-        )
+        with graph.iter(
+            start_node,
+            state=state,
+            deps=graph_deps,
+            infer_name=False,
+            span=run_span,
+        ) as graph_run:
+            yield AgentRun(graph_run)
 
     @overload
     def run_sync(
@@ -572,7 +613,7 @@ class Agent(Generic[AgentDepsT, ResultDataT]):
                 self._infer_name(frame.f_back)
 
         yielded = False
-        with self.run(
+        with self.iter(
             user_prompt,
             result_type=result_type,
             message_history=message_history,
@@ -1113,29 +1154,6 @@ class Agent(Generic[AgentDepsT, ResultDataT]):
             return self._result_schema  # pyright: ignore[reportReturnType]
 
 
-@dataclasses.dataclass
-class AgentRunner(Generic[AgentDepsT, ResultDataT]):
-    graph_runner: GraphRunner[
-        _agent_graph.GraphAgentState, _agent_graph.GraphAgentDeps[AgentDepsT, Any], FinalResult[ResultDataT]
-    ]
-
-    def __await__(self) -> Generator[Any, Any, AgentRunResult[AgentDepsT, ResultDataT]]:
-        """Run the agent graph until it ends, and return self."""
-
-        async def _run():
-            graph_run_result = await self.graph_runner
-            return AgentRunResult(graph_run_result)
-
-        return _run().__await__()
-
-    def __enter__(self) -> AgentRun[AgentDepsT, ResultDataT]:
-        graph_run = self.graph_runner.__enter__()
-        return AgentRun(graph_run)
-
-    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
-        self.graph_runner.__exit__(exc_type, exc_val, exc_tb)
-
-
 @dataclasses.dataclass(repr=False)
 class AgentRun(Generic[AgentDepsT, ResultDataT]):
     """A stateful, iterable run of an agent."""
@@ -1298,93 +1316,3 @@ class AgentRunResult(Generic[AgentDepsT, ResultDataT]):
 
     def usage(self) -> _usage.Usage:
         return self.graph_run_result.state.usage
-
-
-# PyCharm doesn't respect `if not TYPE_CHECKING:`, so it's harder to add behaviors that we
-# don't want picked up by type-checking. In order to ensure that PyCharm doesn't think that
-# it's allowed to iterate over an `AgentRunResult`, we add this `__aiter__` implementation
-# via setattr on the class, which ensures it is not caught by any type-checkers.
-
-
-def _agent_run_result_aiter(self: AgentRunResult[Any, Any]) -> NoReturn:
-    raise TypeError(
-        'Did you try `async for node in await agent.run(...)`?\n'
-        'If so, you need to drop the `await` keyword and use `with` to access the agent run.\n'
-        'You can fix this error by changing `async for node in await agent.run(...):` to \n'
-        '\n'
-        'with agent.run(...) as agent_run:\n'
-        '    async for node in agent_run:\n'
-        '        ...'
-    ) from TypeError(f"'async for' requires an object with __aiter__ method, got {type(self).__name__}")
-
-
-def _agent_run_result_iter(self: AgentRunResult[Any, Any]) -> NoReturn:
-    raise TypeError(
-        'Did you try `for node in await agent.run(...)`?\n'
-        'If so, you need to drop the `await` keyword, use `with` to access the agent run, and use `async for` to iterate.\n'
-        'You can fix this by changing `for node in await agent.run(...):` to \n'
-        '\n'
-        'with agent.run(...) as agent_run:\n'
-        '    async for node in agent_run:\n'
-        '        ...'
-    ) from TypeError(f"'{type(self).__name__}' object is not iterable")
-
-
-def _agent_run_result_aenter(self: AgentRunResult[Any, Any]) -> NoReturn:
-    raise TypeError(
-        'Did you try `async with await agent.run(...):`?\n'
-        'If so, you need to drop the `await` keyword and drop the `async` in `async with`.\n'
-        'You can fix this error by changing `async with await agent.run(...):` to `with agent.run(...):`.'
-    ) from AttributeError('__aenter__')
-
-
-def _agent_run_result_enter(self: AgentRunResult[Any, Any]) -> NoReturn:
-    raise TypeError(
-        'Did you try `with await agent.run(...):`?\n'
-        'If so, you need to drop the `await` keyword.\n'
-        'You can fix this error by changing `with await agent.run(...):` to `with agent.run(...):`.'
-    ) from AttributeError('__enter__')
-
-
-def _agent_runner_aiter(self: AgentRunner[Any, Any]) -> NoReturn:
-    raise TypeError(
-        'Did you try `async for node in agent.run(...):`?\n'
-        'If so, you need to use `with` to access the agent run.\n'
-        'You can fix this error by changing `async for node in agent.run(...):` to \n'
-        '\n'
-        'with agent.run(...) as agent_run:\n'
-        '    async for node in agent_run:\n'
-        '        ...'
-    ) from TypeError(f"'async for' requires an object with __aiter__ method, got {type(self).__name__}")
-
-
-def _agent_runner_iter(self: AgentRunner[Any, Any]) -> NoReturn:
-    raise TypeError(
-        'Did you try `for node in agent.run(...):`?\n'
-        'If so, you need to use `with` to access the agent run, and `async for` to iterate over it.\n'
-        'You can fix this error by changing `for node in agent.run(...):` to \n'
-        '\n'
-        'with agent.run(...) as agent_run:\n'
-        '    async for node in agent_run:\n'
-        '        ...'
-    ) from TypeError(f"'{type(self).__name__}' object is not iterable")
-
-
-def _agent_runner_aenter(self: AgentRunner[Any, Any]) -> NoReturn:
-    raise TypeError(
-        'Did you try `async with agent.run(...):`?\n'
-        'If so, you need to drop the `async` in `async with`.\n'
-        'You can fix this error by changing `async with agent.run(...):` to `with agent.run(...):`.'
-    ) from AttributeError('__aenter__')
-
-
-setattr(AgentRunResult, '__aiter__', _agent_run_result_aiter)
-setattr(AgentRunResult, '__iter__', _agent_run_result_iter)
-setattr(AgentRunResult, '__aenter__', _agent_run_result_aenter)
-setattr(AgentRunResult, '__aexit__', lambda *args, **kwargs: None)  # pyright: ignore[reportUnknownLambdaType]
-setattr(AgentRunResult, '__enter__', _agent_run_result_enter)
-setattr(AgentRunResult, '__exit__', lambda *args, **kwargs: None)  # pyright: ignore[reportUnknownLambdaType]
-setattr(AgentRunner, '__aiter__', _agent_runner_aiter)
-setattr(AgentRunner, '__iter__', _agent_runner_iter)
-setattr(AgentRunner, '__aenter__', _agent_runner_aenter)
-setattr(AgentRunner, '__aexit__', lambda *args, **kwargs: None)  # pyright: ignore[reportUnknownLambdaType]

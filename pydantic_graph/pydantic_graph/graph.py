@@ -3,8 +3,8 @@ from __future__ import annotations as _annotations
 import asyncio
 import inspect
 import types
-from collections.abc import AsyncIterator, Generator, Sequence
-from contextlib import ExitStack
+from collections.abc import AsyncIterator, Iterator, Sequence
+from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field
 from functools import cached_property
 from time import perf_counter
@@ -30,7 +30,7 @@ else:
     logfire._internal.stack_info.NON_USER_CODE_PREFIXES += (str(Path(__file__).parent.absolute()),)
 
 
-__all__ = ('Graph', 'GraphRun', 'GraphRunner', 'GraphRunResult')
+__all__ = ('Graph', 'GraphRun', 'GraphRunResult')
 
 _logfire = logfire_api.Logfire(otel_scope='pydantic-graph')
 
@@ -126,7 +126,7 @@ class Graph(Generic[StateT, DepsT, RunEndT]):
 
         self._validate_edges()
 
-    def run(
+    async def run(
         self: Graph[StateT, DepsT, T],
         start_node: BaseNode[StateT, DepsT, T],
         *,
@@ -134,11 +134,8 @@ class Graph(Generic[StateT, DepsT, RunEndT]):
         deps: DepsT = None,
         infer_name: bool = True,
         span: LogfireSpan | None = None,
-    ) -> GraphRunner[StateT, DepsT, T]:
+    ) -> GraphRunResult[StateT, DepsT, T]:
         """Run the graph from a starting node until it ends.
-
-        The returned GraphRun can be awaited (or used as an async iterator) to drive the graph to completion.
-        TODO: Need to add a more detailed message here explaining that this can behave like a coroutine or a context manager etc.
 
         Args:
             start_node: the first node to run, since the graph definition doesn't define the entry point in the graph,
@@ -175,15 +172,56 @@ class Graph(Generic[StateT, DepsT, RunEndT]):
         if infer_name and self.name is None:
             self._infer_name(inspect.currentframe())
 
-        return GraphRunner[StateT, DepsT, T](
-            self,
-            start_node,
-            history=[],
-            state=state,
-            deps=deps,
-            auto_instrument=self._auto_instrument,
-            span=span,
-        )
+        with self.iter(start_node, state=state, deps=deps, infer_name=infer_name, span=span) as graph_run:
+            async for _node in graph_run:
+                pass
+
+        return graph_run.final_result
+
+    @contextmanager
+    def iter(
+        self: Graph[StateT, DepsT, T],
+        start_node: BaseNode[StateT, DepsT, T],
+        *,
+        state: StateT = None,
+        deps: DepsT = None,
+        infer_name: bool = True,
+        span: LogfireSpan | None = None,
+    ) -> Iterator[GraphRun[StateT, DepsT, T]]:
+        """A contextmanager that yields a GraphRun that can be async iterated over to drive the graph to completion.
+
+        Args:
+            start_node: the first node to run, since the graph definition doesn't define the entry point in the graph,
+                you need to provide the starting node.
+            state: The initial state of the graph.
+            deps: The dependencies of the graph.
+            infer_name: Whether to infer the graph name from the calling frame.
+            span: The span to use for the graph run. If not provided, a new span will be created.
+
+        Yields:
+            A GraphRun that can be async iterated over to drive the graph to completion.
+
+        Here's an example of running the graph from [above][pydantic_graph.graph.Graph]:
+        # TODO: Need to add an example here akin to that from `Graph.run` above
+        """
+        if infer_name and self.name is None:
+            self._infer_name(inspect.currentframe())
+
+        if self._auto_instrument and span is None:
+            span = logfire_api.span('run graph {graph.name}', graph=self)
+
+        with ExitStack() as stack:
+            if span is not None:
+                stack.enter_context(span)
+            yield GraphRun[StateT, DepsT, T](
+                self,
+                start_node,
+                history=[],
+                state=state,
+                deps=deps,
+                auto_instrument=self._auto_instrument,
+                span=span,
+            )
 
     def run_sync(
         self: Graph[StateT, DepsT, T],
@@ -508,75 +546,6 @@ class Graph(Generic[StateT, DepsT, RunEndT]):
                     if item is self:
                         self.name = name
                         return
-
-
-class GraphRunner(Generic[StateT, DepsT, RunEndT]):
-    """This object _MUST_ either be awaited or entered as a contextmanager to get a GraphRun."""
-
-    def __init__(
-        self,
-        graph: Graph[StateT, DepsT, RunEndT],
-        start_node: BaseNode[StateT, DepsT, RunEndT],
-        *,
-        history: list[HistoryStep[StateT, RunEndT]],
-        state: StateT,
-        deps: DepsT,
-        auto_instrument: bool,
-        span: LogfireSpan | None = None,
-    ):
-        self._graph = graph
-        self._start_node = start_node
-        self._history = history
-        self._state = state
-        self._deps = deps
-        self._auto_instrument = auto_instrument
-        self._span = span
-
-        self._entered = False
-
-    def __await__(self) -> Generator[Any, Any, GraphRunResult[StateT, DepsT, RunEndT]]:
-        """Run the graph until it ends, and return the final result."""
-
-        async def _run() -> GraphRunResult[StateT, DepsT, RunEndT]:
-            with self as graph_run:
-                async for _node in graph_run:
-                    pass
-
-                return graph_run.final_result
-
-        return _run().__await__()
-
-    def __enter__(self) -> GraphRun[StateT, DepsT, RunEndT]:
-        """Obtain an iterable graph run.
-
-        Note that we _require_ that the graph run is used as a context manager when iterating over nodes
-        so that we can ensure that the span covers the time range during which the iteration happens.
-        """
-        if self._entered:
-            raise exceptions.GraphRuntimeError('A GraphRunner should only be entered once.')
-
-        if self._auto_instrument and self._span is None:
-            self._span = logfire_api.span('run graph {graph.name}', graph=self._graph)
-
-        if self._span is not None:
-            self._span.__enter__()
-
-        self._entered = True
-
-        return GraphRun(
-            self._graph,
-            self._start_node,
-            history=self._history,
-            state=self._state,
-            deps=self._deps,
-            auto_instrument=self._auto_instrument,
-            span=self._span,
-        )
-
-    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
-        if self._span is not None:
-            self._span.__exit__(exc_type, exc_val, exc_tb)
-        self._span = None  # make it more obvious if you try to use it after exiting
 
 
 class GraphRun(Generic[StateT, DepsT, RunEndT]):

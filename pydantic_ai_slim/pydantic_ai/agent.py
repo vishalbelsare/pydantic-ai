@@ -312,7 +312,7 @@ class Agent(Generic[AgentDepsT, ResultDataT]):
         """A contextmanager which can be used to iterate over the agent graph's nodes as they are executed.
 
         This method builds an internal agent graph (using system prompts, tools and result schemas) and then returns an
-        `AgentRun` object. The `AgentRun` can be used to (async) iterate over the nodes of the graph as they are
+        `AgentRun` object. The `AgentRun` can be used to async-iterate over the nodes of the graph as they are
         executed. This is the API to use if you want to consume the outputs coming from each LLM model response, or the
         stream of events coming from the execution of tools.
 
@@ -1161,12 +1161,58 @@ class Agent(Generic[AgentDepsT, ResultDataT]):
 
 @dataclasses.dataclass(repr=False)
 class AgentRun(Generic[AgentDepsT, ResultDataT]):
-    """A stateful, (async) iterable run of an agent.
+    """A stateful, async-iterable run of an [`Agent`][pydantic_ai.agent.Agent].
 
-    You can use `async for` to iterate over the nodes without any modification to the run, or you can use the `next()`
-    method to iteratively drive the run with the ability to manipulate the node at any point before continuing on.
+    You generally obtain an `AgentRun` instance by calling `with my_agent.iter(...) as agent_run:`.
 
-    TODO: Add API documentation here. Docstring.
+    Once you have an instance, you can use it to iterate through the run's nodes as they execute. When an
+    [`End`][pydantic_graph.nodes.End] is reached, the run finishes and
+    [`final_result`][pydantic_ai.agent.AgentRun.final_result] becomes available.
+
+    Example:
+    ```python
+    from pydantic_ai import Agent
+
+    agent = Agent('openai:gpt-4o')
+
+    async def main():
+        nodes = []
+        # Iterate through the run, recording each node along the way:
+        with agent.iter('What is the capital of France?') as agent_run:
+            async for node in agent_run:
+                nodes.append(node)
+        print(nodes)
+        '''
+        [
+            ModelRequestNode(
+                request=ModelRequest(
+                    parts=[
+                        UserPromptPart(
+                            content='What is the capital of France?',
+                            timestamp=datetime.datetime(...),
+                            part_kind='user-prompt',
+                        )
+                    ],
+                    kind='request',
+                )
+            ),
+            HandleResponseNode(
+                model_response=ModelResponse(
+                    parts=[TextPart(content='Paris', part_kind='text')],
+                    model_name='function:model_logic',
+                    timestamp=datetime.datetime(...),
+                    kind='response',
+                )
+            ),
+            End(data=FinalResult(data='Paris', tool_name=None)),
+        ]
+        '''
+        print(agent_run.final_result.data)
+        #> Paris
+    ```
+
+    You can also manually drive the iteration using the [`next`][pydantic_ai.agent.AgentRun.next] method for
+    more granular control.
     """
 
     _graph_run: GraphRun[
@@ -1182,7 +1228,11 @@ class AgentRun(Generic[AgentDepsT, ResultDataT]):
 
     @property
     def final_result(self) -> AgentRunResult[AgentDepsT, ResultDataT] | None:
-        """The final result of the agent run."""
+        """The final result of the run if it has ended, otherwise `None`.
+
+        Once the run returns an [`End`][pydantic_graph.nodes.End] node, `final_result` is populated
+        with an [`AgentRunResult`][pydantic_ai.agent.AgentRunResult].
+        """
         graph_run_result = self._graph_run.final_result
         if graph_run_result is None:
             return None
@@ -1198,6 +1248,7 @@ class AgentRun(Generic[AgentDepsT, ResultDataT]):
         ]
         | End[FinalResult[ResultDataT]]
     ]:
+        """Provide async-iteration over the nodes in the agent run."""
         return self
 
     async def __anext__(
@@ -1210,7 +1261,7 @@ class AgentRun(Generic[AgentDepsT, ResultDataT]):
         ]
         | End[FinalResult[ResultDataT]]
     ):
-        """Use the last returned node as the input to `Graph.next`."""
+        """Advance to the next node automatically based on the last returned node."""
         return await self._graph_run.__anext__()
 
     async def next(
@@ -1228,14 +1279,59 @@ class AgentRun(Generic[AgentDepsT, ResultDataT]):
         ]
         | End[FinalResult[ResultDataT]]
     ):
-        # TODO: It would be nice to expose a synchronous interface for this, to be able to
-        #   synchronously iterate over the agent graph. I don't think this would be hard to do,
-        #   but I'm having a hard time coming up with an API that fits nicely along side the current `run_sync`.
-        #   The use of `await` provides an easy way to signal that you just want the result, but it's less
-        #   clear to me what the analogous thing should be for synchronous code.
+        """Manually drive the agent run by passing in the node you want to run next.
+
+        This lets you inspect or mutate the node before continuing execution, or skip certain nodes
+        under dynamic conditions. The agent run should be stopped when you return an [`End`][pydantic_graph.nodes.End]
+        node.
+
+        Example:
+        ```python
+        from pydantic_ai import Agent
+        from pydantic_graph import End
+
+        agent = Agent('openai:gpt-4o')
+
+        async def main():
+            nodes = []
+            with agent.iter('What is the capital of France?') as agent_run:
+                # The first node can be retrieved via __anext__(), or you might already have it.
+                next_node = await agent_run.__anext__()
+                while not isinstance(next_node, End):
+                    next_node = await agent_run.next(next_node)
+                    nodes.append(next_node)
+                # Once `next_node` is an End, we've finished:
+                print(nodes)
+                '''
+                [
+                    HandleResponseNode(
+                        model_response=ModelResponse(
+                            parts=[TextPart(content='Paris', part_kind='text')],
+                            model_name='function:model_logic',
+                            timestamp=datetime.datetime(...),
+                            kind='response',
+                        )
+                    ),
+                    End(data=FinalResult(data='Paris', tool_name=None)),
+                ]
+                '''
+                print('Final result:', agent_run.final_result.data)
+                #> Final result: Paris
+        ```
+
+        Args:
+            node: The node to run next in the graph.
+
+        Returns:
+            The next node returned by the graph logic, or an [`End`][pydantic_graph.nodes.End] node if
+            the run has completed.
+        """
+        # Note: It might be nice to expose a synchronous interface for iteration, but we shouldn't do it
+        # on this class or IDEs won't warn you if you accidentally use `for` instead of `async for` to iterate.
         return await self._graph_run.next(node)
 
     def usage(self) -> _usage.Usage:
+        """Get usage statistics for the run so far, including token usage, model requests, and so on."""
         return self._graph_run.state.usage
 
     def __repr__(self):

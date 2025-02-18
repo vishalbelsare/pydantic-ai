@@ -193,14 +193,17 @@ class Graph(Generic[StateT, DepsT, RunEndT]):
     ) -> Iterator[GraphRun[StateT, DepsT, T]]:
         """A contextmanager which can be used to iterate over the graph's nodes as they are executed.
 
-        This method returns a `GraphRun` object which can be used to (async) iterate over the nodes of this `Graph` as
+        This method returns a `GraphRun` object which can be used to async-iterate over the nodes of this `Graph` as
         they are executed. This is the API to use if you want to record or interact with the nodes as the graph
         execution unfolds.
+
+        The `GraphRun` can also be used to manually drive the graph execution by calling
+        [`GraphRun.next`][pydantic_graph.graph.GraphRun.next].
 
         The `GraphRun` provides access to the full run history, state, deps, and the final result of the run once
         it has completed.
 
-        For more details, see the documentation of `GraphRun`.
+        For more details, see the API documentation of [`GraphRun`][pydantic_graph.graph.GraphRun].
 
         Args:
             start_node: the first node to run. Since the graph definition doesn't define the entry point in the graph,
@@ -212,33 +215,6 @@ class Graph(Generic[StateT, DepsT, RunEndT]):
 
         Yields:
             A GraphRun that can be async iterated over to drive the graph to completion.
-
-        Here's an example of iterating over the graph from [above][pydantic_graph.graph.Graph]:
-
-        ```py {title="run_never_42.py" noqa="I001" py="3.10"}
-        from never_42 import Increment, MyState, never_42_graph
-
-        async def main():
-            state = MyState(1)
-            nodes = []
-            with never_42_graph.iter(Increment(), state=state) as graph_run:
-                async for node in graph_run:
-                    nodes.append(node)
-            print(nodes)
-            #> [Check42(), End(data=2)]
-            print(state)
-            #> MyState(number=2)
-
-            state = MyState(41)
-            nodes = []
-            with never_42_graph.iter(Increment(), state=state) as graph_run:
-                async for node in graph_run:
-                    nodes.append(node)
-            print(nodes)
-            #> [Check42(), Increment(), Check42(), End(data=43)]
-            print(state)
-            #> MyState(number=43)
-        ```
         """
         if infer_name and self.name is None:
             self._infer_name(inspect.currentframe())
@@ -408,7 +384,7 @@ class Graph(Generic[StateT, DepsT, RunEndT]):
 
         Here's an example of generating a diagram for the graph from [above][pydantic_graph.graph.Graph]:
 
-        ```py {title="never_42.py" py="3.10"}
+        ```py {title="mermaid_never_42.py" py="3.10"}
         from never_42 import Increment, never_42_graph
 
         print(never_42_graph.mermaid_code(start_node=Increment))
@@ -585,12 +561,44 @@ class Graph(Generic[StateT, DepsT, RunEndT]):
 
 
 class GraphRun(Generic[StateT, DepsT, RunEndT]):
-    """A stateful, (async) iterable run of a graph.
+    """A stateful, async-iterable run of a [`Graph`][pydantic_ai.graph.Graph].
 
-    You can use `async for` to iterate over the nodes without any modification to the run, or you can use the `next()`
-    method to iteratively drive the run with the ability to manipulate the node at any point before continuing on.
+    You typically get a `GraphRun` instance from calling
+    `with [my_graph.iter(...)][pydantic_graph.graph.Graph.iter] as graph_run:`. That gives you the ability to iterate
+    through nodes as they run, either by `async for` iteration or by repeatedly calling `.next(...)`.
 
-    TODO: Add API documentation here. Docstring.
+    Here's an example of iterating over the graph from [above][pydantic_graph.graph.Graph]:
+    ```py {title="iter_never_42.py" noqa="I001" py="3.10"}
+    from copy import deepcopy
+    from never_42 import Increment, MyState, never_42_graph
+
+    async def main():
+        state = MyState(1)
+        node_states = []
+        with never_42_graph.iter(Increment(), state=state) as graph_run:
+            async for node in graph_run:
+                node_states.append((node, deepcopy(graph_run.state)))
+        print(node_states)
+        #> [(Check42(), MyState(number=2)), (End(data=2), MyState(number=2))]
+
+        state = MyState(41)
+        node_states = []
+        with never_42_graph.iter(Increment(), state=state) as graph_run:
+            async for node in graph_run:
+                node_states.append((node, deepcopy(graph_run.state)))
+        print(node_states)
+        '''
+        [
+            (Check42(), MyState(number=42)),
+            (Increment(), MyState(number=42)),
+            (Check42(), MyState(number=43)),
+            (End(data=43), MyState(number=43)),
+        ]
+        '''
+    ```
+
+    See the [`GraphRun.next` documentation][pydantic_graph.graph.GraphRun.next] for an example of how to manually
+    drive the graph run.
     """
 
     def __init__(
@@ -604,6 +612,22 @@ class GraphRun(Generic[StateT, DepsT, RunEndT]):
         auto_instrument: bool,
         span: LogfireSpan | None = None,
     ):
+        """Create a new run for a given graph, starting at the specified node.
+
+        Typically, you'll use [`Graph.iter`][pydantic_graph.graph.Graph.iter] rather than calling this directly.
+
+        Args:
+            graph: The [`Graph`][pydantic_graph.graph.Graph] to run.
+            start_node: The node where execution will begin.
+            history: A list of [`HistoryStep`][pydantic_graph.state.HistoryStep] objects that describe
+                each step of the run. Usually starts empty; can be populated if resuming.
+            state: A shared state object or primitive (like a counter, dataclass, etc.) that is available
+                to all nodes via `ctx.state`.
+            deps: Optional dependencies that each node can access via `ctx.deps`, e.g. database connections,
+                configuration, or logging clients.
+            auto_instrument: Whether to automatically create instrumentation spans during the run.
+            span: An optional existing Logfire span to nest node-level spans under (advanced usage).
+        """
         self.graph = graph
         self.history = history
         self.state = state
@@ -615,7 +639,7 @@ class GraphRun(Generic[StateT, DepsT, RunEndT]):
 
     @property
     def final_result(self) -> GraphRunResult[StateT, DepsT, RunEndT] | None:
-        """The final result of the agent run if the run is completed, otherwise `None`."""
+        """The final result of the graph run if the run is completed, otherwise `None`."""
         if not isinstance(self._next_node, End):
             return None  # The GraphRun has not finished running
         return GraphRunResult(
@@ -625,9 +649,40 @@ class GraphRun(Generic[StateT, DepsT, RunEndT]):
     async def next(
         self: GraphRun[StateT, DepsT, T], node: BaseNode[StateT, DepsT, T]
     ) -> BaseNode[StateT, DepsT, T] | End[T]:
-        """Note: this method behaves very similarly to an async generator's `asend` method."""
-        # TODO: replace the End[T] return with a RunResult[T] type which includes extra data.
+        """Manually drive the graph run by passing in the node you want to run next.
 
+        This lets you inspect or mutate the node before continuing execution, or skip certain nodes
+        under dynamic conditions. The graph run should stop when you return an [`End`][pydantic_graph.nodes.End] node.
+
+        Here's an example of using `next` to drive the graph from [above][pydantic_graph.graph.Graph]:
+        ```py {title="next_never_42.py" noqa="I001" py="3.10"}
+        from copy import deepcopy
+        from pydantic_graph import End
+        from never_42 import Increment, MyState, never_42_graph
+
+        async def main():
+            node_states = []
+            state = MyState(48)
+            with never_42_graph.iter(Increment(), state=state) as graph_run:
+                next_node = await graph_run.__anext__()
+                while not isinstance(next_node, End):
+                    if graph_run.state.number == 50:
+                        graph_run.state.number = 42
+                    node_states.append((next_node, deepcopy(graph_run.state)))
+                    next_node = await graph_run.next(next_node)
+                node_states.append((next_node, deepcopy(graph_run.state)))
+
+            print(node_states)
+            #> [(Check42(), MyState(number=49)), (End(data=49), MyState(number=49))]
+        ```
+
+        Args:
+            node: The node to run next in the graph.
+
+        Returns:
+            The next node returned by the graph logic, or an [`End`][pydantic_graph.nodes.End] node if
+            the run has completed.
+        """
         history = self.history
         state = self.state
         deps = self.deps

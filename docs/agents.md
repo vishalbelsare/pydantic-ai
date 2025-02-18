@@ -62,13 +62,14 @@ print(result.data)
 
 ## Running Agents
 
-There are three ways to run an agent:
+There are four ways to run an agent:
 
-1. [`agent.run()`][pydantic_ai.Agent.run] — a coroutine which returns a [`RunResult`][pydantic_ai.result.RunResult] containing a completed response
-2. [`agent.run_sync()`][pydantic_ai.Agent.run_sync] — a plain, synchronous function which returns a [`RunResult`][pydantic_ai.result.RunResult] containing a completed response (internally, this just calls `loop.run_until_complete(self.run())`)
-3. [`agent.run_stream()`][pydantic_ai.Agent.run_stream] — a coroutine which returns a [`StreamedRunResult`][pydantic_ai.result.StreamedRunResult], which contains methods to stream a response as an async iterable
+1. [`agent.run()`][pydantic_ai.Agent.run] — a coroutine which returns a [`RunResult`][pydantic_ai.result.RunResult] containing a completed response.
+2. [`agent.run_sync()`][pydantic_ai.Agent.run_sync] — a plain, synchronous function which returns a [`RunResult`][pydantic_ai.result.RunResult] containing a completed response (internally, this just calls `loop.run_until_complete(self.run())`).
+3. [`agent.run_stream()`][pydantic_ai.Agent.run_stream] — a coroutine which returns a [`StreamedRunResult`][pydantic_ai.result.StreamedRunResult], which contains methods to stream a response as an async iterable.
+4. [`agent.iter()`][pydantic_ai.Agent.iter] — a context manager which returns an [`AgentRun`][pydantic_ai.agent.AgentRun], an async-iterable over the nodes of the agent's graph.
 
-Here's a simple example demonstrating all three:
+Here's a simple example demonstrating the first three:
 
 ```python {title="run_agent.py"}
 from pydantic_ai import Agent
@@ -93,6 +94,125 @@ _(This example is complete, it can be run "as is" — you'll need to add `asynci
 
 You can also pass messages from previous runs to continue a conversation or provide context, as described in [Messages and Chat History](message-history.md).
 
+---
+
+### Iterating Over an Agent's Graph
+
+In more advanced scenarios, you may want to inspect or manipulate the agent's workflow as it runs. For example, you may want to collect data at each step of the run or manually decide how to proceed based on the node returned. In these situations, you can use the [`Agent.iter`][pydantic_ai.Agent.iter] method, a context manager which returns an [`AgentRun`][pydantic_ai.agent.AgentRun].
+
+#### `async for` iteration
+
+Here's an example of using `async for` with `iter` to record each node the agent executes:
+
+```python
+from pydantic_ai import Agent
+
+agent = Agent('openai:gpt-4o')
+
+
+async def main():
+    nodes = []
+    # Begin an AgentRun, which is an async-iterable over the nodes of the agent's graph
+    with agent.iter('What is the capital of France?') as agent_run:
+        async for node in agent_run:
+            # Each node represents a step in the agent's execution
+            nodes.append(node)
+    print(nodes)
+    """
+    [
+        ModelRequestNode(
+            request=ModelRequest(
+                parts=[
+                    UserPromptPart(
+                        content='What is the capital of France?',
+                        timestamp=datetime.datetime(...),
+                        part_kind='user-prompt',
+                    )
+                ],
+                kind='request',
+            )
+        ),
+        HandleResponseNode(
+            model_response=ModelResponse(
+                parts=[TextPart(content='Paris', part_kind='text')],
+                model_name='function:model_logic',
+                timestamp=datetime.datetime(...),
+                kind='response',
+            )
+        ),
+        End(data=FinalResult(data='Paris', tool_name=None)),
+    ]
+    """
+    print(agent_run.final_result.data)
+    #> Paris
+```
+
+- The `AgentRun` is an async iterator that yields each node (`BaseNode` or `End`) in the flow.
+- The run ends when an `End` node is returned.
+
+#### Using `.next(...)` manually
+
+You can also drive the iteration manually by passing the node you want to run next to the `AgentRun.next(...)` method. This allows you to inspect or modify the node before it executes or skip nodes based on your own logic:
+
+```python
+from pydantic_ai import Agent
+from pydantic_graph import End
+
+agent = Agent('openai:gpt-4o')
+
+
+async def main():
+    with agent.iter('What is the capital of France?') as agent_run:
+        # You can get the first node by calling __anext__ once
+        node = await agent_run.__anext__()
+
+        # Keep track of nodes here
+        all_nodes = [node]
+
+        # Drive the iteration manually
+        while not isinstance(node, End):
+            # You could inspect or mutate the node here as needed
+            node = await agent_run.next(node)
+            all_nodes.append(node)
+
+        print(all_nodes)
+        """
+        [
+            ModelRequestNode(
+                request=ModelRequest(
+                    parts=[
+                        UserPromptPart(
+                            content='What is the capital of France?',
+                            timestamp=datetime.datetime(...),
+                            part_kind='user-prompt',
+                        )
+                    ],
+                    kind='request',
+                )
+            ),
+            HandleResponseNode(
+                model_response=ModelResponse(
+                    parts=[TextPart(content='Paris', part_kind='text')],
+                    model_name='function:model_logic',
+                    timestamp=datetime.datetime(...),
+                    kind='response',
+                )
+            ),
+            End(data=FinalResult(data='Paris', tool_name=None)),
+        ]
+        """
+```
+
+- When you call `await agent_run.next(node)`, it executes that node in the agent's graph, updates the run's history, and returns the *next* node to run.
+- The agent run is finished once an `End` node has been produced; instances of `End` cannot be passed to `next`.
+
+#### Accessing usage and the final result
+
+You can retrieve usage statistics (tokens, requests, etc.) at any time from the [`AgentRun`](pydantic_ai.agent.AgentRun) object via `agent_run.usage()`. This method returns a [`Usage`](pydantic_ai.usage.Usage) object containing the usage data.
+
+Once the run finishes, `agent_run.final_result` becomes a [`AgentRunResult`](pydantic_ai.agent.AgentRunResult) object containing the final output (and related metadata).
+
+---
 
 ### Additional Configuration
 
@@ -177,7 +297,7 @@ except UsageLimitExceeded as e:
 2. This run will error after 3 requests, preventing the infinite tool calling.
 
 !!! note
-    This is especially relevant if you're registered a lot of tools, `request_limit` can be used to prevent the model from choosing to make too many of these calls.
+    This is especially relevant if you've registered many tools. The `request_limit` can be used to prevent the model from calling them in a loop too many times.
 
 #### Model (Run) Settings
 

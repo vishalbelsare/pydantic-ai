@@ -22,21 +22,7 @@ def default_render_number(value: float | int) -> str:
     """The default logic for formatting numerical values in an Evaluation report.
 
     * If the value is an integer, format it as an integer.
-    * If the value is a float, include at least one decimal place and at least four significant figures.
-
-    Test cases for numbers:
-    print(default_format_number(0))
-    print(default_format_number(17348))
-    print(default_format_number(17347.0))
-    # prints 0; should print 0.0000 (four significant figures)
-    print(default_format_number(0.1))
-    # prints 0.1; should print 0.1000 (four significant figures)
-    print(default_format_number(2.0))
-    # prints 2.0; should print 2.000 (four significant figures)
-    print(default_format_number(12.0))
-    # prints 12.0; should print 12.00 (four significant figures)
-    print(default_format_number(2398723.123))
-    # prints 2.399e+06; should print 2398723.1 (one decimal place)
+    * If the value is a float, include at least one decimal place and at least 3 significant figures.
     """
     # If it's an int, just return its string representation.
     if isinstance(value, int):
@@ -66,12 +52,9 @@ def default_render_number_diff(old: float | int, new: float | int) -> str | None
     """Return a string representing the difference between old and new values.
 
     Rules:
-
       - If the two values are equal, return None.
-
       - For integers, return the raw difference (with a leading sign), e.g.:
             _default_format_number_diff(3, 4) -> '+1'
-
       - For floats (or a mix of float and int):
           * Compute the raw delta = new - old and format it with ABS_SIG_FIGS significant figures.
           * If `old` is nonzero, compute a relative change:
@@ -83,37 +66,14 @@ def default_render_number_diff(old: float | int, new: float | int) -> str | None
           * However, if the percentage rounds to 0.0% (e.g. '+0.0%'), return only the absolute diff.
           * Also, if |old| is below BASE_THRESHOLD and |delta| exceeds MULTIPLIER_DROP_FACTOR×|old|,
             drop the relative change indicator.
-
-    Test cases for diffs:
-      _default_format_number_diff(3, 3)            is None
-      _default_format_number_diff(127.3, 127.3)      is None
-
-      _default_format_number_diff(3, 4)              == '+1'
-      _default_format_number_diff(4, 3)              == '-1'
-
-      _default_format_number_diff(1.0, 1.7)          == '+0.7 / +70.0%'
-      _default_format_number_diff(2.5, 1.0)          == '-1.5 / -60.0%'
-
-      _default_format_number_diff(10.023, 10.024)    == '+0.001'
-      _default_format_number_diff(1.00024, 1.00023)  == '-1e-05'
-
-      _default_format_number_diff(2.0, 25.0)         == '+23.0 / +12.5x'
-      _default_format_number_diff(2.0, -25.0)        == '-27.0 / -12.5x'
-      _default_format_number_diff(0.02, 25.0)        == '+25.0 / +1250x'
-      _default_format_number_diff(0.02, -25.0)       == '-25.0 / -1250x'
-
-      _default_format_number_diff(0.001, 25.0)       == '+25.0'
     """
-    # No change.
     if old == new:
         return None
 
-    # If both values are ints, just return the raw difference.
     if isinstance(old, int) and isinstance(new, int):
         diff_int = new - old
         return f'{diff_int:+d}'
 
-    # Compute the raw difference.
     delta = new - old
     abs_diff_str = _render_signed(delta, ABS_SIG_FIGS)
     rel_diff_str = _render_relative(new, old, BASE_THRESHOLD)
@@ -133,8 +93,11 @@ def default_render_duration(seconds: float) -> str:
     return _render_duration(seconds, False)
 
 
-def default_render_duration_diff(old: float, new: float) -> str:
+def default_render_duration_diff(old: float, new: float) -> str | None:
     """Format a duration difference (in seconds) with an explicit sign."""
+    if old == new:
+        return None
+
     abs_diff_str = _render_duration(new - old, True)
     rel_diff_str = _render_relative(new, old, BASE_THRESHOLD)
     if rel_diff_str is None:
@@ -187,26 +150,29 @@ def _render_relative(new: float, base: float, small_base_threshold: float) -> st
         return mult_str
 
 
-def _render_duration(seconds: float, signed: bool) -> str:
+def _render_duration(seconds: float, force_signed: bool) -> str:
     """Format a duration given in seconds to a string.
 
     If the duration is less than 1 millisecond, show microseconds.
     If it's less than one second, show milliseconds.
     Otherwise, show seconds.
     """
+    if seconds == 0:
+        return '0s'
     precision = 1
-    if seconds < 1e-3:
+    if (abs_seconds := abs(seconds)) < 1e-3:
         value = seconds * 1_000_000
         unit = 'µs'
-        if value >= 1:
+        if abs(value) >= 1:
             precision = 0
-    elif seconds < 1:
+    elif abs_seconds < 1:
         value = seconds * 1_000
         unit = 'ms'
     else:
         value = seconds
         unit = 's'
-    if signed:
+
+    if force_signed:
         return f'{value:+.{precision}f}{unit}'
     else:
         return f'{value:.{precision}f}{unit}'

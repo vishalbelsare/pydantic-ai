@@ -64,7 +64,7 @@ dev = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["pydantic_ai"]
+packages = ["pydantic_evals"]
 
 [tool.uv.sources]
-pydantic-graph = { workspace = true }
+pydantic-evals = { workspace = true }

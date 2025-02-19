@@ -23,6 +23,8 @@
 
 ---
 
+2
+
 PydanticAI is a Python agent framework designed to make it less painful to build production grade applications with Generative AI.
 
 FastAPI revolutionized web development by offering an innovative and ergonomic design, built on the foundation of [Pydantic](https://docs.pydantic.dev).

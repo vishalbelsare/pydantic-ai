@@ -444,8 +444,24 @@ class PartDeltaEvent:
     """Event type identifier, used as a discriminator."""
 
 
-ModelResponseStreamEvent = Annotated[Union[PartStartEvent, PartDeltaEvent], pydantic.Discriminator('event_kind')]
-"""An event in the model response stream, either starting a new part or applying a delta to an existing one."""
+@dataclass
+class FinalResultEvent:
+    """An event indicating the current ModelRequest will produce a final result.
+
+    Specifically, this event is emitted when a result tool call part is started, or when text content is received
+    for agents allowing a `str` response_type.
+    """
+
+    tool_name: str | None
+    """The name of the tool that was called, if any."""
+    event_kind: Literal['final_result'] = 'final_result'
+    """Event type identifier, used as a discriminator."""
+
+
+ModelResponseStreamEvent = Annotated[
+    Union[PartStartEvent, PartDeltaEvent, FinalResultEvent], pydantic.Discriminator('event_kind')
+]
+"""An event in the model response stream."""
 
 
 @dataclass
@@ -475,4 +491,6 @@ class FunctionToolResultEvent:
     """Event type identifier, used as a discriminator."""
 
 
-HandleResponseEvent = Annotated[Union[FunctionToolCallEvent, FunctionToolResultEvent], pydantic.Discriminator('kind')]
+HandleResponseEvent = Annotated[
+    Union[FunctionToolCallEvent, FunctionToolResultEvent], pydantic.Discriminator('event_kind')
+]

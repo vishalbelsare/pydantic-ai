@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import Generic, Union, cast
 
 import logfire_api
-from typing_extensions import TypeVar
+from typing_extensions import TypeVar, assert_type
 
 from . import _result, exceptions, messages as _messages, models
 from .tools import AgentDepsT, RunContext
@@ -79,6 +79,41 @@ class StreamedRunResult(Generic[AgentDepsT, ResultDataT]):
 
     def __post_init__(self):
         self._initial_run_ctx_usage = copy(self._run_ctx.usage)
+
+    async def stream_events(self) -> AsyncIterator[_messages.ModelResponseStreamEvent]:
+        """Stream the response as an async iterable of [`ModelResponseStreamEvent`][pydantic_ai.messages.ModelResponseStreamEvent]s."""
+        # TODO: Should we have this method or just require `async for`?
+        return self.__aiter__()
+
+    async def __aiter__(self) -> AsyncIterator[_messages.ModelResponseStreamEvent]:
+        """Stream the response as an async iterable of [`ModelResponseStreamEvent`][pydantic_ai.messages.ModelResponseStreamEvent]s."""
+        result_schema = self._result_schema
+        allow_text_result = result_schema is None or result_schema.allow_text_result
+
+        def _get_final_result_event(e: _messages.ModelResponseStreamEvent) -> _messages.FinalResultEvent | None:
+            """Return an appropriate FinalResultEvent if `e` corresponds to a part that will produce a final result."""
+            if isinstance(e, _messages.PartStartEvent):
+                new_part = e.part
+                if isinstance(new_part, _messages.ToolCallPart):
+                    if result_schema is not None and (match := result_schema.find_tool([new_part])):
+                        call, _ = match
+                        return _messages.FinalResultEvent(tool_name=call.tool_name)
+                elif allow_text_result:
+                    assert_type(e, _messages.PartStartEvent)
+                    return _messages.FinalResultEvent(tool_name=None)
+
+        stream_response_iterator = self._stream_response.__aiter__()
+
+        async for event in stream_response_iterator:
+            yield event
+            if (final_result_event := _get_final_result_event(event)) is not None:
+                yield final_result_event
+                break
+
+        # If we broke out of the above loop, we need to yield the rest of the events
+        # If we didn't, this will just be a no-op
+        async for event in stream_response_iterator:
+            yield event
 
     def all_messages(self, *, result_tool_return_content: str | None = None) -> list[_messages.ModelMessage]:
         """Return the history of _messages.

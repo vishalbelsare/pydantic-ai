@@ -130,14 +130,15 @@ class AnthropicModel(Model):
                 client to use, if provided, `api_key` and `http_client` must be `None`.
             http_client: An existing `httpx.AsyncClient` to use for making HTTP requests.
         """
-        self._http_client = http_client or cached_async_http_client()
         self._model_name = model_name
         if anthropic_client is not None:
             assert http_client is None, 'Cannot provide both `anthropic_client` and `http_client`'
             assert api_key is None, 'Cannot provide both `anthropic_client` and `api_key`'
             self.client = anthropic_client
+        elif http_client is not None:
+            self.client = AsyncAnthropic(api_key=api_key, http_client=http_client)
         else:
-            self.client = AsyncAnthropic(api_key=api_key, http_client=self._http_client)
+            self.client = AsyncAnthropic(api_key=api_key, http_client=cached_async_http_client())
 
     async def request(
         self,
@@ -279,7 +280,7 @@ class AnthropicModel(Model):
                     if isinstance(part, SystemPromptPart):
                         system_prompt += part.content
                     elif isinstance(part, UserPromptPart):
-                        anthropic_messages.append(await _map_user_prompt(part, self._http_client))
+                        anthropic_messages.append(await _map_user_prompt(part))
                     elif isinstance(part, ToolReturnPart):
                         anthropic_messages.append(
                             MessageParam(
@@ -371,7 +372,7 @@ def _map_usage(message: AnthropicMessage | RawMessageStreamEvent) -> usage.Usage
     )
 
 
-async def _map_user_prompt(part: UserPromptPart, http_client: AsyncHTTPClient) -> MessageParam:
+async def _map_user_prompt(part: UserPromptPart) -> MessageParam:
     part_content: str | list[ImageBlockParam | TextBlockParam]
     if isinstance(part.content, str):
         part_content = part.content
@@ -394,7 +395,7 @@ async def _map_user_prompt(part: UserPromptPart, http_client: AsyncHTTPClient) -
                 )
                 part_content.append(image_block)
             elif isinstance(item, ImageUrl):
-                response = await http_client.get(item.url)
+                response = await cached_async_http_client().get(item.url)
                 response.raise_for_status()
                 image_block = ImageBlockParam(
                     source={

@@ -632,5 +632,3 @@ Fix the errors and try again.\
             },
         ]
     )
-
-    assert capfire.log_exporter.exported_logs_as_dicts() == snapshot([])

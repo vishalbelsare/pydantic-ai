@@ -11,6 +11,7 @@ import logfire_api
 from opentelemetry._events import Event, EventLogger, EventLoggerProvider, get_event_logger_provider
 from opentelemetry.trace import Tracer, TracerProvider, get_tracer_provider
 from opentelemetry.util.types import AttributeValue
+from pydantic import TypeAdapter
 
 from ..messages import (
     ModelMessage,
@@ -40,6 +41,8 @@ MODEL_SETTING_ATTRIBUTES: tuple[
     'presence_penalty',
     'frequency_penalty',
 )
+
+ANY_ADAPTER = TypeAdapter[Any](Any)
 
 
 @dataclass
@@ -175,7 +178,7 @@ class InstrumentedModel(WrapperModel):
                     attr_name = 'events'
                     span.set_attributes(
                         {
-                            attr_name: json.dumps(events_list),
+                            attr_name: ANY_ADAPTER.dump_json(events_list),
                             'logfire.json_schema': json.dumps(
                                 {
                                     'type': 'object',

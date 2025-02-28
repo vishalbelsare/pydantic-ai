@@ -162,6 +162,12 @@ class Score:
 
 
 @dataclass
+class Score:
+    value: float
+    reason: str | None = None
+
+
+@dataclass
 class EvalCase(Generic[OutputT]):
     """A container for an evaluation case."""
 
@@ -209,6 +215,17 @@ class EvalCase(Generic[OutputT]):
         # We need to support updating labels via span links, but I'm not sure if we should _only_ support that
         self.case_span.set_attribute(label_attribute, value)
         
+    def record_metadata(self, name: str, value: bool | str) -> None:
+        label_attribute = f'label.{name}'
+        self.metadata[name] = value
+
+        # If we want to use span links to store labels we can do something like this:
+        # with logfire.span('label {name=} {value=}', name=name, value=value, _links=[(self.span.context, None)]):
+        #     pass
+
+        # We need to support updating labels via span links, but I'm not sure if we should _only_ support that
+        self.case_span.set_attribute(label_attribute, value)
+
     def record_metadata(self, name: str, value: bool | str) -> None:
         label_attribute = f'label.{name}'
         self.metadata[name] = value

@@ -4,12 +4,11 @@ import json
 from collections.abc import AsyncIterator, Iterator
 from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass, field
-from functools import partial
 from typing import Any, Callable, Literal
 
 import logfire_api
 from opentelemetry._events import Event, EventLogger, EventLoggerProvider, get_event_logger_provider
-from opentelemetry.trace import Tracer, TracerProvider, get_tracer_provider
+from opentelemetry.trace import Span, Tracer, TracerProvider, get_tracer_provider
 from opentelemetry.util.types import AttributeValue
 from pydantic import TypeAdapter
 
@@ -137,32 +136,21 @@ class InstrumentedModel(WrapperModel):
                 if isinstance(value := model_settings.get(key), (float, int)):
                     attributes[f'gen_ai.request.{key}'] = value
 
-        events_list = []
-        emit_event = partial(self._emit_event, system, events_list)
-
         with self.tracer.start_as_current_span(span_name, attributes=attributes) as span:
-            if span.is_recording():
-                for message in messages:
-                    if isinstance(message, ModelRequest):
-                        for part in message.parts:
-                            if hasattr(part, 'otel_event'):
-                                emit_event(part.otel_event())
-                    elif isinstance(message, ModelResponse):
-                        for event in message.otel_events():
-                            emit_event(event)
 
             def finish(response: ModelResponse, usage: Usage):
                 if not span.is_recording():
                     return
 
-                for response_event in response.otel_events():
-                    emit_event(
+                events = self.messages_to_otel_events(messages)
+                for event in self.messages_to_otel_events([response]):
+                    events.append(
                         Event(
                             'gen_ai.choice',
                             body={
                                 # TODO finish_reason
                                 'index': 0,
-                                'message': response_event.body,
+                                'message': event.body,
                             },
                         )
                     )
@@ -174,26 +162,41 @@ class InstrumentedModel(WrapperModel):
                         **usage.opentelemetry_attributes(),
                     }
                 )
-                if events_list:
-                    attr_name = 'events'
-                    span.set_attributes(
-                        {
-                            attr_name: ANY_ADAPTER.dump_json(events_list),
-                            'logfire.json_schema': json.dumps(
-                                {
-                                    'type': 'object',
-                                    'properties': {attr_name: {'type': 'array'}},
-                                }
-                            ),
-                        }
-                    )
+                self._emit_events(system, span, events)
 
             yield finish
 
-    def _emit_event(self, system: str, events_list: list[dict[str, Any]], event: Event) -> None:
-        attributes = {'gen_ai.system': system}
+    def _emit_events(self, system: str, span: Span, events: list[Event]) -> None:
+        event_attributes = {'gen_ai.system': system}
         if self.event_mode == 'logs':
-            event.attributes = {**(event.attributes or {}), **attributes}
-            self.event_logger.emit(event)
+            for event in events:
+                event.attributes = {**(event.attributes or {}), **event_attributes}
+                self.event_logger.emit(event)
         else:
-            events_list.append({'event.name': event.name, **(event.body or {}), **attributes})
+            events_list: list[dict[str, Any]] = []
+            for event in events:
+                events_list.append({'event.name': event.name, **(event.body or {}), **event_attributes})
+
+            attr_name = 'events'
+            span.set_attributes(
+                {
+                    attr_name: ANY_ADAPTER.dump_json(events),
+                    'logfire.json_schema': json.dumps(
+                        {
+                            'type': 'object',
+                            'properties': {attr_name: {'type': 'array'}},
+                        }
+                    ),
+                }
+            )
+
+    def messages_to_otel_events(self, messages: list[ModelMessage]) -> list[Event]:
+        result: list[Event] = []
+        for message in messages:
+            if isinstance(message, ModelRequest):
+                for part in message.parts:
+                    if hasattr(part, 'otel_event'):
+                        result.append(part.otel_event())
+            elif isinstance(message, ModelResponse):
+                result.extend(message.otel_events())
+        return result

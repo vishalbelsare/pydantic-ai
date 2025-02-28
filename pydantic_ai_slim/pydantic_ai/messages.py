@@ -8,6 +8,7 @@ from typing import Annotated, Any, Literal, Union, cast, overload
 
 import pydantic
 import pydantic_core
+from opentelemetry._events import Event
 from typing_extensions import TypeAlias
 
 from ._utils import now_utc as _now_utc
@@ -32,6 +33,9 @@ class SystemPromptPart:
 
     part_kind: Literal['system-prompt'] = 'system-prompt'
     """Part type identifier, this is available on all parts as a discriminator."""
+
+    def otel_event(self) -> Event:
+        return Event('gen_ai.system.message', body={'content': self.content, 'role': 'system'})
 
 
 @dataclass
@@ -138,6 +142,9 @@ class UserPromptPart:
     part_kind: Literal['user-prompt'] = 'user-prompt'
     """Part type identifier, this is available on all parts as a discriminator."""
 
+    def otel_event(self) -> Event:
+        return Event('gen_ai.user.message', body={'content': self.content, 'role': 'user'})
+
 
 tool_return_ta: pydantic.TypeAdapter[Any] = pydantic.TypeAdapter(Any, config=pydantic.ConfigDict(defer_build=True))
 
@@ -175,6 +182,9 @@ class ToolReturnPart:
             return tool_return_ta.dump_python(self.content, mode='json')  # pyright: ignore[reportUnknownMemberType]
         else:
             return {'return_value': tool_return_ta.dump_python(self.content, mode='json')}
+
+    def otel_event(self) -> Event:
+        return Event('gen_ai.tool.message', body={'content': self.content, 'role': 'tool', 'id': self.tool_call_id})
 
 
 error_details_ta = pydantic.TypeAdapter(list[pydantic_core.ErrorDetails], config=pydantic.ConfigDict(defer_build=True))
@@ -223,6 +233,14 @@ class RetryPromptPart:
             json_errors = error_details_ta.dump_json(self.content, exclude={'__all__': {'ctx'}}, indent=2)
             description = f'{len(self.content)} validation errors: {json_errors.decode()}'
         return f'{description}\n\nFix the errors and try again.'
+
+    def otel_event(self) -> Event:
+        if self.tool_name is None:
+            return Event('gen_ai.user.message', body={'content': self.model_response(), 'role': 'user'})
+        else:
+            return Event(
+                'gen_ai.tool.message', body={'content': self.model_response(), 'role': 'tool', 'id': self.tool_call_id}
+            )
 
 
 ModelRequestPart = Annotated[
@@ -328,6 +346,36 @@ class ModelResponse:
 
     kind: Literal['response'] = 'response'
     """Message type identifier, this is available on all parts as a discriminator."""
+
+    def otel_events(self) -> list[Event]:
+        """Return OpenTelemetry events for the response."""
+        result: list[Event] = []
+
+        def new_event_body():
+            new_body: dict[str, Any] = {'role': 'assistant'}
+            ev = Event('gen_ai.assistant.message', body=new_body)
+            result.append(ev)
+            return new_body
+
+        body = new_event_body()
+        for part in self.parts:
+            if isinstance(part, ToolCallPart):
+                body.setdefault('tool_calls', []).append(
+                    {
+                        'id': part.tool_call_id,
+                        'type': 'function',  # TODO https://github.com/pydantic/pydantic-ai/issues/888
+                        'function': {
+                            'name': part.tool_name,
+                            'arguments': part.args,
+                        },
+                    }
+                )
+            elif isinstance(part, TextPart):
+                if body.get('content'):
+                    body = new_event_body()
+                body['content'] = part.content
+
+        return result
 
 
 ModelMessage = Annotated[Union[ModelRequest, ModelResponse], pydantic.Discriminator('kind')]

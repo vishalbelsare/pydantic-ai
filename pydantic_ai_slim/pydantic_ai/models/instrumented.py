@@ -15,14 +15,7 @@ from opentelemetry.util.types import AttributeValue
 from ..messages import (
     ModelMessage,
     ModelRequest,
-    ModelRequestPart,
     ModelResponse,
-    RetryPromptPart,
-    SystemPromptPart,
-    TextPart,
-    ToolCallPart,
-    ToolReturnPart,
-    UserPromptPart,
 )
 from ..settings import ModelSettings
 from ..usage import Usage
@@ -115,7 +108,7 @@ class InstrumentedModel(WrapperModel):
                     finish(response_stream.get(), response_stream.usage())
 
     @contextmanager
-    def _instrument(  # noqa: C901
+    def _instrument(
         self,
         messages: list[ModelMessage],
         model_settings: ModelSettings | None,
@@ -149,27 +142,27 @@ class InstrumentedModel(WrapperModel):
                 for message in messages:
                     if isinstance(message, ModelRequest):
                         for part in message.parts:
-                            event_name, body = _request_part_body(part)
-                            if event_name:
-                                emit_event(event_name, body)
+                            if hasattr(part, 'otel_event'):
+                                emit_event(part.otel_event())
                     elif isinstance(message, ModelResponse):
-                        for body in _response_bodies(message):
-                            emit_event('gen_ai.assistant.message', body)
+                        for event in message.otel_events():
+                            emit_event(event)
 
             def finish(response: ModelResponse, usage: Usage):
                 if not span.is_recording():
                     return
 
-                for response_body in _response_bodies(response):
-                    if response_body:
-                        emit_event(
+                for response_event in response.otel_events():
+                    emit_event(
+                        Event(
                             'gen_ai.choice',
-                            {
+                            body={
                                 # TODO finish_reason
                                 'index': 0,
-                                'message': response_body,
+                                'message': response_event.body,
                             },
                         )
+                    )
                 span.set_attributes(
                     {
                         # TODO finish_reason (https://github.com/open-telemetry/semantic-conventions/issues/1277), id
@@ -194,51 +187,10 @@ class InstrumentedModel(WrapperModel):
 
             yield finish
 
-    def _emit_event(
-        self, system: str, events_list: list[dict[str, Any]], event_name: str, body: dict[str, Any]
-    ) -> None:
+    def _emit_event(self, system: str, events_list: list[dict[str, Any]], event: Event) -> None:
         attributes = {'gen_ai.system': system}
         if self.event_mode == 'logs':
-            self.event_logger.emit(Event(event_name, body=body, attributes=attributes))
+            event.attributes = {**(event.attributes or {}), **attributes}
+            self.event_logger.emit(event)
         else:
-            events_list.append({'event.name': event_name, **body, **attributes})
-
-
-def _request_part_body(part: ModelRequestPart) -> tuple[str, dict[str, Any]]:
-    if isinstance(part, SystemPromptPart):
-        return 'gen_ai.system.message', {'content': part.content, 'role': 'system'}
-    elif isinstance(part, UserPromptPart):
-        return 'gen_ai.user.message', {'content': part.content, 'role': 'user'}
-    elif isinstance(part, ToolReturnPart):
-        return 'gen_ai.tool.message', {'content': part.content, 'role': 'tool', 'id': part.tool_call_id}
-    elif isinstance(part, RetryPromptPart):
-        if part.tool_name is None:
-            return 'gen_ai.user.message', {'content': part.model_response(), 'role': 'user'}
-        else:
-            return 'gen_ai.tool.message', {'content': part.model_response(), 'role': 'tool', 'id': part.tool_call_id}
-    else:
-        return '', {}
-
-
-def _response_bodies(message: ModelResponse) -> list[dict[str, Any]]:
-    body: dict[str, Any] = {'role': 'assistant'}
-    result = [body]
-    for part in message.parts:
-        if isinstance(part, ToolCallPart):
-            body.setdefault('tool_calls', []).append(
-                {
-                    'id': part.tool_call_id,
-                    'type': 'function',  # TODO https://github.com/pydantic/pydantic-ai/issues/888
-                    'function': {
-                        'name': part.tool_name,
-                        'arguments': part.args,
-                    },
-                }
-            )
-        elif isinstance(part, TextPart):
-            if body.get('content'):
-                body = {'role': 'assistant'}
-                result.append(body)
-            body['content'] = part.content
-
-    return result
+            events_list.append({'event.name': event.name, **(event.body or {}), **attributes})

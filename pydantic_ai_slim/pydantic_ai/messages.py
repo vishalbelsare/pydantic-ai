@@ -143,7 +143,12 @@ class UserPromptPart:
     """Part type identifier, this is available on all parts as a discriminator."""
 
     def otel_event(self) -> Event:
-        return Event('gen_ai.user.message', body={'content': self.content, 'role': 'user'})
+        if isinstance(self.content, str):
+            content = self.content
+        else:
+            # TODO figure out what to record for images and audio
+            content = [part if isinstance(part, str) else {'kind': part.kind} for part in self.content]
+        return Event('gen_ai.user.message', body={'content': content, 'role': 'user'})
 
 
 tool_return_ta: pydantic.TypeAdapter[Any] = pydantic.TypeAdapter(Any, config=pydantic.ConfigDict(defer_build=True))

@@ -11,11 +11,11 @@
 # TODO: Use span links to store scores, this provides a way to update them, add them later, etc.
 # TODO: Add some kind of `eval_function` decorator, which ensures that calls to the function send eval-review-compatible data to logfire
 # TODO: Make these relative imports; I've used an absolute import for now just to make it possible to run this file directly
-from pydantic_evals.evals import evaluation, increment_eval_metric
+from pydantic_evals.evals import Evaluation, increment_eval_metric
 from pydantic_evals.reports import RenderNumberConfig, RenderValueConfig
 
 __all__ = (
-    'evaluation',
+    'Evaluation',
     'increment_eval_metric',
     'RenderNumberConfig',
     'RenderValueConfig',

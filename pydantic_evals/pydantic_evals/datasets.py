@@ -1,3 +1,5 @@
+# TODO: Add assertions to DatasetRow and shared_assertions to Dataset
+
 import asyncio
 import sys
 from pathlib import Path
@@ -6,7 +8,7 @@ from typing import Any, Generic, Self
 
 import yaml
 from pydantic import BaseModel, ValidationError
-from pydantic_core import to_jsonable_python
+from pydantic_core import to_json, to_jsonable_python
 from typing_extensions import TypeVar
 
 from pydantic_ai import Agent, models
@@ -18,16 +20,16 @@ MetadataT = TypeVar('MetadataT', default=dict[str, Any])
 DEFAULT_DATASET_PATH = './test_cases.yaml'
 
 
-class DatasetRow(BaseModel, Generic[InputsT, OutputT, MetadataT]):
+class DatasetRow(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid'):
     """A single row of a "dataset", consisting of input, expected output, and metadata."""
 
     name: str
     inputs: InputsT
-    expected_output: OutputT
     metadata: MetadataT
+    expected_output: OutputT | None
 
 
-class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT]):
+class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid'):
     """A dataset of test cases, each consisting of input, expected output, and metadata."""
 
     rows: list[DatasetRow[InputsT, OutputT, MetadataT]]
@@ -44,7 +46,7 @@ class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT]):
             return cls.model_validate(loaded)
         except ValidationError as e:
             raise ValueError(
-                f'{cls.__name__} dataset file {path} contains data that does not match the schema: {e}.'
+                f'{cls.__name__} dataset file {path} contains data that does not match the schema:\n{e}.'
             ) from e
 
     @classmethod
@@ -66,15 +68,23 @@ class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT]):
         else:
             schema_path = cls._get_relative_path(schema_path)
 
-        schema_ref = str(_get_relative_path_reference(schema_path, dataset_path))
+        schema_content = to_json(cls.model_json_schema(), indent=2).decode() + '\n'
+        if not schema_path.exists() or schema_path.read_text() != schema_content:
+            schema_path.write_text(schema_content)
+
+        schema_ref = str(_get_relative_path_reference(schema_path, dataset_path.parent))
         yaml_language_server_line = f'# yaml-language-server: $schema={schema_ref}'
         if dataset_path.exists():
             try:
                 cls.from_yaml(dataset_path)
-            except Exception:
-                raise ValueError(
-                    f'{cls.__name__} dataset file {dataset_path} already exists, but does not contain compatible data. Fix or delete the file before calling this function.'
-                )
+            except ValueError as e:
+                if isinstance(e.__cause__, ValidationError):
+                    raise ValueError(
+                        f'{cls.__name__} dataset file {dataset_path} already exists, but does not contain compatible data.'
+                        f' Fix or delete the file before calling this function:\n{e.__cause__}'
+                    ) from e.__cause__
+                else:
+                    raise
             dataset_text = dataset_path.read_text()
             cases_text_with_schema = _ensure_yaml_language_server_line(dataset_text, schema_ref)
             if cases_text_with_schema != dataset_text:

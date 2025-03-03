@@ -2,8 +2,8 @@ from __future__ import annotations as _annotations
 
 import asyncio
 import inspect
-from collections.abc import AsyncIterator, Awaitable
-from contextlib import asynccontextmanager
+from collections.abc import Awaitable
+from contextlib import nullcontext
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from functools import partial
@@ -11,276 +11,83 @@ from typing import Any, Callable, Generic
 
 import logfire_api
 from pydantic_core import to_jsonable_python
-from rich.console import Console
 from typing_extensions import TypeVar
 
-from pydantic_evals._utils import UNSET, Unset
-from pydantic_evals.reports import EvalReport, EvalReportCase, RenderNumberConfig, RenderValueConfig
+from pydantic_evals.datasets import DatasetRow
+from pydantic_evals.reports import EvalReport, EvalReportCase
 
-__all__ = ('Eval', 'EvalCase', 'evaluation', 'increment_eval_metric')
+__all__ = ('Evaluation', 'ScoringContext', 'increment_eval_metric')
 
-# P = ParamSpec('P')
-InputsT = TypeVar('InputsT')
-OutputT = TypeVar('OutputT')
-MetadataT = TypeVar('MetadataT', default=None)
-
-
-@asynccontextmanager
-async def evaluation(
-    task: Callable[[InputsT], Awaitable[OutputT]],
-    *,
-    name: str | None = None,
-    handler: Callable[[EvalCase[InputsT, OutputT, MetadataT]], Awaitable[None]] | None = None,
-) -> AsyncIterator[Eval[InputsT, OutputT, MetadataT]]:
-    """Context manager for starting an evaluation."""
-    with logfire_api.span('evaluation', name=name) as eval_span:
-        eval = Eval(task, name=name, span=eval_span, handler=handler)
-
-        yield eval
-
-        async def _handle_case(case: EvalCase[InputsT, OutputT, MetadataT]) -> None:
-            if not case.has_output:
-                async with case:
-                    pass
-
-        async with asyncio.TaskGroup() as group:
-            for eval_case in eval.cases:
-                # TODO: Use a semaphore to enforce some kind of max concurrency.
-                #  See https://discuss.python.org/t/adding-a-limit-parameter-to-taskgroup-for-concurrent-coroutines-management/47686/3
-                group.create_task(_handle_case(eval_case), name=eval_case.name)
+InputsT = TypeVar('InputsT', default=dict[str, Any])
+OutputT = TypeVar('OutputT', default=dict[str, Any])
+MetadataT = TypeVar('MetadataT', default=dict[str, Any])
 
 
 @dataclass(init=False)
-class Eval(Generic[InputsT, OutputT, MetadataT]):
+class Evaluation(Generic[InputsT, OutputT, MetadataT]):
     """A container for evaluation cases.
 
     This should generally not be instantiated directly; instead, use the `evaluation` context manager.
     """
 
     task: Callable[[InputsT], Awaitable[OutputT]]
+
     name: str
-
-    handler: Callable[[EvalCase[InputsT, OutputT, MetadataT]], Awaitable[None]] | None = field(repr=False)
-    span: logfire_api.LogfireSpan | None = field(repr=False)
-
-    cases: list[EvalCase[InputsT, OutputT, MetadataT]] = field(repr=False)
+    default_scoring: Callable[[ScoringContext[InputsT, OutputT, MetadataT]], Awaitable[None]] | None = field(repr=False)
+    span: logfire_api.LogfireSpan = field(repr=False)
 
     def __init__(
         self,
         task: Callable[[InputsT], Awaitable[OutputT]],
         *,
         name: str | None = None,
-        handler: Callable[[EvalCase[InputsT, OutputT, MetadataT]], Awaitable[None]] | None = None,
-        span: logfire_api.LogfireSpan | None = None,
+        scoring: Callable[[ScoringContext[InputsT, OutputT, MetadataT]], Awaitable[None]] | None = None,
+        cases: list[DatasetRow[InputsT, OutputT, MetadataT]] | None = None,
     ):
         if name is None:
             name = _get_task_name(task)
 
         self.task = task
         self.name = name
-        self.handler = handler
-        self.span = span
+        self.default_scoring = scoring
+        self.eval_cases: list[EvalCase[InputsT, OutputT, MetadataT]] = [EvalCase(c, scoring) for c in cases or []]
 
-        self.cases = []
+        self.span = logfire_api.span('Evaluation of {name}', name=self.name)
 
-    def as_report(self) -> EvalReport:
-        return EvalReport(name=self.name, cases=[c.as_report_case() for c in self.cases])
-
-    def print_report(
+    def add_case(
         self,
-        width: int | None = None,
-        include_input: bool = False,
-        include_output: bool = False,
-        include_total_duration: bool = False,
-        include_averages: bool = True,
-        input_config: RenderValueConfig | None = None,
-        output_config: RenderValueConfig | None = None,
-        score_configs: dict[str, RenderNumberConfig] | None = None,
-        label_configs: dict[str, RenderValueConfig] | None = None,
-        metric_configs: dict[str, RenderNumberConfig] | None = None,
-        duration_config: RenderNumberConfig | None = None,
+        dataset_row: DatasetRow[InputsT, OutputT, MetadataT],
+        scoring_override: Callable[[ScoringContext[InputsT, OutputT, MetadataT]], Awaitable[None]] | None = None,
     ) -> None:
-        console = Console(width=width)
-        console.print(
-            self.as_report().console_table(
-                include_input=include_input,
-                include_output=include_output,
-                include_total_duration=include_total_duration,
-                include_averages=include_averages,
-                input_config=input_config,
-                output_config=output_config,
-                score_configs=score_configs,
-                label_configs=label_configs,
-                metric_configs=metric_configs,
-                duration_config=duration_config,
-            )
-        )
+        self.eval_cases.append(EvalCase(dataset_row, scoring_override or self.default_scoring))
 
-    def print_diff(
-        self,
-        *,
-        baseline: Eval[InputsT, OutputT, MetadataT] | EvalReport,
-        width: int | None = None,
-        include_input: bool = False,
-        include_output: bool = False,
-        include_total_duration: bool = False,
-        include_removed_cases: bool = False,
-        include_averages: bool = True,
-        input_config: RenderValueConfig | None = None,
-        output_config: RenderValueConfig | None = None,
-        score_configs: dict[str, RenderNumberConfig] | None = None,
-        label_configs: dict[str, RenderValueConfig] | None = None,
-        metric_configs: dict[str, RenderNumberConfig] | None = None,
-        duration_config: RenderNumberConfig | None = None,
-    ) -> None:
-        if not isinstance(baseline, EvalReport):
-            baseline = baseline.as_report()
+    async def run(self, max_concurrency: int | None = None) -> EvalReport:
+        with self.span:
+            limiter = asyncio.Semaphore(max_concurrency) if max_concurrency is not None else nullcontext()
 
-        console = Console(width=width)
-        console.print(
-            self.as_report().console_table(
-                baseline=baseline,
-                include_input=include_input,
-                include_output=include_output,
-                include_total_duration=include_total_duration,
-                include_removed_cases=include_removed_cases,
-                include_averages=include_averages,
-                input_config=input_config,
-                output_config=output_config,
-                score_configs=score_configs,
-                label_configs=label_configs,
-                metric_configs=metric_configs,
-                duration_config=duration_config,
-            )
-        )
+            async def _handle_case(case: EvalCase[InputsT, OutputT, MetadataT]) -> EvalReportCase:
+                async with limiter:
+                    return await run_case(self.task, case)
 
-    def case(
-        self,
-        name: str,
-        inputs: InputsT,
-        metadata: MetadataT = None,
-        handler: Callable[[EvalCase[InputsT, OutputT, MetadataT]], Awaitable[None]] | None = None,
-    ) -> EvalCase[InputsT, OutputT, MetadataT]:
-        case = EvalCase(name, self.task, inputs=inputs, metadata=metadata, handler=handler or self.handler)
-        self.cases.append(case)
-        return case
+            async_tasks: list[asyncio.Task[EvalReportCase]] = []
+            async with asyncio.TaskGroup() as group:
+                for eval_case in self.eval_cases:
+                    async_tasks.append(group.create_task(_handle_case(eval_case), name=eval_case.dataset_row.name))
+
+            report = EvalReport(name=self.name, cases=[x.result() for x in async_tasks])
+
+            # TODO: This attribute will be too big in general; remove it once we can use child spans in details panel:
+            self.span.set_attribute('cases', report.cases)
+        return report
 
 
 @dataclass
-class DatasetItem(Generic[InputsT, MetadataT]):
-    """A container for an evaluation case."""
-
-    name: str
-    inputs: InputsT
-    metadata: MetadataT  # might include expected output, annotations, etc.
-
-
-# @dataclass
-# class Dataset(Generic[InputsT, MetadataT]):
-#     items: list[DatasetItem[InputsT, MetadataT]]
-#
-#     def run(self, task: Callable[[InputsT], Awaitable[OutputT]]) -> None:
-#         for item in self.items:
-#             case = EvalCase(item.name, task, inputs=item.inputs, metadata=item.metadata)
-#             case.run()
-#
-#
-# @dataclass
-# class _TaskRunResults(Generic[OutputT]):
-#     output: OutputT
-#     attributes: dict[str, Any]
-#     metrics: dict[str, int | float]
-#
-#
-# @dataclass
-# class _OutputScoringResults(Generic[OutputT]):
-#     scores: dict[str, int | float]
-#     labels: dict[str, bool | str]
-
-
-# @dataclass(init=False)
-class EvalCase(Generic[InputsT, OutputT, MetadataT]):
-    """A container for an evaluation case."""
-
-    # dataset_item: DatasetItem[InputsT, MetadataT]
-    # scores: dict[str, str | bool | int | float]
-
-    def __init__(
-        self,
-        name: str,
-        task: Callable[[InputsT], Awaitable[OutputT]],
-        *,
-        inputs: InputsT,
-        metadata: MetadataT,
-        handler: Callable[[EvalCase[InputsT, OutputT, MetadataT]], Awaitable[None]] | None = None,
-    ):
-        self.name = name
-        self.task = task
-        self.inputs = inputs
-        self.metadata = metadata
-        self._handler = handler
-
-        self.scores: dict[str, int | float] = {}
-        self.metrics: dict[str, int | float] = {}
-        self.labels: dict[str, bool | str] = {}
-        # self.attributes = {}
-
-        self._case_span = logfire_api.span(
-            'case: {name}',
-            name=name,
-            inputs=inputs,
-            metadata=metadata,
-        )
-        self._task_span = logfire_api.span('task execution')
-        self._output: OutputT | Unset = UNSET
-        self._token: Any = None
-
-    @property
-    def has_output(self) -> bool:
-        return not isinstance(self._output, Unset)
-
-    @property
-    def output(self) -> OutputT:
-        if isinstance(self._output, Unset):
-            raise RuntimeError('`output` accessed before it was set.')
-        return self._output
-
-    @output.setter
-    def output(self, case_output: OutputT) -> None:
-        self._output = case_output
-
-    def record_score(self, name: str, value: int | float) -> None:
-        score_attribute = f'score.{name}'
-        self.scores[name] = value
-
-        # If we want to use span links to store scores we can do something like this:
-        # with logfire.span('score {name=} {value=}', name=name, value=value, _links=[(self.span.context, None)]):
-        #     pass
-
-        # We need to support updating scores via span links, but I'm not sure if we should _only_ support that
-        self._case_span.set_attribute(score_attribute, value)
-
-    def record_label(self, name: str, value: bool | str) -> None:
-        label_attribute = f'label.{name}'
-        self.labels[name] = value
-
-        # If we want to use span links to store labels we can do something like this:
-        # with logfire.span('label {name=} {value=}', name=name, value=value, _links=[(self.span.context, None)]):
-        #     pass
-
-        # We need to support updating labels via span links, but I'm not sure if we should _only_ support that
-        self._case_span.set_attribute(label_attribute, value)
+class _TaskRun:
+    attributes: dict[str, Any] = field(init=False, default_factory=dict)
+    metrics: dict[str, int | float] = field(init=False, default_factory=dict)
 
     def record_metric(self, name: str, value: int | float) -> None:
-        metric_attribute = f'metric.{name}'
         self.metrics[name] = value
-
-        # If we want to use span links to store metrics we can do something like this:
-        # with logfire.span('metric {name=} {value=}', name=name, value=value, _links=[(self.span.context, None)]):
-        #     pass
-
-        # We need to support updating metrics via span links, but I'm not sure if we should _only_ support that
-        self._case_span.set_attribute(metric_attribute, value)
 
     def increment_metric(self, name: str, amount: int | float) -> None:
         current_value = self.metrics.get(name, 0)
@@ -288,53 +95,123 @@ class EvalCase(Generic[InputsT, OutputT, MetadataT]):
         self.record_metric(name, incremented_value)
 
     def record_attribute(self, name: str, value: Any) -> None:
-        self._case_span.set_attribute(name, value)
-
-    def handler(self, handler: Callable[[EvalCase[InputsT, OutputT, MetadataT]], Awaitable[None]]) -> None:
-        self._handler = handler
-
-    def as_report_case(self) -> EvalReportCase:
-        jsonable_inputs = to_jsonable_python(self.inputs)
-        report_inputs: dict[str, Any] = (
-            jsonable_inputs if isinstance(jsonable_inputs, dict) else {'inputs': jsonable_inputs}
-        )
-        return EvalReportCase(
-            name=self.name,
-            inputs=report_inputs,
-            output=self.output,
-            scores=self.scores,
-            metrics=self.metrics,
-            labels=self.labels,
-            task_duration=_get_span_duration(self._task_span),
-            total_duration=_get_span_duration(self._case_span),
-        )
-
-    async def __aenter__(self):
-        if _CURRENT_EVAL_CASE.get() is not None:
-            raise RuntimeError('An eval case has already been entered. Evaluation cases should not be nested')
-        self._token = _CURRENT_EVAL_CASE.set(self)
-        self._case_span.__enter__()
-        with self._task_span:
-            case_output = await self.task(self.inputs)
-        self._case_span.set_attribute('case_output', case_output)
-        self.output = case_output
-        return self
-
-    async def __aexit__(
-        self, exc_type: type[BaseException] | None, exc_value: BaseException | None, traceback: Any
-    ) -> None:
-        if self._handler is not None:
-            await self._handler(self)
-        self._case_span.__exit__(exc_type, exc_value, traceback)
-        _CURRENT_EVAL_CASE.reset(self._token)
+        self.attributes[name] = value
 
 
-_CURRENT_EVAL_CASE = ContextVar[EvalCase[Any, Any, Any] | None]('_CURRENT_EVAL_CASE', default=None)
+async def _run_task(
+    task: Callable[[InputsT], Awaitable[OutputT]], inputs: InputsT
+) -> tuple[OutputT, _TaskRun, logfire_api.LogfireSpan]:
+    task_run = _TaskRun()
+    if _CURRENT_TASK_RUN.get() is not None:
+        raise RuntimeError('A task run has already been entered. Task runs should not be nested')
+    token = _CURRENT_TASK_RUN.set(task_run)
+    try:
+        with logfire_api.span('execute {task}', task=_get_task_name(task)) as task_span:
+            task_output = await task(inputs)
+    finally:
+        _CURRENT_TASK_RUN.reset(token)
+    return task_output, task_run, task_span
+
+
+@dataclass
+class EvalCase(Generic[InputsT, OutputT, MetadataT]):
+    dataset_row: DatasetRow[InputsT, OutputT, MetadataT]
+    handler: Callable[[ScoringContext[InputsT, OutputT, MetadataT]], Awaitable[None]] | None
+
+
+@dataclass
+class ScoringContext(Generic[InputsT, OutputT, MetadataT]):
+    """Context for scoring an evaluation case."""
+
+    name: str
+    inputs: InputsT
+    metadata: MetadataT
+    output: OutputT
+    expected_output: OutputT | None
+
+    attributes: dict[str, Any]
+    metrics: dict[str, int | float]
+    scores: dict[str, int | float] = field(init=False, default_factory=dict)
+    labels: dict[str, bool | str] = field(init=False, default_factory=dict)
+
+    def record_score(self, name: str, value: int | float) -> None:
+        self.scores[name] = value
+
+    def record_label(self, name: str, value: bool | str) -> None:
+        self.labels[name] = value
+
+
+async def run_case(
+    task: Callable[[InputsT], Awaitable[OutputT]], case: EvalCase[InputsT, OutputT, MetadataT]
+) -> EvalReportCase:
+    dataset_row = case.dataset_row
+    handler = case.handler
+
+    with logfire_api.span(
+        '{task_name}: {case_name}',
+        task_name=_get_task_name(task),
+        case_name=dataset_row.name,
+        inputs=dataset_row.inputs,
+        metadata=dataset_row.metadata,
+    ) as case_span:
+        output, task_run, task_span = await _run_task(task, dataset_row.inputs)
+        task_duration = _get_span_duration(task_span)
+
+        case_span.set_attribute('output', output)
+        case_span.set_attribute('task_duration', task_duration)
+        case_span.set_attribute('metrics', task_run.metrics)
+        case_span.set_attribute('attributes', task_run.attributes)
+        if handler is not None:
+            scoring_context = ScoringContext(
+                name=dataset_row.name,
+                inputs=dataset_row.inputs,
+                metadata=dataset_row.metadata,
+                output=output,
+                expected_output=dataset_row.expected_output,
+                attributes=task_run.attributes,
+                metrics=task_run.metrics,
+            )
+            await handler(scoring_context)
+            scores = scoring_context.scores
+            labels = scoring_context.labels
+            case_span.set_attribute('scores', scores)
+            case_span.set_attribute('labels', labels)
+        else:
+            scores = {}
+            labels = {}
+
+    jsonable_inputs = to_jsonable_python(dataset_row.inputs)
+    report_inputs: dict[str, Any] = (
+        jsonable_inputs if isinstance(jsonable_inputs, dict) else {'inputs': jsonable_inputs}
+    )
+    return EvalReportCase(
+        name=dataset_row.name,
+        inputs=report_inputs,
+        output=output,
+        metadata=dataset_row.metadata,
+        expected_output=dataset_row.expected_output,
+        scores=scores,
+        labels=labels,
+        metrics=task_run.metrics,
+        attributes=task_run.attributes,
+        task_duration=task_duration,
+        total_duration=_get_span_duration(case_span),
+    )
+
+
+_CURRENT_TASK_RUN = ContextVar[_TaskRun | None]('_CURRENT_TASK_RUN', default=None)
+
+
+def set_eval_attribute(name: str, value: Any) -> None:
+    """Set the named attribute for the current eval task run."""
+    current_case = _CURRENT_TASK_RUN.get()
+    if current_case is not None:
+        current_case.record_attribute(name, value)
 
 
 def increment_eval_metric(name: str, amount: int | float) -> None:
-    """Increment the named metric for the current evaluation case."""
-    current_case = _CURRENT_EVAL_CASE.get()
+    """Increment the named metric for the current eval task run."""
+    current_case = _CURRENT_TASK_RUN.get()
     if current_case is not None:
         current_case.increment_metric(name, amount)
 

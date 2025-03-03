@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, Literal, Protocol, TypeVar
 
 from pydantic import BaseModel
+from rich.console import Console
 from rich.table import Table
 from typing_extensions import TypedDict
 
@@ -322,11 +323,14 @@ class EvalReportCase(BaseModel):
 
     name: str
     inputs: dict[str, Any]
+    metadata: Any
+    expected_output: Any
     output: Any
 
     scores: dict[str, float | int]
     metrics: dict[str, float | int]
     labels: dict[str, bool | str]
+    attributes: dict[str, Any]
     task_duration: float
     total_duration: float  # includes scoring time
 
@@ -336,6 +340,42 @@ class EvalReport(BaseModel):
 
     name: str
     cases: list[EvalReportCase]
+
+    def print(
+        self,
+        width: int | None = None,
+        baseline: EvalReport | None = None,
+        include_input: bool = False,
+        include_output: bool = False,
+        include_total_duration: bool = False,
+        include_removed_cases: bool = False,
+        include_averages: bool = True,
+        input_config: RenderValueConfig | None = None,
+        output_config: RenderValueConfig | None = None,
+        score_configs: dict[str, RenderNumberConfig] | None = None,
+        label_configs: dict[str, RenderValueConfig] | None = None,
+        metric_configs: dict[str, RenderNumberConfig] | None = None,
+        duration_config: RenderNumberConfig | None = None,
+    ):
+        """Print this report to the console, optionally comparing it to a baseline report.
+
+        If you want more control over the output, use `console_table` instead and pass it to `rich.Console.print`.
+        """
+        table = self.console_table(
+            baseline=baseline,
+            include_input=include_input,
+            include_output=include_output,
+            include_total_duration=include_total_duration,
+            include_removed_cases=include_removed_cases,
+            include_averages=include_averages,
+            input_config=input_config,
+            output_config=output_config,
+            score_configs=score_configs,
+            label_configs=label_configs,
+            metric_configs=metric_configs,
+            duration_config=duration_config,
+        )
+        Console(width=width).print(table)
 
     def console_table(
         self,
@@ -352,7 +392,7 @@ class EvalReport(BaseModel):
         metric_configs: dict[str, RenderNumberConfig] | None = None,
         duration_config: RenderNumberConfig | None = None,
     ) -> Table:
-        """Print a diff table comparing the baseline and new EvalReport.
+        """Return a table containing the data from this report, or the diff between this report and a baseline report.
 
         Optionally include input and output details.
         """

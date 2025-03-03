@@ -1,7 +1,6 @@
-from pydantic_evals import evaluation
 from pydantic_evals.demo.time_range import TimeRangeAgentResponse, infer_time_range
 from pydantic_evals.demo.time_range.models import TimeRangeDataset, TimeRangeInputs
-from pydantic_evals.evals import EvalCase
+from pydantic_evals.evals import Evaluation, ScoringContext
 from pydantic_evals.llm_as_a_judge import GradingOutput, judge_input_output
 
 
@@ -12,21 +11,22 @@ async def judge_time_range_case(inputs: TimeRangeInputs, output: TimeRangeAgentR
 
 
 async def main():
-    """TODO: Remove this file before merging."""
+    """TODO: Move the pydantic_evals.demo package before merging."""
     import logfire
 
     logfire.configure(send_to_logfire=False, console=logfire.ConsoleOptions(verbose=True))
 
-    async def handle_case(eval_case: EvalCase[TimeRangeInputs, TimeRangeAgentResponse]):
-        result = await judge_time_range_case(inputs=eval_case.inputs, output=eval_case.output)
-        eval_case.record_label('reasonable', 'yes' if result else 'no')
+    dataset = TimeRangeDataset.from_yaml()
 
-    cases = TimeRangeDataset.from_yaml().rows
-    async with evaluation(infer_time_range, handler=handle_case) as my_eval:
-        for case_data in cases:
-            my_eval.case(name=case_data.name, inputs=case_data.inputs, handler=handle_case)
+    async def handler(ctx: ScoringContext[TimeRangeInputs, TimeRangeAgentResponse]):
+        result = await judge_time_range_case(inputs=ctx.inputs, output=ctx.output)
+        ctx.record_label('reasonable', 'yes' if result else 'no')
 
-    my_eval.print_report(include_input=True, include_output=True)
+    evaluation = Evaluation(infer_time_range, scoring=handler, cases=dataset.rows)
+
+    report = await evaluation.run(max_concurrency=10)
+
+    report.print(include_input=True, include_output=True)
 
 
 if __name__ == '__main__':

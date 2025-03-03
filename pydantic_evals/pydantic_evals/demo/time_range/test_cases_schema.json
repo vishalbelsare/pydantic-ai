@@ -1,6 +1,7 @@
 {
   "$defs": {
-    "TestCase_TimeRangeInputs_Union_TimeRangeBuilderSuccess__TimeRangeBuilderError__dict_str__Any__": {
+    "DatasetRow_TimeRangeInputs_Union_TimeRangeBuilderSuccess__TimeRangeBuilderError__dict_str__Any__": {
+      "additionalProperties": false,
       "properties": {
         "name": {
           "title": "Name",
@@ -9,6 +10,10 @@
         "inputs": {
           "$ref": "#/$defs/TimeRangeInputs"
         },
+        "metadata": {
+          "title": "Metadata",
+          "type": "object"
+        },
         "expected_output": {
           "anyOf": [
             {
@@ -16,22 +21,21 @@
             },
             {
               "$ref": "#/$defs/TimeRangeBuilderError"
+            },
+            {
+              "type": "null"
             }
           ],
           "title": "Expected Output"
-        },
-        "metadata": {
-          "title": "Metadata",
-          "type": "object"
         }
       },
       "required": [
         "name",
         "inputs",
-        "expected_output",
-        "metadata"
+        "metadata",
+        "expected_output"
       ],
-      "title": "TestCase[TimeRangeInputs, Union[TimeRangeBuilderSuccess, TimeRangeBuilderError], dict[str, Any]]",
+      "title": "DatasetRow[TimeRangeInputs, Union[TimeRangeBuilderSuccess, TimeRangeBuilderError], dict[str, Any]]",
       "type": "object"
     },
     "TimeRangeBuilderError": {
@@ -85,7 +89,7 @@
       "type": "object"
     },
     "TimeRangeInputs": {
-      "description": "The inputs for a time range inference agent.",
+      "description": "The inputs for the time range inference agent.",
       "properties": {
         "prompt": {
           "title": "Prompt",
@@ -105,18 +109,20 @@
       "type": "object"
     }
   },
+  "additionalProperties": false,
+  "description": "A dataset of examples for the time range inference agent.",
   "properties": {
     "rows": {
       "items": {
-        "$ref": "#/$defs/TestCase_TimeRangeInputs_Union_TimeRangeBuilderSuccess__TimeRangeBuilderError__dict_str__Any__"
+        "$ref": "#/$defs/DatasetRow_TimeRangeInputs_Union_TimeRangeBuilderSuccess__TimeRangeBuilderError__dict_str__Any__"
       },
-      "title": "Test Cases",
+      "title": "Rows",
       "type": "array"
     }
   },
   "required": [
     "rows"
   ],
-  "title": "TimeRangeTestCases",
+  "title": "TimeRangeDataset",
   "type": "object"
 }

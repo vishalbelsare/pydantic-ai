@@ -57,14 +57,7 @@ class TimeRangeInputs(TypedDict):
     now: AwareDatetime
 
 
-class TimeRangeExample(BaseModel):
-    """An example of the time range inference agent input and output."""
-
-    name: str
-    inputs: TimeRangeInputs
-    expected_output: TimeRangeAgentResponse
-
-
+# TODO: Drop the MetadataT type parameter and use the default below once pydantic 2.11 is in use
 class TimeRangeDataset(Dataset[TimeRangeInputs, TimeRangeAgentResponse, dict[str, Any]]):
     """A dataset of examples for the time range inference agent."""
 

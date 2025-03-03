@@ -16,6 +16,7 @@ class GradingOutput(BaseModel, populate_by_name=True):
 
 
 _judge_output_agent = Agent(
+    name='judge_output',
     system_prompt=dedent(
         """
         You are grading output according to a user-specified rubric. If the statement in the rubric is true, then the output passes the test. You respond with a JSON object with this structure: {reason: string, pass: boolean, score: number}
@@ -44,6 +45,7 @@ async def judge_output(
 
 
 _judge_input_output_agent = Agent(
+    name='judge_input_output',
     system_prompt=dedent(
         """
         You are grading output according to a user-specified rubric. If the statement in the rubric is true for the provided input and output, then the output passes the test. You respond with a JSON object with this structure: {reason: string, pass: boolean, score: number}

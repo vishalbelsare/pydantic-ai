@@ -26,7 +26,7 @@ class DatasetRow(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid'
     name: str
     inputs: InputsT
     metadata: MetadataT
-    expected_output: OutputT | None
+    expected_output: OutputT | None = None
 
 
 class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid'):

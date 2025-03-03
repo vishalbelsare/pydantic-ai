@@ -14,7 +14,7 @@ async def main():
     """TODO: Move the pydantic_evals.demo package before merging."""
     import logfire
 
-    logfire.configure(send_to_logfire=False, console=logfire.ConsoleOptions(verbose=True))
+    logfire.configure(send_to_logfire='if-token-present', console=logfire.ConsoleOptions(verbose=True))
 
     dataset = TimeRangeDataset.from_yaml()
 

@@ -67,7 +67,7 @@ if __name__ == '__main__':
 
     async def main():
         """Example usage of the time range inference agent."""
-        logfire.configure(send_to_logfire=False, console=ConsoleOptions(verbose=True))
+        logfire.configure(send_to_logfire='if-token-present', console=ConsoleOptions(verbose=True))
         user_prompt = 'yesterday from 2-4 ET'
         # user_prompt = 'the last 24 hours'
         # user_prompt = '6 to 9 PM ET on October 8th'

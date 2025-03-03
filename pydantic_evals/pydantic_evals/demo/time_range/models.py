@@ -1,11 +1,11 @@
 from __future__ import annotations as _annotations
 
-from typing import Any, ClassVar
+from typing import Any
 
 from pydantic import AwareDatetime, BaseModel
 from typing_extensions import TypedDict
 
-from pydantic_evals.cases import TestCases
+from pydantic_evals.datasets import Dataset
 
 
 class TimeRangeBuilderSuccess(BaseModel, use_attribute_docstrings=True):
@@ -51,24 +51,25 @@ TimeRangeAgentResponse = TimeRangeBuilderSuccess | TimeRangeBuilderError
 
 
 class TimeRangeInputs(TypedDict):
-    """The inputs for a time range inference agent."""
+    """The inputs for the time range inference agent."""
 
     prompt: str
     now: AwareDatetime
 
 
 class TimeRangeExample(BaseModel):
-    """An example of a time range inference agent input and output."""
+    """An example of the time range inference agent input and output."""
 
     name: str
     inputs: TimeRangeInputs
     expected_output: TimeRangeAgentResponse
 
 
-class TimeRangeTestCases(TestCases[TimeRangeInputs, TimeRangeAgentResponse, dict[str, Any]]):
-    stem: ClassVar[str] = 'test_cases'
+class TimeRangeDataset(Dataset[TimeRangeInputs, TimeRangeAgentResponse, dict[str, Any]]):
+    """A dataset of examples for the time range inference agent."""
+
+    pass
 
 
 if __name__ == '__main__':
-    TimeRangeTestCases.generate_cases_files()
-    TimeRangeTestCases.generate_examples()
+    TimeRangeDataset.generate_dataset_examples()

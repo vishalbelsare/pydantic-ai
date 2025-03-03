@@ -7,10 +7,9 @@ from textwrap import dedent
 
 import logfire
 from logfire import ConsoleOptions
-from pydantic import AwareDatetime
 
 from pydantic_ai import Agent, RunContext
-from pydantic_evals.demo.time_range.models import TimeRangeAgentResponse
+from pydantic_evals.demo.time_range.models import TimeRangeAgentResponse, TimeRangeInputs
 
 
 @dataclass
@@ -58,10 +57,10 @@ time_range_agent = Agent[TimeRangeDeps, TimeRangeAgentResponse](
 time_range_agent.system_prompt(time_range_system_prompt)
 
 
-async def infer_time_range(prompt: str, now: AwareDatetime | None = None) -> TimeRangeAgentResponse:
+async def infer_time_range(inputs: TimeRangeInputs) -> TimeRangeAgentResponse:
     """Infer a time range from a user prompt."""
-    deps = TimeRangeDeps(now=now or datetime.now().astimezone())
-    return (await time_range_agent.run(prompt, deps=deps)).data
+    deps = TimeRangeDeps(now=inputs['now'])
+    return (await time_range_agent.run(inputs['prompt'], deps=deps)).data
 
 
 if __name__ == '__main__':
@@ -75,6 +74,6 @@ if __name__ == '__main__':
         # user_prompt = 'next week'
         # user_prompt = 'what time is it?'
 
-        print(await infer_time_range(user_prompt))
+        print(await infer_time_range(TimeRangeInputs(prompt=user_prompt, now=datetime.now().astimezone())))
 
     asyncio.run(main())

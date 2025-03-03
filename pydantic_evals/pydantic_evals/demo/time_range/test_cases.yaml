@@ -1,5 +1,5 @@
-# yaml-language-server: $schema=./test_cases_schema.json
-test_cases:
+# yaml-language-server: $schema=test_cases_schema.json
+rows:
 - name: Specific Date Mention
   inputs:
     prompt: Let's meet on March 25, 2024.

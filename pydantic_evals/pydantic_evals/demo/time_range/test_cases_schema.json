@@ -106,7 +106,7 @@
     }
   },
   "properties": {
-    "test_cases": {
+    "rows": {
       "items": {
         "$ref": "#/$defs/TestCase_TimeRangeInputs_Union_TimeRangeBuilderSuccess__TimeRangeBuilderError__dict_str__Any__"
       },
@@ -115,7 +115,7 @@
     }
   },
   "required": [
-    "test_cases"
+    "rows"
   ],
   "title": "TimeRangeTestCases",
   "type": "object"

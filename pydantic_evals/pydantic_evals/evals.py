@@ -16,7 +16,20 @@ from typing_extensions import TypeVar
 from pydantic_evals.datasets import DatasetRow
 from pydantic_evals.reports import EvalReport, EvalReportCase
 
+# while waiting for https://github.com/pydantic/logfire/issues/745
+try:
+    import logfire._internal.stack_info
+except ImportError:
+    pass
+else:
+    from pathlib import Path
+
+    logfire._internal.stack_info.NON_USER_CODE_PREFIXES += (str(Path(__file__).parent.absolute()),)
+
 __all__ = ('Evaluation', 'ScoringContext', 'increment_eval_metric')
+
+_logfire = logfire_api.Logfire(otel_scope='pydantic-evals')
+
 
 InputsT = TypeVar('InputsT', default=dict[str, Any])
 OutputT = TypeVar('OutputT', default=dict[str, Any])
@@ -52,7 +65,7 @@ class Evaluation(Generic[InputsT, OutputT, MetadataT]):
         self.default_scoring = scoring
         self.eval_cases: list[EvalCase[InputsT, OutputT, MetadataT]] = [EvalCase(c, scoring) for c in cases or []]
 
-        self.span = logfire_api.span('Evaluation of {name}', name=self.name)
+        self.span = _logfire.span('evaluate {name}', name=self.name)
 
     def add_case(
         self,
@@ -106,7 +119,7 @@ async def _run_task(
         raise RuntimeError('A task run has already been entered. Task runs should not be nested')
     token = _CURRENT_TASK_RUN.set(task_run)
     try:
-        with logfire_api.span('execute {task}', task=_get_task_name(task)) as task_span:
+        with _logfire.span('execute {task}', task=_get_task_name(task)) as task_span:
             task_output = await task(inputs)
     finally:
         _CURRENT_TASK_RUN.reset(token)
@@ -147,7 +160,7 @@ async def run_case(
     dataset_row = case.dataset_row
     handler = case.handler
 
-    with logfire_api.span(
+    with _logfire.span(
         '{task_name}: {case_name}',
         task_name=_get_task_name(task),
         case_name=dataset_row.name,

@@ -1,17 +1,18 @@
-# TODO: Add assertions to DatasetRow and shared_assertions to Dataset
+from __future__ import annotations as _annotations
 
 import asyncio
 import sys
 from pathlib import Path
 from textwrap import dedent
-from typing import Any, Generic, Self
+from typing import TYPE_CHECKING, Any, Generic, Self
 
 import yaml
 from pydantic import BaseModel, ValidationError
 from pydantic_core import to_json, to_jsonable_python
 from typing_extensions import TypeVar
 
-from pydantic_ai import Agent, models
+if TYPE_CHECKING:
+    from pydantic_ai import models
 
 InputsT = TypeVar('InputsT', default=dict[str, Any])
 OutputT = TypeVar('OutputT', default=dict[str, Any])
@@ -188,6 +189,8 @@ async def _generate_examples(
     n_examples = max(0, n_examples - len(existing_cases))
     if n_examples == 0:
         return []
+
+    from pydantic_ai import Agent  # import locally to prevent circular dependencies
 
     agent = Agent(
         model,

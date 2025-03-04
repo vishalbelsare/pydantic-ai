@@ -334,6 +334,10 @@ class EvalReportCase(BaseModel):
     task_duration: float
     total_duration: float  # includes scoring time
 
+    # TODO: Maybe drop these once we can reference child spans in details panel:
+    trace_id: str
+    span_id: str
+
 
 class EvalReport(BaseModel):
     """A report of the results of evaluating a model on a set of cases."""

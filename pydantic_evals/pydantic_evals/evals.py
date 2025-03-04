@@ -14,7 +14,7 @@ from pydantic_core import to_jsonable_python
 from typing_extensions import TypeVar
 
 from pydantic_evals.datasets import DatasetRow
-from pydantic_evals.reports import EvalReport, EvalReportCase
+from pydantic_evals.reports import EvalReport, EvalReportCase, EvalReportCaseAggregate
 
 # while waiting for https://github.com/pydantic/logfire/issues/745
 try:
@@ -91,6 +91,8 @@ class Evaluation(Generic[InputsT, OutputT, MetadataT]):
 
             # TODO: This attribute will be too big in general; remove it once we can use child spans in details panel:
             self.span.set_attribute('cases', report.cases)
+            # TODO: Maybe remove this 'averages' attribute if we can compute it from child spans
+            self.span.set_attribute('averages', EvalReportCaseAggregate.average(report.cases))
         return report
 
 
@@ -105,6 +107,8 @@ class _TaskRun:
     def increment_metric(self, name: str, amount: int | float) -> None:
         current_value = self.metrics.get(name, 0)
         incremented_value = current_value + amount
+        if current_value == 0 and incremented_value == 0:
+            return  # Avoid recording a metric that is always zero
         self.record_metric(name, incremented_value)
 
     def record_attribute(self, name: str, value: Any) -> None:
@@ -192,6 +196,10 @@ async def run_case(
         else:
             scores = {}
             labels = {}
+        context = case_span.context
+        assert context is not None
+        trace_id = f'{context.trace_id:032x}'
+        span_id = f'{context.span_id:016x}'
 
     jsonable_inputs = to_jsonable_python(dataset_row.inputs)
     report_inputs: dict[str, Any] = (
@@ -209,6 +217,8 @@ async def run_case(
         attributes=task_run.attributes,
         task_duration=task_duration,
         total_duration=_get_span_duration(case_span),
+        trace_id=trace_id,
+        span_id=span_id,
     )
 
 

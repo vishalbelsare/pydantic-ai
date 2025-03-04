@@ -28,6 +28,13 @@
           ],
           "default": null,
           "title": "Expected Output"
+        },
+        "assertions": {
+          "items": {
+            "$ref": "#/$defs/SerializedAssertion"
+          },
+          "title": "Assertions",
+          "type": "array"
         }
       },
       "required": [
@@ -36,6 +43,20 @@
         "metadata"
       ],
       "title": "DatasetRow[TimeRangeInputs, Union[TimeRangeBuilderSuccess, TimeRangeBuilderError], dict[str, Any]]",
+      "type": "object"
+    },
+    "SerializedAssertion": {
+      "additionalProperties": true,
+      "properties": {
+        "call": {
+          "title": "Call",
+          "type": "string"
+        }
+      },
+      "required": [
+        "call"
+      ],
+      "title": "SerializedAssertion",
       "type": "object"
     },
     "TimeRangeBuilderError": {

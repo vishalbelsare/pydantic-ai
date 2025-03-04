@@ -1,3 +1,5 @@
+# TODO: Add support for dataset-wide and case-specific assertions.
+# TODO: Add a score to the evaluate span that tracks the percentage of cases that pass all assertions.
 from __future__ import annotations as _annotations
 
 import asyncio
@@ -15,6 +17,7 @@ from typing_extensions import TypeVar
 
 from pydantic_evals.datasets import DatasetRow
 from pydantic_evals.reports import EvalReport, EvalReportCase, EvalReportCaseAggregate
+from pydantic_evals.scoring import ScoringContext
 
 # while waiting for https://github.com/pydantic/logfire/issues/745
 try:
@@ -26,7 +29,7 @@ else:
 
     logfire._internal.stack_info.NON_USER_CODE_PREFIXES += (str(Path(__file__).parent.absolute()),)
 
-__all__ = ('Evaluation', 'ScoringContext', 'increment_eval_metric')
+__all__ = ('Evaluation', 'increment_eval_metric')
 
 _logfire = logfire_api.Logfire(otel_scope='pydantic-evals')
 
@@ -134,28 +137,6 @@ async def _run_task(
 class EvalCase(Generic[InputsT, OutputT, MetadataT]):
     dataset_row: DatasetRow[InputsT, OutputT, MetadataT]
     handler: Callable[[ScoringContext[InputsT, OutputT, MetadataT]], Awaitable[None]] | None
-
-
-@dataclass
-class ScoringContext(Generic[InputsT, OutputT, MetadataT]):
-    """Context for scoring an evaluation case."""
-
-    name: str
-    inputs: InputsT
-    metadata: MetadataT
-    output: OutputT
-    expected_output: OutputT | None
-
-    attributes: dict[str, Any]
-    metrics: dict[str, int | float]
-    scores: dict[str, int | float] = field(init=False, default_factory=dict)
-    labels: dict[str, bool | str] = field(init=False, default_factory=dict)
-
-    def record_score(self, name: str, value: int | float) -> None:
-        self.scores[name] = value
-
-    def record_label(self, name: str, value: bool | str) -> None:
-        self.labels[name] = value
 
 
 async def run_case(

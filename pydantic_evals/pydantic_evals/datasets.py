@@ -1,18 +1,20 @@
+# TODO: Add assertions to DatasetRow and shared_assertions to Dataset
 from __future__ import annotations as _annotations
 
 import asyncio
 import sys
 from pathlib import Path
 from textwrap import dedent
-from typing import TYPE_CHECKING, Any, Generic, Self
+from typing import Any, ClassVar, Generic, Self
 
 import yaml
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, Field, ValidationError
 from pydantic_core import to_json, to_jsonable_python
 from typing_extensions import TypeVar
 
-if TYPE_CHECKING:
-    from pydantic_ai import models
+from pydantic_ai import models
+from pydantic_evals.assertions import AssertionFunction, SerializedAssertion
+from pydantic_evals.scoring import ScoringContext
 
 InputsT = TypeVar('InputsT', default=dict[str, Any])
 OutputT = TypeVar('OutputT', default=dict[str, Any])
@@ -28,12 +30,32 @@ class DatasetRow(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid'
     inputs: InputsT
     metadata: MetadataT
     expected_output: OutputT | None = None
+    assertions: list[SerializedAssertion] = Field(default_factory=list)
 
 
 class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid'):
     """A dataset of test cases, each consisting of input, expected output, and metadata."""
 
     rows: list[DatasetRow[InputsT, OutputT, MetadataT]]
+
+    assertion_registry: ClassVar[dict[str, AssertionFunction[Any, Any, Any]]] = {}
+
+    def __init_subclass__(cls, **kwargs: Any):
+        super().__init_subclass__(**kwargs)
+        cls.assertion_registry = cls.assertion_registry.copy()
+
+    @classmethod
+    def register_assertion(cls, function: AssertionFunction[InputsT, OutputT, MetadataT], name: str | None = None):
+        name = name or function.__name__
+        cls.assertion_registry[name] = function
+
+    @classmethod
+    def inherited_assertion_registry(cls) -> dict[str, AssertionFunction[Any, Any, Any]]:
+        full_registry: dict[str, AssertionFunction[Any, Any, Any]] = {}
+        for base in cls.__mro__[::-1]:
+            if issubclass(base, Dataset):
+                full_registry.update(base.assertion_registry)
+        return full_registry
 
     @classmethod
     def from_yaml(cls, path: Path | str = DEFAULT_DATASET_PATH) -> Self:
@@ -44,11 +66,59 @@ class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid'):
         raw = path.read_text()
         loaded = yaml.safe_load(raw)
         try:
-            return cls.model_validate(loaded)
+            result = cls.model_validate(loaded)
         except ValidationError as e:
             raise ValueError(
                 f'{cls.__name__} dataset file {path} contains data that does not match the schema:\n{e}.'
             ) from e
+        try:
+            result.validate_assertions()
+        except ValueError as e:
+            raise ValueError(f'{cls.__name__} dataset file {path} contains invalid assertions:\n{e}.') from e
+        return result
+
+    def validate_assertions(self) -> None:
+        registry = self.inherited_assertion_registry()
+        for row in self.rows:
+            for assertion in row.assertions:
+                assertion.validate_against_registry(registry, row.name)
+
+    # @classmethod
+    # def model_json_schema_with_assertions(cls) -> dict[str, Any]:
+    #     # TODO: Implement this to get type-safe JSON schema for registered assertions
+    #     registry = cls.inherited_assertion_registry()
+    #     tds: list[Any] = []
+    #     for name, function in registry.items():
+    #         signature = inspect.signature(function)
+    #         first_param = list(signature.parameters.values())[0]
+    #         type_hints = _typing_extra.get_function_type_hints(function)
+    #         type_hints.pop(first_param.name)
+    #         type_hints.pop('return', None)
+    #         for p in signature.parameters.values():
+    #             if p.default is not p.empty:
+    #                 type_hints[p.name] = NotRequired[type_hints[p.name]]
+    #         type_hints['call'] = Literal[name]
+    #         td = TypedDict(f'{function.__name__.title()}Assertion', type_hints)  # pyright : ignore
+    #         td.__pydantic_config__ = {'extra': 'forbid'}  # pyright : ignore
+    #         tds.append(td)
+    #
+    #     params: tuple[Any, ...] | None = None
+    #     for cls_ in cls.__mro__:
+    #         if issubclass(cls_, BaseModel) and cls_.__pydantic_generic_metadata__['args']:
+    #             params = cls_.__pydantic_generic_metadata__['args']
+    #             break
+    #     assert params is not None
+    #
+    #     class ClsDatasetRow(DatasetRow[params[0], params[1], params[2]]):
+    #         assertions: list[Union[tuple(tds)]]  # pyright : ignore
+    #     ClsDatasetRow.__name__ = cls.__name__ + 'Row'
+    #
+    #     class ClsDataset(cls):
+    #         rows: list[ClsDatasetRow[params[0], params[1], params[2]]]  # pyright : ignore
+    #
+    #     ClsDataset.__name__ = cls.__name__
+    #
+    #     return ClsDataset.model_json_schema()
 
     @classmethod
     def generate_dataset_files(
@@ -151,6 +221,27 @@ class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid'):
         assert module_path is not None, 'Module must be a file-based module'
         root = Path(module_path).parent
         return root / path
+
+
+async def llm_rubric(
+    ctx: ScoringContext[Any, Any, Any],
+    rubric: str,
+    model: models.KnownModelName = 'gpt-4o',
+    include_input: bool = False,
+) -> bool:
+    """Judge whether the output of a language model meets the criteria of a provided rubric."""
+    if include_input:
+        from pydantic_evals.llm_as_a_judge import judge_input_output
+
+        grading_output = await judge_input_output(ctx.inputs, ctx.output, rubric, model)
+    else:
+        from pydantic_evals.llm_as_a_judge import judge_output
+
+        grading_output = await judge_output(ctx.output, rubric, model)
+    return grading_output.pass_
+
+
+Dataset.register_assertion(llm_rubric, 'llm_rubric')
 
 
 def _ensure_yaml_language_server_line(content: str, schema_ref: str) -> str:

@@ -6,7 +6,12 @@ from pydantic_evals.llm_as_a_judge import GradingOutput, judge_input_output
 
 async def judge_time_range_case(inputs: TimeRangeInputs, output: TimeRangeAgentResponse) -> GradingOutput:
     """Judge the output of a time range inference agent based on a rubric."""
-    rubric = 'The output should be a reasonable time range to select for the given inputs.'
+    rubric = (
+        'The output should be a reasonable time range to select for the given inputs, or an error '
+        'message if no good time range could be selected. Pick a score between 0 and 1 to represent how confident '
+        'you are that the selected time range was what the user intended, or that an error message was '
+        'an appropriate response.'
+    )
     return await judge_input_output(inputs, output, rubric)
 
 
@@ -20,7 +25,8 @@ async def main():
 
     async def handler(ctx: ScoringContext[TimeRangeInputs, TimeRangeAgentResponse]):
         result = await judge_time_range_case(inputs=ctx.inputs, output=ctx.output)
-        ctx.record_label('reasonable', 'yes' if result else 'no')
+        ctx.record_label('is_reasonable', 'yes' if result.pass_ else 'no')
+        ctx.record_score('accuracy', result.score)
 
     evaluation = Evaluation(infer_time_range, scoring=handler, cases=dataset.rows)
 

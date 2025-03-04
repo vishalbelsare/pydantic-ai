@@ -24,7 +24,10 @@ class ScoringContext(Generic[InputsT, OutputT, MetadataT]):
 
     attributes: dict[str, Any]
     metrics: dict[str, int | float]
+
+    # TODO: Allow storing a reason with the scores
     scores: dict[str, int | float] = field(init=False, default_factory=dict)
+    # TODO: Allow storing a reason with the labels
     labels: dict[str, bool | str] = field(init=False, default_factory=dict)
 
     def record_score(self, name: str, value: int | float) -> None:

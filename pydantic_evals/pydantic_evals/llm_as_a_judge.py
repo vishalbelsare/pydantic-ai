@@ -33,6 +33,7 @@ _judge_output_agent = Agent(
         """
     ),
     result_type=GradingOutput,
+    instrument=True,
 )
 
 
@@ -64,6 +65,7 @@ _judge_input_output_agent = Agent(
         """
     ),
     result_type=GradingOutput,
+    instrument=True,
 )
 
 

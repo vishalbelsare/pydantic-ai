@@ -53,6 +53,7 @@ time_range_agent = Agent[TimeRangeDeps, TimeRangeAgentResponse](
     result_type=TimeRangeAgentResponse,  # type: ignore
     deps_type=TimeRangeDeps,
     retries=1,
+    instrument=True,
 )
 time_range_agent.system_prompt(time_range_system_prompt)
 

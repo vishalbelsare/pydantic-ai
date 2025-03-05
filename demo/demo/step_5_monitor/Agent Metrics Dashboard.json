@@ -1,0 +1,455 @@
+{
+  "id": "7adf81a1-9f2d-4920-9916-8b203c2beb0b",
+  "name": "Agents Metrics",
+  "slug": "9rr5sb",
+  "items": [
+    {
+      "id": "chart_1_kctkj",
+      "config": {
+        "type": "area",
+        "chart": "timeseries",
+        "title": "LLM latency",
+        "xAxes": {
+          "key": "x"
+        },
+        "yAxes": [
+          {
+            "key": "avg_duration"
+          }
+        ],
+        "sqlQuery": "SELECT\n    time_bucket('%time_bucket_duration%', start_timestamp) AS x,\n    attributes->>'gen_ai.request.model' AS model,\n    AVG(duration) AS avg_duration\nFROM records\nWHERE \n    kind = 'span'\n    AND attributes->>'gen_ai.operation.name' = 'chat'\nGROUP BY x, model\nORDER BY x, model;",
+        "dimension": {
+          "key": "model"
+        },
+        "metricFields": [
+          {
+            "key": "x",
+            "type": "Unknown"
+          },
+          {
+            "key": "model",
+            "type": "Unknown"
+          },
+          {
+            "key": "avg_duration",
+            "type": "Unknown"
+          }
+        ]
+      },
+      "layouts": {
+        "lg": {
+          "w": 4,
+          "h": 8,
+          "x": 0,
+          "y": 0,
+          "i": "chart_1_kctkj",
+          "moved": false,
+          "static": false
+        },
+        "md": {
+          "h": 8,
+          "i": "chart_1_kctkj",
+          "w": 12,
+          "x": 0,
+          "y": null
+        },
+        "sm": {
+          "h": 8,
+          "i": "chart_1_kctkj",
+          "w": 12,
+          "x": 0,
+          "y": null
+        },
+        "xs": {
+          "h": 8,
+          "i": "chart_1_kctkj",
+          "w": 12,
+          "x": 0,
+          "y": null
+        },
+        "xxs": {
+          "h": 8,
+          "i": "chart_1_kctkj",
+          "w": 12,
+          "x": 0,
+          "y": null
+        }
+      }
+    },
+    {
+      "id": "chart_2 + 1736178542415",
+      "config": {
+        "type": "area",
+        "chart": "timeseries",
+        "title": "LLM Token counts",
+        "xAxes": {
+          "key": "x"
+        },
+        "yAxes": [
+          {
+            "key": "input_tokens"
+          },
+          {
+            "key": "output_tokens"
+          }
+        ],
+        "sqlQuery": "SELECT\n    time_bucket('%time_bucket_duration%', start_timestamp) AS x,\n    SUM(CAST(attributes->>'gen_ai.usage.input_tokens' AS FLOAT)) AS input_tokens,\n    SUM(CAST(attributes->>'gen_ai.usage.output_tokens' AS FLOAT)) AS output_tokens\nFROM records\nWHERE \n    kind = 'span'\n    AND attributes->>'gen_ai.operation.name' = 'chat'\n    AND attributes->>'gen_ai.usage.input_tokens' IS NOT NULL\n    AND attributes->>'gen_ai.usage.output_tokens' IS NOT NULL\nGROUP BY x\nORDER BY x;",
+        "dimension": {
+          "key": "endpoint"
+        },
+        "metricFields": [
+          {
+            "key": "x",
+            "type": "Unknown"
+          },
+          {
+            "key": "input_tokens",
+            "type": "Unknown"
+          },
+          {
+            "key": "output_tokens",
+            "type": "Unknown"
+          }
+        ]
+      },
+      "layouts": {
+        "lg": {
+          "w": 4,
+          "h": 8,
+          "x": 8,
+          "y": 0,
+          "i": "chart_2 + 1736178542415",
+          "moved": false,
+          "static": false
+        },
+        "md": {
+          "h": 8,
+          "i": "chart_2 + 1736178542415",
+          "w": 12,
+          "x": 0,
+          "y": null
+        },
+        "sm": {
+          "h": 8,
+          "i": "chart_2 + 1736178542415",
+          "w": 12,
+          "x": 0,
+          "y": null
+        },
+        "xs": {
+          "h": 8,
+          "i": "chart_2 + 1736178542415",
+          "w": 12,
+          "x": 0,
+          "y": null
+        },
+        "xxs": {
+          "h": 8,
+          "i": "chart_2 + 1736178542415",
+          "w": 12,
+          "x": 0,
+          "y": null
+        }
+      }
+    },
+    {
+      "id": "chart_3 + 1736178576030",
+      "config": {
+        "type": "area",
+        "chart": "timeseries",
+        "title": "LLM Request count",
+        "xAxes": {
+          "key": "x"
+        },
+        "yAxes": [
+          {
+            "key": "count"
+          }
+        ],
+        "sqlQuery": "SELECT\n    time_bucket('%time_bucket_duration%', start_timestamp) AS x,\n    attributes->>'gen_ai.request.model' AS model,\n    COUNT(*) AS count\nFROM records\nWHERE \n    kind = 'span'\n    AND attributes->>'gen_ai.operation.name' = 'chat'\nGROUP BY x, model\nORDER BY x, model;",
+        "metricFields": [
+          {
+            "key": "x",
+            "type": "Unknown"
+          },
+          {
+            "key": "model",
+            "type": "Unknown"
+          },
+          {
+            "key": "count",
+            "type": "Unknown"
+          }
+        ],
+        "dimension": {
+          "key": "model"
+        }
+      },
+      "layouts": {
+        "lg": {
+          "w": 4,
+          "h": 8,
+          "x": 4,
+          "y": 0,
+          "i": "chart_3 + 1736178576030",
+          "moved": false,
+          "static": false
+        },
+        "md": {
+          "h": 8,
+          "i": "chart_3 + 1736178576030",
+          "w": 12,
+          "x": 0,
+          "y": null
+        },
+        "sm": {
+          "h": 8,
+          "i": "chart_3 + 1736178576030",
+          "w": 12,
+          "x": 0,
+          "y": null
+        },
+        "xs": {
+          "h": 8,
+          "i": "chart_3 + 1736178576030",
+          "w": 12,
+          "x": 0,
+          "y": null
+        },
+        "xxs": {
+          "h": 8,
+          "i": "chart_3 + 1736178576030",
+          "w": 12,
+          "x": 0,
+          "y": null
+        }
+      }
+    },
+    {
+      "id": "chart_4 + 1736179749162",
+      "config": {
+        "type": "area",
+        "chart": "timeseries",
+        "title": "Agent latency",
+        "xAxes": {
+          "key": "x"
+        },
+        "yAxes": [
+          {
+            "key": "avg_duration"
+          }
+        ],
+        "sqlQuery": "SELECT\n    time_bucket('%time_bucket_duration%', start_timestamp) AS x,\n    attributes->>'agent_name' AS agent_name,\n    AVG(duration) AS avg_duration\nFROM records\nWHERE \n    kind = 'span'\n    AND otel_scope_name = 'pydantic-ai' \n    AND span_name = 'agent run'\nGROUP BY x, agent_name\nORDER BY x, agent_name;",
+        "dimension": {
+          "key": "agent_name"
+        },
+        "metricFields": [
+          {
+            "key": "x",
+            "type": "Unknown"
+          },
+          {
+            "key": "agent_name",
+            "type": "Unknown"
+          },
+          {
+            "key": "avg_duration",
+            "type": "Unknown"
+          }
+        ]
+      },
+      "layouts": {
+        "lg": {
+          "w": 4,
+          "h": 8,
+          "x": 0,
+          "y": 8,
+          "i": "chart_4 + 1736179749162",
+          "moved": false,
+          "static": false
+        },
+        "md": {
+          "h": 8,
+          "i": "chart_4 + 1736179749162",
+          "w": 12,
+          "x": 0,
+          "y": null
+        },
+        "sm": {
+          "h": 8,
+          "i": "chart_4 + 1736179749162",
+          "w": 12,
+          "x": 0,
+          "y": null
+        },
+        "xs": {
+          "h": 8,
+          "i": "chart_4 + 1736179749162",
+          "w": 12,
+          "x": 0,
+          "y": null
+        },
+        "xxs": {
+          "h": 8,
+          "i": "chart_4 + 1736179749162",
+          "w": 12,
+          "x": 0,
+          "y": null
+        }
+      }
+    },
+    {
+      "id": "chart_5 + 1736179916690",
+      "config": {
+        "type": "area",
+        "chart": "timeseries",
+        "title": "Eval latency",
+        "xAxes": {
+          "key": "x"
+        },
+        "yAxes": [
+          {
+            "key": "avg_task_duration"
+          }
+        ],
+        "sqlQuery": "SELECT\n    time_bucket('%time_bucket_duration%', start_timestamp) AS x,\n    attributes->>'name' AS eval_name,\n    AVG(CAST(attributes->'averages'->'task_duration' AS FLOAT)) AS avg_task_duration\nFROM records\nWHERE \n    kind = 'span'\n    AND otel_scope_name = 'pydantic-evals' \n    AND span_name LIKE 'evaluate %'\n    AND attributes->'averages'->'task_duration' IS NOT NULL\nGROUP BY x, eval_name\nORDER BY x, eval_name;",
+        "dimension": {
+          "key": "eval_name"
+        },
+        "metricFields": [
+          {
+            "key": "x",
+            "type": "Unknown"
+          },
+          {
+            "key": "eval_name",
+            "type": "Unknown"
+          },
+          {
+            "key": "avg_task_duration",
+            "type": "Unknown"
+          }
+        ]
+      },
+      "layouts": {
+        "lg": {
+          "w": 4,
+          "h": 8,
+          "x": 4,
+          "y": 8,
+          "i": "chart_5 + 1736179916690",
+          "moved": false,
+          "static": false
+        },
+        "md": {
+          "h": 8,
+          "i": "chart_5 + 1736179916690",
+          "w": 12,
+          "x": 0,
+          "y": null
+        },
+        "sm": {
+          "h": 8,
+          "i": "chart_5 + 1736179916690",
+          "w": 12,
+          "x": 0,
+          "y": null
+        },
+        "xs": {
+          "h": 8,
+          "i": "chart_5 + 1736179916690",
+          "w": 12,
+          "x": 0,
+          "y": null
+        },
+        "xxs": {
+          "h": 8,
+          "i": "chart_5 + 1736179916690",
+          "w": 12,
+          "x": 0,
+          "y": null
+        }
+      }
+    },
+    {
+      "id": "chart_6_33h6mn",
+      "config": {
+        "chart": "timeseries",
+        "title": "Eval tokens",
+        "sqlQuery": "SELECT\n    time_bucket('%time_bucket_duration%', start_timestamp) AS x,\n    attributes->>'name' AS eval_name,\n    AVG(CAST(attributes->'averages'->'metrics'->'input_tokens' AS FLOAT)) AS avg_input_tokens,\n    AVG(CAST(attributes->'averages'->'metrics'->'output_tokens' AS FLOAT)) AS avg_output_tokens\nFROM records\nWHERE \n    kind = 'span'\n    AND otel_scope_name = 'pydantic-evals' \n    AND span_name LIKE 'evaluate %'\n    AND attributes->'averages'->'metrics'->'input_tokens' IS NOT NULL\n    AND attributes->'averages'->'metrics'->'output_tokens' IS NOT NULL\nGROUP BY x, eval_name\nORDER BY x, eval_name;",
+        "yAxes": [
+          {
+            "key": "avg_input_tokens"
+          },
+          {
+            "key": "avg_output_tokens"
+          }
+        ],
+        "xAxes": {
+          "key": "x"
+        },
+        "metricFields": [
+          {
+            "key": "x",
+            "type": "Unknown"
+          },
+          {
+            "key": "eval_name",
+            "type": "Unknown"
+          },
+          {
+            "key": "avg_input_tokens",
+            "type": "Unknown"
+          },
+          {
+            "key": "avg_output_tokens",
+            "type": "Unknown"
+          }
+        ],
+        "dimension": {
+          "key": "eval_name"
+        },
+        "type": "area"
+      },
+      "layouts": {
+        "lg": {
+          "w": 4,
+          "h": 8,
+          "x": 8,
+          "y": 8,
+          "i": "chart_6_33h6mn",
+          "moved": false,
+          "static": false
+        },
+        "md": {
+          "i": "chart_6_33h6mn",
+          "x": 0,
+          "y": 1,
+          "w": 12,
+          "h": 8
+        },
+        "sm": {
+          "i": "chart_6_33h6mn",
+          "x": 0,
+          "y": 1,
+          "w": 12,
+          "h": 8
+        },
+        "xs": {
+          "i": "chart_6_33h6mn",
+          "x": 0,
+          "y": 1,
+          "w": 12,
+          "h": 8
+        },
+        "xxs": {
+          "i": "chart_6_33h6mn",
+          "x": 0,
+          "y": 1,
+          "w": 12,
+          "h": 8
+        }
+      }
+    }
+  ]
+}

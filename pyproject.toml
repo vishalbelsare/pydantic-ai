@@ -51,13 +51,14 @@ examples = ["pydantic-ai-examples==0.0.32"]
 logfire = ["logfire>=2.3"]
 
 [tool.uv.sources]
+demo = { workspace = true }
 pydantic-ai-slim = { workspace = true }
 pydantic-evals = { workspace = true }
 pydantic-graph = { workspace = true }
 pydantic-ai-examples = { workspace = true }
 
 [tool.uv.workspace]
-members = ["pydantic_ai_slim", "pydantic_evals", "pydantic_graph", "examples"]
+members = ["demo", "pydantic_ai_slim", "pydantic_evals", "pydantic_graph", "examples"]
 
 [dependency-groups]
 # dev dependencies are defined in `pydantic-ai-slim/pyproject.toml` to allow for minimal testing
@@ -89,6 +90,7 @@ include = [
     "examples/**/*.py",
     "tests/**/*.py",
     "docs/**/*.py",
+    "demo/**/*.py",
 ]
 
 [tool.ruff.lint]
@@ -122,7 +124,7 @@ typeCheckingMode = "strict"
 reportMissingTypeStubs = false
 reportUnnecessaryIsInstance = false
 reportUnnecessaryTypeIgnoreComment = true
-include = ["pydantic_ai_slim", "pydantic_evals", "pydantic_graph", "tests", "examples"]
+include = ["demo", "pydantic_ai_slim", "pydantic_evals", "pydantic_graph", "tests", "examples"]
 venvPath = ".venv"
 # see https://github.com/microsoft/pyright/issues/7771 - we don't want to error on decorated functions in tests
 # which are not otherwise used
@@ -142,6 +144,7 @@ filterwarnings = ["error"]
 [tool.coverage.run]
 # required to avoid warnings about files created by create_module fixture
 include = [
+    "demo/**/*.py",
     "pydantic_ai_slim/**/*.py",
     "pydantic_evals/**/*.py",
     "pydantic_graph/**/*.py",

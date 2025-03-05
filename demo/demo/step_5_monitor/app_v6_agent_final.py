@@ -1,15 +1,20 @@
 from __future__ import annotations as _annotations
 
-import asyncio
 from dataclasses import dataclass, field
 from datetime import datetime
 from textwrap import dedent
 
 import logfire
-from logfire import ConsoleOptions
-
+from fastapi import FastAPI
 from pydantic_ai import Agent, RunContext
-from pydantic_evals.demo.time_range.models import TimeRangeInputs, TimeRangeResponse
+from pydantic_evals.demo.time_range.models import TimeRangeResponse
+
+logfire.configure(
+    send_to_logfire="if-token-present",
+    environment="prod",
+    service_name="app",
+    service_version="v6",
+)
 
 
 @dataclass
@@ -22,7 +27,7 @@ class TimeRangeDeps:
 def time_range_system_prompt(ctx: RunContext[TimeRangeDeps]):
     """Build the system prompt for the time range inference agent."""
     # Format like: Friday, November 22, 2024 11:15:14 PST
-    now_str = ctx.deps.now.strftime('%A, %B %d, %Y %H:%M:%S %Z')
+    now_str = ctx.deps.now.strftime("%A, %B %d, %Y %H:%M:%S %Z")
     return dedent(
         f"""
         Convert the user's request into a structured time range. Both the min and max must have a timezone offset specified.
@@ -48,32 +53,28 @@ def time_range_system_prompt(ctx: RunContext[TimeRangeDeps]):
 
 
 time_range_agent = Agent[TimeRangeDeps, TimeRangeResponse](
-    'gpt-4o',
-    # we can't yet annotate type form, hence type ignore
-    result_type=TimeRangeResponse,  # type: ignore
+    "gpt-4o",
+    result_type=TimeRangeResponse,  # type: ignore  # we can't yet annotate something as receiving a TypeForm
     deps_type=TimeRangeDeps,
     retries=1,
+    instrument=True,
 )
 time_range_agent.system_prompt(time_range_system_prompt)
 
-
-async def infer_time_range(inputs: TimeRangeInputs) -> TimeRangeResponse:
-    """Infer a time range from a user prompt."""
-    deps = TimeRangeDeps(now=inputs['now'])
-    return (await time_range_agent.run(inputs['prompt'], deps=deps)).data
+app = FastAPI()
 
 
-if __name__ == '__main__':
+@app.get("/infer-time-range")
+async def infer_time_range(prompt: str) -> TimeRangeResponse:
+    logfire.info(f"Handling {prompt=}")
+    agent_run_result = await time_range_agent.run(prompt, deps=TimeRangeDeps())
+    return agent_run_result.data
 
-    async def main():
-        """Example usage of the time range inference agent."""
-        logfire.configure(send_to_logfire='if-token-present', console=ConsoleOptions(verbose=True))
-        user_prompt = 'yesterday from 2-4 ET'
-        # user_prompt = 'the last 24 hours'
-        # user_prompt = '6 to 9 PM ET on October 8th'
-        # user_prompt = 'next week'
-        # user_prompt = 'what time is it?'
 
-        print(await infer_time_range(TimeRangeInputs(prompt=user_prompt, now=datetime.now().astimezone())))
+if __name__ == "__main__":
+    logfire.instrument_fastapi(app, capture_headers=True, record_send_receive=True)
 
-    asyncio.run(main())
+    import uvicorn
+
+    print("Swagger UI Link: http://localhost:8099/docs")
+    uvicorn.run(app, port=8099)

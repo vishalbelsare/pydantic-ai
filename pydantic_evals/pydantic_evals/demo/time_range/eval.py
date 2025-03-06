@@ -28,7 +28,7 @@ async def main():
         ctx.record_label('is_reasonable', 'yes' if result.pass_ else 'no')
         ctx.record_score('accuracy', result.score)
 
-    evaluation = Evaluation(infer_time_range, scoring=handler, cases=dataset.rows)
+    evaluation = Evaluation(infer_time_range, scoring=handler, cases=dataset.deserialized_rows())
 
     report = await evaluation.run(max_concurrency=10)
 

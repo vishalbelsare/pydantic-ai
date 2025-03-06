@@ -2,18 +2,20 @@
 from __future__ import annotations as _annotations
 
 import asyncio
+import functools
 import sys
+from inspect import iscoroutinefunction
 from pathlib import Path
 from textwrap import dedent
 from typing import Any, ClassVar, Generic, Self
 
 import yaml
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, TypeAdapter, ValidationError
 from pydantic_core import to_json, to_jsonable_python
 from typing_extensions import TypeVar
 
 from pydantic_ai import models
-from pydantic_evals.assertions import AssertionFunction, SerializedAssertion
+from pydantic_evals.assertions import Assertion, AssertionFunction, SerializedAssertion
 from pydantic_evals.scoring import ScoringContext
 
 InputsT = TypeVar('InputsT', default=dict[str, Any])
@@ -23,20 +25,35 @@ MetadataT = TypeVar('MetadataT', default=dict[str, Any])
 DEFAULT_DATASET_PATH = './test_cases.yaml'
 
 
-class DatasetRow(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid'):
+class _BaseDatasetRow(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid'):
     """A single row of a "dataset", consisting of input, expected output, and metadata."""
 
     name: str
     inputs: InputsT
     metadata: MetadataT
     expected_output: OutputT | None = None
+
+
+class SerializedDatasetRow(_BaseDatasetRow[InputsT, OutputT, MetadataT]):
+    """A single row of a "dataset", consisting of input, expected output, and metadata."""
+
+    __pydantic_config__ = {'extra': 'forbid'}
+
     assertions: list[SerializedAssertion] = Field(default_factory=list)
+
+
+class DatasetRow(_BaseDatasetRow[InputsT, OutputT, MetadataT]):
+    """A single row of a "dataset", consisting of input, expected output, and metadata."""
+
+    __pydantic_config__ = {'extra': 'forbid'}
+
+    assertions: list[Assertion[InputsT, OutputT, MetadataT]] = Field(default_factory=list)
 
 
 class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid'):
     """A dataset of test cases, each consisting of input, expected output, and metadata."""
 
-    rows: list[DatasetRow[InputsT, OutputT, MetadataT]]
+    rows: list[SerializedDatasetRow[InputsT, OutputT, MetadataT]]
 
     assertion_registry: ClassVar[dict[str, AssertionFunction[Any, Any, Any]]] = {}
 
@@ -47,7 +64,24 @@ class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid'):
     @classmethod
     def register_assertion(cls, function: AssertionFunction[InputsT, OutputT, MetadataT], name: str | None = None):
         name = name or function.__name__
+        if name in cls.assertion_registry:
+            raise ValueError(f'Assertion {name!r} is already registered')
         cls.assertion_registry[name] = function
+
+        if iscoroutinefunction(function):
+
+            async def not_function(*args: Any, **kwargs: Any) -> bool:  # pyright: ignore[reportRedeclaration]
+                return not await function(*args, **kwargs)
+        else:
+
+            def not_function(*args: Any, **kwargs: Any) -> bool:
+                return not function(*args, **kwargs)
+
+        not_function = functools.wraps(function)(not_function)  # pyright: ignore[reportAssignmentType]
+        not_name = f'not_{name}'
+        not_function.__name__ = not_name
+        not_function.__qualname__ = f'{".".join(not_function.__qualname__.split(".")[:-1])}.{not_name}'
+        cls.assertion_registry[not_name] = not_function
 
     @classmethod
     def inherited_assertion_registry(cls) -> dict[str, AssertionFunction[Any, Any, Any]]:
@@ -56,6 +90,33 @@ class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid'):
             if issubclass(base, Dataset):
                 full_registry.update(base.assertion_registry)
         return full_registry
+
+    @classmethod
+    @functools.cache
+    def type_adapter(cls) -> TypeAdapter[Self]:
+        return TypeAdapter(cls)
+
+    @classmethod
+    @functools.cache
+    def serialized_row_type(cls) -> type[SerializedDatasetRow[InputsT, OutputT, MetadataT]]:
+        for c in cls.__mro__:
+            metadata = getattr(c, '__pydantic_generic_metadata__')
+            if len(args := metadata.get('args')) == 3:
+                return SerializedDatasetRow[args]  # type: ignore
+            elif len(args := getattr(c, '__args__', ())) == 3:
+                return SerializedDatasetRow[args]  # type: ignore
+        raise ValueError(f'Could not find the DatasetRow type for {cls}')
+
+    @classmethod
+    @functools.cache
+    def row_type(cls) -> type[DatasetRow[InputsT, OutputT, MetadataT]]:
+        for c in cls.__mro__:
+            metadata = getattr(c, '__pydantic_generic_metadata__')
+            if len(args := metadata.get('args')) == 3:
+                return DatasetRow[args]  # type: ignore
+            elif len(args := getattr(c, '__args__', ())) == 3:
+                return DatasetRow[args]  # type: ignore
+        raise ValueError(f'Could not find the DatasetRow type for {cls}')
 
     @classmethod
     def from_yaml(cls, path: Path | str = DEFAULT_DATASET_PATH) -> Self:
@@ -67,6 +128,7 @@ class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid'):
         loaded = yaml.safe_load(raw)
         try:
             result = cls.model_validate(loaded)
+            result.rows = [cls.serialized_row_type().model_validate(row.model_dump()) for row in result.rows]
         except ValidationError as e:
             raise ValueError(
                 f'{cls.__name__} dataset file {path} contains data that does not match the schema:\n{e}.'
@@ -76,6 +138,23 @@ class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid'):
         except ValueError as e:
             raise ValueError(f'{cls.__name__} dataset file {path} contains invalid assertions:\n{e}.') from e
         return result
+
+    def deserialized_rows(self) -> list[DatasetRow[InputsT, OutputT, MetadataT]]:
+        registry = self.inherited_assertion_registry()
+
+        rows: list[DatasetRow[InputsT, OutputT, MetadataT]] = []
+        for row in self.rows:
+            assertions = [a.bind(registry) for a in row.assertions]
+            row = self.row_type()(
+                name=row.name,
+                inputs=row.inputs,
+                metadata=row.metadata,
+                expected_output=row.expected_output,
+                assertions=assertions,
+            )
+            rows.append(row)
+
+        return rows
 
     def validate_assertions(self) -> None:
         registry = self.inherited_assertion_registry()
@@ -139,7 +218,7 @@ class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid'):
         else:
             schema_path = cls._get_relative_path(schema_path)
 
-        schema_content = to_json(cls.model_json_schema(), indent=2).decode() + '\n'
+        schema_content = to_json(cls.type_adapter().json_schema(), indent=2).decode() + '\n'
         if not schema_path.exists() or schema_path.read_text() != schema_content:
             schema_path.write_text(schema_content)
 
@@ -228,7 +307,7 @@ async def llm_rubric(
     rubric: str,
     model: models.KnownModelName = 'gpt-4o',
     include_input: bool = False,
-) -> bool:
+) -> tuple[bool, str]:
     """Judge whether the output of a language model meets the criteria of a provided rubric."""
     if include_input:
         from pydantic_evals.llm_as_a_judge import judge_input_output
@@ -238,10 +317,21 @@ async def llm_rubric(
         from pydantic_evals.llm_as_a_judge import judge_output
 
         grading_output = await judge_output(ctx.output, rubric, model)
-    return grading_output.pass_
+    return grading_output.pass_, grading_output.reason
+
+
+async def is_instance(ctx: ScoringContext[Any, Any, Any], type_name: str) -> bool | tuple[bool, str]:
+    """Check if the output is an instance of a type with the given name."""
+    output = ctx.output
+    for cls in type(output).__mro__:
+        if cls.__name__ == type_name:
+            return True
+    return False, f'output is of type {type(output).__qualname__}'
 
 
 Dataset.register_assertion(llm_rubric, 'llm_rubric')
+Dataset.register_assertion(is_instance, 'is_instance')
+# TODO: Other common assertions could be added here, such as "is_equal", "is_greater_than", etc.
 
 
 def _ensure_yaml_language_server_line(content: str, schema_ref: str) -> str:
@@ -260,7 +350,7 @@ async def _generate_examples(
     path: Path,
     model: models.Model | models.KnownModelName = 'gpt-4o',
     n_examples: int = 3,
-) -> list[DatasetRow[Any, Any, Any]]:
+) -> list[SerializedDatasetRow[Any, Any, Any]]:
     if path.exists():
         cases_text = path.read_text()
         try:
@@ -269,7 +359,7 @@ async def _generate_examples(
             raise ValueError(f'Cases file {path} is not valid YAML')
 
         try:
-            existing_cases = dataset_type.model_validate(loaded).rows
+            existing_cases = dataset_type.type_adapter().validate_python(loaded).rows
         except ValidationError as e:
             raise ValueError(
                 f'Cases file {path} contains data that does not match the schema. Delete the file before calling this function.'

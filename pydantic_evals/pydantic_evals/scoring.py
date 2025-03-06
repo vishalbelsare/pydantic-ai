@@ -25,6 +25,8 @@ class ScoringContext(Generic[InputsT, OutputT, MetadataT]):
     attributes: dict[str, Any]
     metrics: dict[str, int | float]
 
+    # TODO: Add the set of otel spans that were created during the case as an attribute that can be accessed here
+    #   This would be useful for things like checking for specific agent behaviors in a more extended behavior.
     # TODO: Allow storing a reason with the scores
     scores: dict[str, int | float] = field(init=False, default_factory=dict)
     # TODO: Allow storing a reason with the labels

@@ -15,6 +15,7 @@ import logfire_api
 from pydantic_core import to_jsonable_python
 from typing_extensions import TypeVar
 
+from pydantic_evals.assertions import AssertionResult
 from pydantic_evals.datasets import DatasetRow
 from pydantic_evals.reports import EvalReport, EvalReportCase, EvalReportCaseAggregate
 from pydantic_evals.scoring import ScoringContext
@@ -159,16 +160,28 @@ async def run_case(
         case_span.set_attribute('task_duration', task_duration)
         case_span.set_attribute('metrics', task_run.metrics)
         case_span.set_attribute('attributes', task_run.attributes)
+
+        scoring_context = ScoringContext[InputsT, OutputT, MetadataT](
+            name=dataset_row.name,
+            inputs=dataset_row.inputs,
+            expected_output=dataset_row.expected_output,
+            output=output,
+            metadata=dataset_row.metadata,
+            attributes=task_run.attributes,
+            metrics=task_run.metrics,
+        )
+
+        assertions = []
+        if dataset_row.assertions:
+            async with asyncio.TaskGroup() as tg:
+                tasks: list[asyncio.Task[AssertionResult]] = []
+                for assertion in dataset_row.assertions:
+                    tasks.append(tg.create_task(assertion.check(scoring_context)))
+            assertions = [t.result() for t in tasks]
+            case_span.set_attribute('assertions', assertions)
+
         if handler is not None:
-            scoring_context = ScoringContext(
-                name=dataset_row.name,
-                inputs=dataset_row.inputs,
-                metadata=dataset_row.metadata,
-                output=output,
-                expected_output=dataset_row.expected_output,
-                attributes=task_run.attributes,
-                metrics=task_run.metrics,
-            )
+            # TODO: Should we put a span around the handler execution?
             await handler(scoring_context)
             scores = scoring_context.scores
             labels = scoring_context.labels
@@ -196,6 +209,7 @@ async def run_case(
         labels=labels,
         metrics=task_run.metrics,
         attributes=task_run.attributes,
+        assertions=assertions,
         task_duration=task_duration,
         total_duration=_get_span_duration(case_span),
         trace_id=trace_id,

@@ -12,11 +12,13 @@ from typing_extensions import TypedDict
 
 from pydantic_evals._utils import UNSET, Unset
 
+from .assertions import AssertionResult
 from .render_numbers import (
     default_render_duration,
     default_render_duration_diff,
     default_render_number,
     default_render_number_diff,
+    default_render_percentage,
 )
 
 __all__ = ('EvalReport', 'EvalReportCase', 'EvalRenderer', 'RenderValueConfig', 'RenderNumberConfig')
@@ -282,7 +284,9 @@ class EvalReportCaseAggregate(BaseModel):
     name: str
 
     scores: dict[str, float | int]
+    labels: dict[str, dict[bool | str, float]]
     metrics: dict[str, float | int]
+    assertions: float | None
     task_duration: float
     total_duration: float
 
@@ -302,17 +306,38 @@ class EvalReportCaseAggregate(BaseModel):
                     sums_by_name[name] += value
             return {name: sums_by_name[name] / counts_by_name[name] for name in sums_by_name}
 
+        def _label_averages(rows_labels: list[dict[str, bool | str]]) -> dict[str, dict[bool | str, float]]:
+            counts_by_name: dict[str, int] = defaultdict(int)
+            sums_by_name: dict[str, dict[bool | str, float]] = defaultdict(lambda: defaultdict(float))
+            for row_labels in rows_labels:
+                for name, value in row_labels.items():
+                    counts_by_name[name] += 1
+                    if value is not False:
+                        sums_by_name[name][value] += 1
+            return {
+                name: {value: count / counts_by_name[name] for value, count in sums_by_name[name].items()}
+                for name in sums_by_name
+            }
+
         average_task_duration = sum(case.task_duration for case in cases) / num_cases
         average_total_duration = sum(case.total_duration for case in cases) / num_cases
 
         average_scores: dict[str, float] = _averages_by_name([case.scores for case in cases])
-        # TODO: Aggregate labels, showing the percentage occurrences of each label
+        average_labels: dict[str, dict[bool | str, float]] = _label_averages([case.labels for case in cases])
         average_metrics: dict[str, float] = _averages_by_name([case.metrics for case in cases])
+
+        average_assertions: float | None = None
+        n_assertions = sum(len(case.assertions) for case in cases)
+        if n_assertions > 0:
+            n_passing = sum(1 for case in cases for assertion in case.assertions if assertion.passed)
+            average_assertions = n_passing / n_assertions
 
         return EvalReportCaseAggregate(
             name='Averages',
             scores=average_scores,
+            labels=average_labels,
             metrics=average_metrics,
+            assertions=average_assertions,
             task_duration=average_task_duration,
             total_duration=average_total_duration,
         )
@@ -331,6 +356,7 @@ class EvalReportCase(BaseModel):
     metrics: dict[str, float | int]
     labels: dict[str, bool | str]
     attributes: dict[str, Any]
+    assertions: list[AssertionResult]
     task_duration: float
     total_duration: float  # includes scoring time
 
@@ -429,6 +455,7 @@ class EvalCaseRenderer:
     include_scores: bool
     include_labels: bool
     include_metrics: bool
+    include_assertions: bool
     include_total_duration: bool
 
     input_renderer: _ValueRenderer
@@ -452,6 +479,8 @@ class EvalCaseRenderer:
             table.add_column('Labels', overflow='fold')
         if self.include_metrics:
             table.add_column('Metrics', overflow='fold')
+        if self.include_assertions:
+            table.add_column('Assertions', overflow='fold')
         table.add_column('Durations' if self.include_total_duration else 'Duration', justify='right')
         return table
 
@@ -474,6 +503,9 @@ class EvalCaseRenderer:
         if self.include_metrics:
             row.append(self._render_dict(case.metrics, self.metric_renderers))
 
+        if self.include_assertions:
+            row.append(self._render_assertions(case.assertions))
+
         row.append(self._render_durations(case))
         return row
 
@@ -491,11 +523,13 @@ class EvalCaseRenderer:
             row.append(self._render_dict(aggregate.scores, self.score_renderers))
 
         if self.include_labels:
-            # TODO: Aggregate labels, showing the percentage occurrences of each label
-            row.append(EMPTY_AGGREGATE_CELL_STR)
+            row.append(self._render_dict(aggregate.labels, self.label_renderers))
 
         if self.include_metrics:
             row.append(self._render_dict(aggregate.metrics, self.metric_renderers))
+
+        if self.include_assertions:
+            row.append(self._render_aggregate_assertions(aggregate.assertions))
 
         row.append(self._render_durations(aggregate))
         return row
@@ -529,6 +563,10 @@ class EvalCaseRenderer:
             metrics_diff = self._render_dicts_diff(baseline.metrics, new_case.metrics, self.metric_renderers)
             row.append(metrics_diff)
 
+        if self.include_assertions:
+            assertions_diff = self._render_assertions_diff(baseline.assertions, new_case.assertions)
+            row.append(assertions_diff)
+
         row.append(self._render_durations_diff(baseline, new_case))
 
         return row
@@ -553,11 +591,16 @@ class EvalCaseRenderer:
             row.append(scores_diff)
 
         if self.include_labels:
-            row.append(EMPTY_AGGREGATE_CELL_STR)
+            labels_diff = self._render_dicts_diff(baseline.labels, new.labels, self.label_renderers)
+            row.append(labels_diff)
 
         if self.include_metrics:
             metrics_diff = self._render_dicts_diff(baseline.metrics, new.metrics, self.metric_renderers)
             row.append(metrics_diff)
+
+        if self.include_assertions:
+            assertions_diff = self._render_aggregate_assertions_diff(baseline.assertions, new.assertions)
+            row.append(assertions_diff)
 
         row.append(self._render_durations_diff(baseline, new))
 
@@ -624,6 +667,46 @@ class EvalCaseRenderer:
             diff_lines.append(rendered)
         return '\n'.join(diff_lines) if diff_lines else EMPTY_CELL_STR
 
+    @staticmethod
+    def _render_assertions(
+        assertions: list[AssertionResult],
+    ) -> str:
+        if not assertions:
+            return EMPTY_CELL_STR
+        return ''.join(['[green]✔[/]' if a.passed else '[red]✗[/]' for a in assertions])
+
+    @staticmethod
+    def _render_aggregate_assertions(
+        assertions: float | None,
+    ) -> str:
+        return (
+            default_render_percentage(assertions) + ' [green]✔[/]'
+            if assertions is not None
+            else EMPTY_AGGREGATE_CELL_STR
+        )
+
+    @staticmethod
+    def _render_assertions_diff(assertions: list[AssertionResult], new_assertions: list[AssertionResult]) -> str:
+        if not assertions and not new_assertions:
+            return EMPTY_CELL_STR
+
+        old = ''.join(['[green]✔[/]' if a.passed else '[red]✗[/]' for a in assertions])
+        new = ''.join(['[green]✔[/]' if a.passed else '[red]✗[/]' for a in new_assertions])
+        return old if old == new else f'{old} → {new}'
+
+    @staticmethod
+    def _render_aggregate_assertions_diff(
+        baseline: float | None,
+        new: float | None,
+    ) -> str:
+        if baseline is None and new is None:
+            return EMPTY_AGGREGATE_CELL_STR
+        rendered_baseline = (
+            default_render_percentage(baseline) + ' [green]✔[/]' if baseline is not None else EMPTY_CELL_STR
+        )
+        rendered_new = default_render_percentage(new) + ' [green]✔[/]' if new is not None else EMPTY_CELL_STR
+        return rendered_new if rendered_baseline == rendered_new else f'{rendered_baseline} → {rendered_new}'
+
 
 @dataclass
 class EvalRenderer:
@@ -654,6 +737,9 @@ class EvalRenderer:
     def include_metrics(self, report: EvalReport, baseline: EvalReport | None = None):
         return any(case.metrics for case in self._all_cases(report, baseline))
 
+    def include_assertions(self, report: EvalReport, baseline: EvalReport | None = None):
+        return any(case.assertions for case in self._all_cases(report, baseline))
+
     def _all_cases(self, report: EvalReport, baseline: EvalReport | None) -> list[EvalReportCase]:
         if not baseline:
             return report.cases
@@ -682,6 +768,7 @@ class EvalRenderer:
             include_scores=self.include_scores(report, baseline),
             include_labels=self.include_labels(report, baseline),
             include_metrics=self.include_metrics(report, baseline),
+            include_assertions=self.include_assertions(report, baseline),
             include_total_duration=self.include_total_duration,
             input_renderer=input_renderer,
             output_renderer=output_renderer,

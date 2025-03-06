@@ -48,6 +48,14 @@ def default_render_number(value: float | int) -> str:
     return f'{value:.{decimals}f}'
 
 
+def default_render_percentage(value: float) -> str:
+    """The default logic for formatting percentages in an Evaluation report.
+
+    * Include at least one decimal place and at least 3 significant figures.
+    """
+    return f'{value:.{VALUE_SIG_FIGS - 2}%}'
+
+
 def default_render_number_diff(old: float | int, new: float | int) -> str | None:
     """Return a string representing the difference between old and new values.
 

@@ -1,17 +1,25 @@
 from __future__ import annotations as _annotations
 
-import datetime
+from datetime import datetime
 
 import logfire
 from fastapi import FastAPI
 from pydantic import BaseModel
 
-logfire.configure(send_to_logfire="if-token-present")
+from demo.util.tokens import get_app_write_token
+
+token = get_app_write_token()
+logfire.configure(
+    token=token,
+    environment="prod",
+    service_name="app",
+    service_version="v2",
+)
 
 
-class TimeRangeBuilderSuccess(BaseModel, use_attribute_docstrings=True):
-    min_timestamp: datetime.datetime
-    max_timestamp: datetime.datetime
+class TimeRangeBuilderSuccess(BaseModel):
+    min_timestamp: datetime
+    max_timestamp: datetime
     explanation: str | None
 
 
@@ -25,10 +33,10 @@ app = FastAPI()
 
 @app.get("/infer-time-range")
 async def infer_time_range(prompt: str) -> TimeRangeResponse:
-    # logfire.info(f'Handling {prompt=}')
+    logfire.info(f"Handling {prompt=}")
     return TimeRangeBuilderSuccess(
-        min_timestamp=datetime.datetime(2025, 3, 6),
-        max_timestamp=datetime.datetime(2025, 3, 7),
+        min_timestamp=datetime(2025, 3, 6),
+        max_timestamp=datetime(2025, 3, 7),
         explanation="Today is a good day",
     )
 

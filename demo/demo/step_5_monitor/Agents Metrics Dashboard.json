@@ -1,7 +1,7 @@
 {
-  "id": "7adf81a1-9f2d-4920-9916-8b203c2beb0b",
-  "name": "Agents Metrics",
-  "slug": "9rr5sb",
+  "id": "0909433f-6690-4623-94fe-c058c4003461",
+  "name": "Agents Metrics (imported)",
+  "slug": "2pp7be",
   "items": [
     {
       "id": "chart_1_kctkj",
@@ -93,7 +93,7 @@
             "key": "output_tokens"
           }
         ],
-        "sqlQuery": "SELECT\n    time_bucket('%time_bucket_duration%', start_timestamp) AS x,\n    SUM(CAST(attributes->>'gen_ai.usage.input_tokens' AS FLOAT)) AS input_tokens,\n    SUM(CAST(attributes->>'gen_ai.usage.output_tokens' AS FLOAT)) AS output_tokens\nFROM records\nWHERE \n    kind = 'span'\n    AND attributes->>'gen_ai.operation.name' = 'chat'\n    AND attributes->>'gen_ai.usage.input_tokens' IS NOT NULL\n    AND attributes->>'gen_ai.usage.output_tokens' IS NOT NULL\nGROUP BY x\nORDER BY x;",
+        "sqlQuery": "SELECT\n    time_bucket('%time_bucket_duration%', start_timestamp) AS x,\n    SUM(CAST(attributes->>'gen_ai.usage.input_tokens' AS FLOAT)) AS input_tokens,\n    SUM(CAST(attributes->>'gen_ai.usage.output_tokens' AS FLOAT)) AS output_tokens\nFROM records\nWHERE \n    kind = 'span'\n    AND deployment_environment='prod'\n    AND attributes->>'gen_ai.operation.name' = 'chat'\n    AND attributes->>'gen_ai.usage.input_tokens' IS NOT NULL\n    AND attributes->>'gen_ai.usage.output_tokens' IS NOT NULL\nGROUP BY x\nORDER BY x;",
         "dimension": {
           "key": "endpoint"
         },
@@ -167,6 +167,9 @@
           }
         ],
         "sqlQuery": "SELECT\n    time_bucket('%time_bucket_duration%', start_timestamp) AS x,\n    attributes->>'gen_ai.request.model' AS model,\n    COUNT(*) AS count\nFROM records\nWHERE \n    kind = 'span'\n    AND attributes->>'gen_ai.operation.name' = 'chat'\nGROUP BY x, model\nORDER BY x, model;",
+        "dimension": {
+          "key": "model"
+        },
         "metricFields": [
           {
             "key": "x",
@@ -180,10 +183,7 @@
             "key": "count",
             "type": "Unknown"
           }
-        ],
-        "dimension": {
-          "key": "model"
-        }
+        ]
       },
       "layouts": {
         "lg": {
@@ -374,42 +374,35 @@
     {
       "id": "chart_6_33h6mn",
       "config": {
+        "type": "area",
         "chart": "timeseries",
         "title": "Eval tokens",
-        "sqlQuery": "SELECT\n    time_bucket('%time_bucket_duration%', start_timestamp) AS x,\n    attributes->>'name' AS eval_name,\n    AVG(CAST(attributes->'averages'->'metrics'->'input_tokens' AS FLOAT)) AS avg_input_tokens,\n    AVG(CAST(attributes->'averages'->'metrics'->'output_tokens' AS FLOAT)) AS avg_output_tokens\nFROM records\nWHERE \n    kind = 'span'\n    AND otel_scope_name = 'pydantic-evals' \n    AND span_name LIKE 'evaluate %'\n    AND attributes->'averages'->'metrics'->'input_tokens' IS NOT NULL\n    AND attributes->'averages'->'metrics'->'output_tokens' IS NOT NULL\nGROUP BY x, eval_name\nORDER BY x, eval_name;",
-        "yAxes": [
-          {
-            "key": "avg_input_tokens"
-          },
-          {
-            "key": "avg_output_tokens"
-          }
-        ],
         "xAxes": {
           "key": "x"
         },
+        "yAxes": [
+          {
+            "key": "input_tokens"
+          },
+          {
+            "key": "output_tokens"
+          }
+        ],
+        "sqlQuery": "SELECT\n    time_bucket('%time_bucket_duration%', start_timestamp) AS x,\n    SUM(CAST(attributes->>'gen_ai.usage.input_tokens' AS FLOAT)) AS input_tokens,\n    SUM(CAST(attributes->>'gen_ai.usage.output_tokens' AS FLOAT)) AS output_tokens\nFROM records\nWHERE \n    kind = 'span'\n    AND attributes->>'gen_ai.operation.name' = 'chat'\n    AND attributes->>'gen_ai.usage.input_tokens' IS NOT NULL\n    AND attributes->>'gen_ai.usage.output_tokens' IS NOT NULL\n    AND deployment_environment='dev'\nGROUP BY x\nORDER BY x;",
         "metricFields": [
           {
             "key": "x",
             "type": "Unknown"
           },
           {
-            "key": "eval_name",
+            "key": "input_tokens",
             "type": "Unknown"
           },
           {
-            "key": "avg_input_tokens",
-            "type": "Unknown"
-          },
-          {
-            "key": "avg_output_tokens",
+            "key": "output_tokens",
             "type": "Unknown"
           }
-        ],
-        "dimension": {
-          "key": "eval_name"
-        },
-        "type": "area"
+        ]
       },
       "layouts": {
         "lg": {
@@ -422,32 +415,32 @@
           "static": false
         },
         "md": {
+          "h": 8,
           "i": "chart_6_33h6mn",
-          "x": 0,
-          "y": 1,
           "w": 12,
-          "h": 8
+          "x": 0,
+          "y": 1
         },
         "sm": {
+          "h": 8,
           "i": "chart_6_33h6mn",
-          "x": 0,
-          "y": 1,
           "w": 12,
-          "h": 8
+          "x": 0,
+          "y": 1
         },
         "xs": {
+          "h": 8,
           "i": "chart_6_33h6mn",
-          "x": 0,
-          "y": 1,
           "w": 12,
-          "h": 8
+          "x": 0,
+          "y": 1
         },
         "xxs": {
+          "h": 8,
           "i": "chart_6_33h6mn",
-          "x": 0,
-          "y": 1,
           "w": 12,
-          "h": 8
+          "x": 0,
+          "y": 1
         }
       }
     }

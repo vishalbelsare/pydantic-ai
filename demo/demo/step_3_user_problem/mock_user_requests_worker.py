@@ -78,11 +78,16 @@ async def main():
             print(f"Response: {response.status_code} {response.content}")
 
     async with httpx.AsyncClient(timeout=30.0) as client:
-        async with asyncio.TaskGroup() as tg:
-            while True:
-                prompt = random.choice(mock_user_prompts)
-                await asyncio.sleep(random.random() * 5.0)
-                tg.create_task(task(client, prompt))
+        while True:
+            try:
+                async with asyncio.TaskGroup() as tg:
+                    while True:
+                        prompt = random.choice(mock_user_prompts)
+                        await asyncio.sleep(random.random() * 5.0)
+                        tg.create_task(task(client, prompt))
+            except Exception:
+                print("SERVER IS DOWN")
+                await asyncio.sleep(1.0)
 
 
 if __name__ == "__main__":

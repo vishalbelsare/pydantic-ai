@@ -1,107 +1,106 @@
 rows:
-- name: example_1
+- name: success_1
   inputs:
-    prompt: past 12 hours
-    now: '2025-03-05T04:42:58.091220Z'
+    prompt: yesterday 7 AM to 7 PM
+    now: '2025-03-06T16:29:35.396890Z'
   metadata: {}
   expected_output:
-    min_timestamp: '2025-03-04T09:42:58-07:00'
-    max_timestamp: '2025-03-04T21:42:58-07:00'
-    explanation: The user's current time is Tuesday, March 04, 2025 21:42:58 MST.
-      Therefore, the past 12 hours span from March 04, 2025 09:42:58 MST to March
-      04, 2025 21:42:58 MST.
+    min_timestamp: '2025-03-05T07:00:00-07:00'
+    max_timestamp: '2025-03-05T19:00:00-07:00'
+    explanation: The time range is from 7 AM to 7 PM on March 5th, 2025, which was
+      yesterday from the current date of March 6th, 2025.
   assertions: []
-- name: example_2
+- name: success_2
   inputs:
-    prompt: Feb 14 at 8 AM to Feb 15 at 8 AM
-    now: '2025-03-05T04:42:57.147114Z'
+    prompt: midnight to now
+    now: '2025-03-06T16:29:38.006102Z'
   metadata: {}
   expected_output:
-    min_timestamp: '2025-02-14T08:00:00-07:00'
-    max_timestamp: '2025-02-15T08:00:00-07:00'
-    explanation: The time range starts on February 14, 2025, at 8:00 AM and ends on
-      February 15, 2025, at 8:00 AM, in the MST timezone.
+    min_timestamp: '2025-03-06T00:00:00-07:00'
+    max_timestamp: '2025-03-06T09:29:38-07:00'
+    explanation: The time range is from midnight today to the current time.
   assertions: []
-- name: example_3
+- name: success_3
   inputs:
-    prompt: Jan 3rd from midday to end of day local
-    now: '2025-03-05T04:42:57.528439Z'
+    prompt: yesterday 3-5pm
+    now: '2025-03-06T16:24:07.469622Z'
   metadata: {}
   expected_output:
-    min_timestamp: '2025-01-03T12:00:00-07:00'
-    max_timestamp: '2025-01-03T23:59:59-07:00'
-    explanation: The time range starts at midday (12:00 PM) on January 3rd, 2025,
-      and ends at the end of the day (11:59:59 PM) in your local timezone, which is
-      MST (UTC-07:00).
+    min_timestamp: '2025-03-05T15:00:00-07:00'
+    max_timestamp: '2025-03-05T17:00:00-07:00'
+    explanation: The time range is for yesterday's date, March 5, 2025, from 3 PM
+      to 5 PM MST.
   assertions: []
-- name: example_4
+- name: success_4
   inputs:
-    prompt: the logs from 10:30 to 11:45 on June 10
-    now: '2025-03-05T04:42:57.696764Z'
+    prompt: March 1, 00:00 to 23:59 local
+    now: '2025-03-06T16:24:50.751938Z'
   metadata: {}
   expected_output:
-    min_timestamp: '2025-06-10T10:30:00-06:00'
-    max_timestamp: '2025-06-10T11:45:00-06:00'
-    explanation: The time range is interpreted as 10:30 AM to 11:45 AM on June 10,
-      2025, in the time zone of the given context (MST).
+    min_timestamp: '2023-03-01T00:00:00'
+    max_timestamp: '2023-03-01T23:59:00'
+    explanation: The time range is set from March 1st, 2023, starting at midnight
+      (00:00) to just before midnight (23:59) local time.
   assertions: []
-- name: example_5
+- name: success_5
   inputs:
-    prompt: last 2 hours PST
-    now: '2025-03-05T04:43:10.151694Z'
+    prompt: yesterday afternoon PT to 9 AM ET today
+    now: '2025-03-06T16:24:51.041817Z'
   metadata: {}
   expected_output:
-    min_timestamp: '2025-03-04T19:43:10-08:00'
-    max_timestamp: '2025-03-04T21:43:10-08:00'
-    explanation: The user requested the last two hours in PST. Given the current time
-      of 21:43:10 MST, we converted it to PST (20:43:10) and calculated two hours
-      back from there (18:43:10 PST to 20:43:10 PST).
+    min_timestamp: '2025-03-05T12:00:00-08:00'
+    max_timestamp: '2025-03-06T09:00:00-05:00'
+    explanation: The time range starts from yesterday afternoon (12 PM PT) to today
+      9 AM ET. Considering the current date is March 6, 2025, this corresponds to
+      March 5, 2025, 12 PM in Pacific Time to March 6, 2025, 9 AM in Eastern Time.
   assertions: []
-- name: example_6
+- name: error_1
   inputs:
-    prompt: 3 o'clock last tuesday
-    now: '2025-03-05T02:28:32.849460Z'
+    prompt: all data from when the test environment was deployed until now
+    now: '2025-03-06T16:24:55.693545Z'
   metadata: {}
   expected_output:
-    error_message: The specified time '3 o'clock last Tuesday' is ambiguous because
-      it does not specify whether '3 o'clock' is AM or PM. Please clarify if you meant
-      3:00 AM or 3:00 PM.
+    error_message: The deployment date of the test environment is not provided, so
+      I cannot build the time range.
   assertions: []
-- name: example_7
+- name: error_2
   inputs:
-    prompt: 3pm last tuesday
-    now: '2025-03-05T03:56:04.874395Z'
+    prompt: from the 12th to the 10th
+    now: '2025-03-06T16:26:00.356440Z'
   metadata: {}
   expected_output:
-    error_message: The date 'last Tuesday' on the user's local time refers to February
-      25, 2025. At 3 PM, the time range would typically be the 10 minute window from
-      15:00:00 to 15:10:00 on that date. However, I need to confirm this calculation
-      with proper functions if available.
+    error_message: The request 'from the 12th to the 10th' is unclear as it implies
+      an inversion in time direction or is otherwise ambiguous. Please provide a clear
+      and correct time range or specify the month and year if necessary.
   assertions: []
-- name: example_8
+- name: error_3
   inputs:
-    prompt: 3 pm yesterday
-    now: '2025-03-05T03:59:19.567145Z'
+    prompt: 10:00 UTC to 16:00 UTC on May 10
+    now: '2025-03-06T16:26:03.883540Z'
   metadata: {}
   expected_output:
-    error_message: The provided date is ambiguous. Please specify a complete date
-      for the query '3 pm yesterday'.
+    error_message: The user's request is missing a year. Please provide a complete
+      date including the year to define the time range accurately.
   assertions: []
-- name: example_9
+- name: error_4
   inputs:
-    prompt: around 4pm ET last tuesday
-    now: '2025-03-05T04:00:37.409151Z'
+    prompt: the spike at 4:17 PM local on Mar 3
+    now: '2025-03-06T16:26:15.036047Z'
   metadata: {}
   expected_output:
-    error_message: The date provided, 'last Tuesday', is ambiguous without the context
-      of the current date. Please provide a specific date or additional context.
+    error_message: The request 'the spike at 4:17 PM local on Mar 3' is not clear
+      enough to establish a time range. Please specify the duration or context (e.g.,
+      before or after an event, or over a certain number of hours) for the spike you're
+      referring to.
   assertions: []
-- name: example_10
+- name: error_5
   inputs:
-    prompt: Jan 12, 6 AM to noon
-    now: '2025-03-05T04:39:31.857969Z'
+    prompt: from last Monday morning to now
+    now: '2025-03-06T16:26:35.117294Z'
   metadata: {}
   expected_output:
-    error_message: The request is missing a specific year. Please specify the year
-      to accurately determine the time range.
-  assertions: []
+    error_message: Failed to create a valid time range due to missing timestamps.
+      Please try again.
+  assertions:
+    - call: llm_rubric
+      rubric: 'Should generate a valid time range'

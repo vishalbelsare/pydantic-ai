@@ -6,16 +6,32 @@ from textwrap import dedent
 
 import logfire
 from fastapi import FastAPI
+from pydantic import BaseModel
 from pydantic_ai import Agent, RunContext
+from typing_extensions import TypedDict
 
-from demo.models.time_range_v1 import TimeRangeInputs, TimeRangeResponse
+from demo.util.tokens import get_app_write_token
 
+token = get_app_write_token()
 logfire.configure(
-    send_to_logfire="if-token-present",
+    token=token,
     environment="prod",
     service_name="app",
-    service_version="v5",
+    service_version="v4",
 )
+
+
+class TimeRangeBuilderSuccess(BaseModel):
+    min_timestamp: datetime
+    max_timestamp: datetime
+    explanation: str | None
+
+
+class TimeRangeBuilderError(BaseModel):
+    error_message: str
+
+
+TimeRangeResponse = TimeRangeBuilderSuccess | TimeRangeBuilderError
 
 
 @dataclass
@@ -23,6 +39,16 @@ class TimeRangeDeps:
     now: datetime = field(default_factory=lambda: datetime.now().astimezone())
 
 
+time_range_agent = Agent[TimeRangeDeps, TimeRangeResponse](
+    "gpt-4o",
+    result_type=TimeRangeResponse,  # type: ignore  # we can't yet annotate something as receiving a TypeForm
+    deps_type=TimeRangeDeps,
+    retries=1,
+    instrument=True,
+)
+
+
+@time_range_agent.system_prompt
 def time_range_system_prompt(ctx: RunContext[TimeRangeDeps]):
     now_str = ctx.deps.now.strftime(
         "%A, %B %d, %Y %H:%M:%S %Z"
@@ -51,15 +77,6 @@ def time_range_system_prompt(ctx: RunContext[TimeRangeDeps]):
     )
 
 
-time_range_agent = Agent[TimeRangeDeps, TimeRangeResponse](
-    "gpt-4o",
-    result_type=TimeRangeResponse,  # type: ignore  # we can't yet annotate something as receiving a TypeForm
-    deps_type=TimeRangeDeps,
-    retries=1,
-    instrument=True,
-)
-time_range_agent.system_prompt(time_range_system_prompt)
-
 app = FastAPI()
 
 
@@ -69,6 +86,11 @@ async def infer_time_range(prompt: str) -> TimeRangeResponse:
     return await run_infer_time_range(
         {"prompt": prompt, "now": datetime.now().astimezone()}
     )
+
+
+class TimeRangeInputs(TypedDict):
+    prompt: str
+    now: datetime
 
 
 async def run_infer_time_range(inputs: TimeRangeInputs) -> TimeRangeResponse:

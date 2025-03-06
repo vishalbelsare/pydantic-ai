@@ -6,11 +6,16 @@ from pydantic_evals.datasets import Dataset
 from pydantic_evals.evals import Evaluation, ScoringContext
 from pydantic_evals.llm_as_a_judge import GradingOutput, judge_input_output
 
-from demo.models.time_range_v1 import TimeRangeInputs, TimeRangeResponse
-from demo.step_4_evaluate.app_v5_agent_updated import run_infer_time_range
+from demo.step_4_evaluate.app_v4_agent_updated import (
+    TimeRangeInputs,
+    TimeRangeResponse,
+    run_infer_time_range,
+)
+from demo.util.tokens import get_app_write_token
 
+token = get_app_write_token()
 logfire.configure(
-    send_to_logfire="if-token-present",
+    token=token,
     environment="dev",
     service_name="eval",
 )
@@ -39,7 +44,9 @@ async def main():
         ctx.record_label("is_reasonable", "yes" if result.pass_ else "no")
         ctx.record_score("accuracy", result.score)
 
-    evaluation = Evaluation(run_infer_time_range, scoring=handler, cases=dataset.rows)
+    evaluation = Evaluation(
+        run_infer_time_range, scoring=handler, cases=dataset.deserialized_rows()
+    )
 
     report = await evaluation.run(max_concurrency=10)
 

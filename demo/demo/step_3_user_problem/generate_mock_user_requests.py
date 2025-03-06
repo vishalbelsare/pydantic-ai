@@ -1,10 +1,8 @@
 """Make some mock user requests to the app.
 
-Demo path:
-* Browse the produced spans
+* Browse the traces
 * Search for the agent spans in flat view (and save the search)
 * Search for the spans with errors (and save the search)
-* Add some of the agent spans to a collection
 """
 
 import asyncio

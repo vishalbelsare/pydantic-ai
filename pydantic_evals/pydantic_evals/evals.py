@@ -178,7 +178,7 @@ async def run_case(
                 for assertion in dataset_row.assertions:
                     tasks.append(tg.create_task(assertion.check(scoring_context)))
             assertions = [t.result() for t in tasks]
-            case_span.set_attribute('assertions', assertions)
+        case_span.set_attribute('assertions', assertions)
 
         if handler is not None:
             # TODO: Should we put a span around the handler execution?

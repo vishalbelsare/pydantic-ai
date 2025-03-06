@@ -1,14 +1,14 @@
 from __future__ import annotations as _annotations
 
-import datetime
+from datetime import datetime
 
 from fastapi import FastAPI
 from pydantic import BaseModel
 
 
 class TimeRangeBuilderSuccess(BaseModel):
-    min_timestamp: datetime.datetime
-    max_timestamp: datetime.datetime
+    min_timestamp: datetime
+    max_timestamp: datetime
     explanation: str | None
 
 
@@ -23,8 +23,8 @@ app = FastAPI()
 @app.get("/infer-time-range")
 async def infer_time_range(prompt: str) -> TimeRangeResponse:
     return TimeRangeBuilderSuccess(
-        min_timestamp=datetime.datetime(2025, 3, 6),
-        max_timestamp=datetime.datetime(2025, 3, 7),
+        min_timestamp=datetime(2025, 3, 6),
+        max_timestamp=datetime(2025, 3, 7),
         explanation="Today is a good day",
     )
 

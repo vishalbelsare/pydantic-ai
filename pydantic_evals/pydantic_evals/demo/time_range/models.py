@@ -47,7 +47,7 @@ class TimeRangeBuilderError(BaseModel):
         return f'TimeRangeBuilderError:\n* {self.error_message}'
 
 
-TimeRangeAgentResponse = TimeRangeBuilderSuccess | TimeRangeBuilderError
+TimeRangeResponse = TimeRangeBuilderSuccess | TimeRangeBuilderError
 
 
 class TimeRangeInputs(TypedDict):
@@ -58,7 +58,7 @@ class TimeRangeInputs(TypedDict):
 
 
 # TODO: Drop the MetadataT type parameter and use the default below once pydantic 2.11 is in use
-class TimeRangeDataset(Dataset[TimeRangeInputs, TimeRangeAgentResponse, dict[str, Any]]):
+class TimeRangeDataset(Dataset[TimeRangeInputs, TimeRangeResponse, dict[str, Any]]):
     """A dataset of examples for the time range inference agent."""
 
     pass

@@ -281,6 +281,13 @@ class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid'):
             new_content += '\n'.join(new_lines)
             dataset_path.write_text(new_content)
 
+    def save(self, path: Path | str = DEFAULT_DATASET_PATH, schema_ref: str | None = None) -> None:
+        path = self._get_relative_path(path)
+        content = yaml.dump(to_jsonable_python(self), sort_keys=False)
+        if schema_ref is not None:
+            content = _ensure_yaml_language_server_line(content, schema_ref)
+        path.write_text(content)
+
     @classmethod
     def _get_schema_path(cls, dataset_path: Path) -> Path:
         return dataset_path.parent / f'./{dataset_path.stem}_schema.json'

@@ -9,7 +9,7 @@ import logfire
 from logfire import ConsoleOptions
 
 from pydantic_ai import Agent, RunContext
-from pydantic_evals.demo.time_range.models import TimeRangeAgentResponse, TimeRangeInputs
+from pydantic_evals.demo.time_range.models import TimeRangeInputs, TimeRangeResponse
 
 
 @dataclass
@@ -47,10 +47,10 @@ def time_range_system_prompt(ctx: RunContext[TimeRangeDeps]):
     )
 
 
-time_range_agent = Agent[TimeRangeDeps, TimeRangeAgentResponse](
+time_range_agent = Agent[TimeRangeDeps, TimeRangeResponse](
     'gpt-4o',
     # we can't yet annotate type form, hence type ignore
-    result_type=TimeRangeAgentResponse,  # type: ignore
+    result_type=TimeRangeResponse,  # type: ignore
     deps_type=TimeRangeDeps,
     retries=1,
     instrument=True,
@@ -58,7 +58,7 @@ time_range_agent = Agent[TimeRangeDeps, TimeRangeAgentResponse](
 time_range_agent.system_prompt(time_range_system_prompt)
 
 
-async def infer_time_range(inputs: TimeRangeInputs) -> TimeRangeAgentResponse:
+async def infer_time_range(inputs: TimeRangeInputs) -> TimeRangeResponse:
     """Infer a time range from a user prompt."""
     deps = TimeRangeDeps(now=inputs['now'])
     return (await time_range_agent.run(inputs['prompt'], deps=deps)).data

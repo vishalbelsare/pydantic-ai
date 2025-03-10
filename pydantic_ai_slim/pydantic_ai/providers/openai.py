@@ -1,7 +1,6 @@
 from __future__ import annotations as _annotations
 
 import os
-from typing import TypeVar
 
 import httpx
 
@@ -17,8 +16,6 @@ except ImportError as _import_error:  # pragma: no cover
 
 
 from . import Provider
-
-InterfaceClient = TypeVar('InterfaceClient')
 
 
 class OpenAIProvider(Provider[AsyncOpenAI]):

@@ -11,14 +11,16 @@ from dataclasses import dataclass, field
 from functools import partial
 from typing import Any, Callable, Generic
 
-import logfire_api
+import logfire
 from pydantic_core import to_jsonable_python
 from typing_extensions import TypeVar
 
 from pydantic_evals.assertions import AssertionResult
+from pydantic_evals.context_in_memory_span_exporter import context_subtree_spans
 from pydantic_evals.datasets import DatasetRow
 from pydantic_evals.reports import EvalReport, EvalReportCase, EvalReportCaseAggregate
 from pydantic_evals.scoring import ScoringContext
+from pydantic_evals.span_tree import SpanTree
 
 # while waiting for https://github.com/pydantic/logfire/issues/745
 try:
@@ -32,7 +34,7 @@ else:
 
 __all__ = ('Evaluation', 'increment_eval_metric')
 
-_logfire = logfire_api.Logfire(otel_scope='pydantic-evals')
+_logfire = logfire.Logfire(otel_scope='pydantic-evals')
 
 
 InputsT = TypeVar('InputsT', default=dict[str, Any])
@@ -51,7 +53,7 @@ class Evaluation(Generic[InputsT, OutputT, MetadataT]):
 
     name: str
     default_scoring: Callable[[ScoringContext[InputsT, OutputT, MetadataT]], Awaitable[None]] | None = field(repr=False)
-    span: logfire_api.LogfireSpan = field(repr=False)
+    span: logfire.LogfireSpan = field(repr=False)
 
     def __init__(
         self,
@@ -128,9 +130,25 @@ async def _run_task(
     token = _CURRENT_TASK_RUN.set(task_run)
     try:
         with _logfire.span('execute {task}', task=_get_task_name(task)) as task_span:
-            task_output = await task(dataset_row.inputs)
+            with context_subtree_spans() as finished_spans:
+                task_output = await task(dataset_row.inputs)
     finally:
         _CURRENT_TASK_RUN.reset(token)
+
+    # TODO: Make this metric-attributes functionality user-configurable in some way
+    #   Note: this is the main reason why I think we should require at least otel as a dependency, if not logfire;
+    #   otherwise, we don't have a great way to get usage data from arbitrary frameworks
+    for span in finished_spans:
+        attributes = span.attributes
+        assert attributes is not None  # this appears to be guaranteed, despite type-hinting to the contrary
+        for k, v in attributes.items():
+            if not isinstance(v, (int, float)):
+                continue
+            if k.startswith('gen_ai.usage.details.'):
+                task_run.increment_metric(k[21:], v)
+            if k.startswith('gen_ai.usage.'):
+                task_run.increment_metric(k[13:], v)
+
     return ScoringContext[InputsT, OutputT, MetadataT](
         name=dataset_row.name,
         inputs=dataset_row.inputs,
@@ -138,6 +156,7 @@ async def _run_task(
         expected_output=dataset_row.expected_output,
         output=task_output,
         duration=_get_span_duration(task_span),
+        span_tree=SpanTree(finished_spans),
         attributes=task_run.attributes,
         metrics=task_run.metrics,
     )
@@ -150,7 +169,8 @@ class EvalCase(Generic[InputsT, OutputT, MetadataT]):
 
 
 async def run_case(
-    task: Callable[[InputsT], Awaitable[OutputT]], case: EvalCase[InputsT, OutputT, MetadataT]
+    task: Callable[[InputsT], Awaitable[OutputT]],
+    case: EvalCase[InputsT, OutputT, MetadataT],
 ) -> EvalReportCase:
     dataset_row = case.dataset_row
     handler = case.handler
@@ -242,7 +262,7 @@ def _get_task_name(func: Callable[..., Any]) -> str:
     return _unwrap(func).__qualname__
 
 
-def _get_span_duration(span: logfire_api.LogfireSpan) -> float:
+def _get_span_duration(span: logfire.LogfireSpan) -> float:
     end_time = span.end_time
     start_time = span.start_time
     assert isinstance(start_time, int), 'span is not started'

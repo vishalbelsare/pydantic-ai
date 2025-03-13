@@ -192,11 +192,11 @@ class InstrumentedModel(WrapperModel):
                     }
 
                 self._emit_events(span, events)
-                from pydantic_evals import increment_eval_metric  # import locally to prevent circular dependencies
-
-                increment_eval_metric('requests', 1)
-                for k, v in otel_usage_attributes.items():
-                    increment_eval_metric(k.split('.')[-1], v)
+                # from pydantic_evals import increment_eval_metric  # import locally to prevent circular dependencies
+                #
+                # increment_eval_metric('requests', 1)
+                # for k, v in otel_usage_attributes.items():
+                #     increment_eval_metric(k.split('.')[-1], v)
 
             yield finish
 

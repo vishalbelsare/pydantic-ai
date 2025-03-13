@@ -12,7 +12,7 @@ try:
     from openai import AsyncAzureOpenAI
 except ImportError as _import_error:  # pragma: no cover
     raise ImportError(
-        'Please install `openai` to use the OpenAI provider, '
+        'Please install the `openai` package to use the Azure provider, '
         "you can use the `openai` optional group — `pip install 'pydantic-ai-slim[openai]'`"
     ) from _import_error
 
@@ -79,26 +79,27 @@ class AzureProvider(Provider[AsyncOpenAI]):
             self._base_url = str(openai_client.base_url)
             self._client = openai_client
         else:
-            self._base_url = azure_endpoint or os.getenv('AZURE_OPENAI_ENDPOINT')
-            if self._base_url is None:
+            azure_endpoint = azure_endpoint or os.getenv('AZURE_OPENAI_ENDPOINT')
+            if azure_endpoint is None:  # pragma: no cover
                 raise ValueError(
                     'Must provide one of the `azure_endpoint` argument or the `AZURE_OPENAI_ENDPOINT` environment variable'
                 )
 
-            if api_key is None and 'OPENAI_API_KEY' not in os.environ and openai_client is None:
+            if api_key is None and 'OPENAI_API_KEY' not in os.environ:  # pragma: no cover
                 raise ValueError(
                     'Must provide one of the `api_key` argument or the `OPENAI_API_KEY` environment variable'
                 )
 
-            if api_version is None and 'OPENAI_API_VERSION' not in os.environ and openai_client is None:
+            if api_version is None and 'OPENAI_API_VERSION' not in os.environ:  # pragma: no cover
                 raise ValueError(
                     'Must provide one of the `api_version` argument or the `OPENAI_API_VERSION` environment variable'
                 )
 
             http_client = http_client or cached_async_http_client()
             self._client = AsyncAzureOpenAI(
-                base_url=self.base_url,
+                azure_endpoint=azure_endpoint,
                 api_key=api_key,
                 api_version=api_version,
                 http_client=http_client,
             )
+            self._base_url = str(self._client.base_url)

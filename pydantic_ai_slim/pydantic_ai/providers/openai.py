@@ -10,7 +10,7 @@ try:
     from openai import AsyncOpenAI
 except ImportError as _import_error:  # pragma: no cover
     raise ImportError(
-        'Please install `openai` to use the OpenAI provider, '
+        'Please install the `openai` package to use the OpenAI provider, '
         "you can use the `openai` optional group — `pip install 'pydantic-ai-slim[openai]'`"
     ) from _import_error
 

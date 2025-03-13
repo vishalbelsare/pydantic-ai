@@ -1,6 +1,8 @@
 import pytest
 from inline_snapshot import snapshot
 
+from pydantic_ai.agent import Agent
+
 from ..conftest import try_import
 
 with try_import() as imports_successful:
@@ -10,7 +12,11 @@ with try_import() as imports_successful:
     from pydantic_ai.providers.azure import AzureProvider
 
 
-pytestmark = pytest.mark.skipif(not imports_successful(), reason='openai not installed')
+pytestmark = [
+    pytest.mark.skipif(not imports_successful(), reason='openai not installed'),
+    pytest.mark.vcr,
+    pytest.mark.anyio,
+]
 
 
 def test_azure_provider():
@@ -21,7 +27,7 @@ def test_azure_provider():
     )
     assert isinstance(provider, AzureProvider)
     assert provider.name == 'azure'
-    assert provider.base_url == snapshot('https://project-id.openai.azure.com/')
+    assert provider.base_url == snapshot('https://project-id.openai.azure.com/openai/')
     assert isinstance(provider.client, AsyncAzureOpenAI)
 
 
@@ -36,3 +42,26 @@ def test_azure_provider_with_openai_model():
     )
     assert isinstance(model, OpenAIModel)
     assert isinstance(model.client, AsyncAzureOpenAI)
+
+
+def test_azure_provider_with_azure_openai_client():
+    client = AsyncAzureOpenAI(
+        api_version='2024-12-01-preview',
+        azure_endpoint='https://pydanticai7521574644.openai.azure.com/',
+    )
+    provider = AzureProvider(openai_client=client)
+    assert isinstance(provider.client, AsyncAzureOpenAI)
+
+
+async def test_azure_provider_call(allow_model_requests: None):
+    model = OpenAIModel(
+        model_name='gpt-4o',
+        provider=AzureProvider(
+            api_version='2024-12-01-preview',
+            azure_endpoint='https://pydanticai7521574644.openai.azure.com/',
+        ),
+    )
+    agent = Agent(model)
+
+    result = await agent.run('What is the capital of France?')
+    assert result.data == snapshot('The capital of France is **Paris**.')

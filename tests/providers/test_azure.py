@@ -2,11 +2,10 @@ import pytest
 from inline_snapshot import snapshot
 from openai import AsyncAzureOpenAI
 
-from pydantic_ai.models.openai import OpenAIModel
-
 from ..conftest import try_import
 
 with try_import() as imports_successful:
+    from pydantic_ai.models.openai import OpenAIModel
     from pydantic_ai.providers.azure import AzureProvider
 
 

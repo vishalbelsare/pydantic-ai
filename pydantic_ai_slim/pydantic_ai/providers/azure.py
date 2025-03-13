@@ -21,7 +21,10 @@ from . import Provider
 
 
 class AzureProvider(Provider[AsyncOpenAI]):
-    """Provider for Azure OpenAI API."""
+    """Provider for Azure OpenAI API.
+
+    See <https://azure.microsoft.com/en-us/products/ai-foundry> for more information.
+    """
 
     @property
     def name(self) -> str:

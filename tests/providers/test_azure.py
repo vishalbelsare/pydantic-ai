@@ -58,10 +58,13 @@ def test_azure_provider_with_azure_openai_client():
 
 async def test_azure_provider_call(allow_model_requests: None):
     api_key = os.environ.get('AZURE_OPENAI_API_KEY', '1234567890')
-    azure_endpoint = os.environ.get('AZURE_OPENAI_ENDPOINT', 'https://project-id.openai.azure.com/')
     api_version = os.environ.get('AZURE_OPENAI_API_VERSION', '2024-12-01-preview')
 
-    provider = AzureProvider(api_key=api_key, azure_endpoint=azure_endpoint, api_version=api_version)
+    provider = AzureProvider(
+        api_key=api_key,
+        azure_endpoint='https://pydanticai7521574644.openai.azure.com/',
+        api_version=api_version,
+    )
     model = OpenAIModel(model_name='gpt-4o', provider=provider)
     agent = Agent(model)
 

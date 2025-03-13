@@ -120,18 +120,27 @@ class _TaskRun:
 
 
 async def _run_task(
-    task: Callable[[InputsT], Awaitable[OutputT]], inputs: InputsT
-) -> tuple[OutputT, _TaskRun, logfire_api.LogfireSpan]:
+    task: Callable[[InputsT], Awaitable[OutputT]], dataset_row: DatasetRow[InputsT, OutputT, MetadataT]
+) -> ScoringContext[InputsT, OutputT, MetadataT]:
     task_run = _TaskRun()
     if _CURRENT_TASK_RUN.get() is not None:
         raise RuntimeError('A task run has already been entered. Task runs should not be nested')
     token = _CURRENT_TASK_RUN.set(task_run)
     try:
         with _logfire.span('execute {task}', task=_get_task_name(task)) as task_span:
-            task_output = await task(inputs)
+            task_output = await task(dataset_row.inputs)
     finally:
         _CURRENT_TASK_RUN.reset(token)
-    return task_output, task_run, task_span
+    return ScoringContext[InputsT, OutputT, MetadataT](
+        name=dataset_row.name,
+        inputs=dataset_row.inputs,
+        metadata=dataset_row.metadata,
+        expected_output=dataset_row.expected_output,
+        output=task_output,
+        duration=_get_span_duration(task_span),
+        attributes=task_run.attributes,
+        metrics=task_run.metrics,
+    )
 
 
 @dataclass
@@ -153,23 +162,12 @@ async def run_case(
         inputs=dataset_row.inputs,
         metadata=dataset_row.metadata,
     ) as case_span:
-        output, task_run, task_span = await _run_task(task, dataset_row.inputs)
-        task_duration = _get_span_duration(task_span)
+        scoring_context = await _run_task(task, dataset_row)
 
-        case_span.set_attribute('output', output)
-        case_span.set_attribute('task_duration', task_duration)
-        case_span.set_attribute('metrics', task_run.metrics)
-        case_span.set_attribute('attributes', task_run.attributes)
-
-        scoring_context = ScoringContext[InputsT, OutputT, MetadataT](
-            name=dataset_row.name,
-            inputs=dataset_row.inputs,
-            expected_output=dataset_row.expected_output,
-            output=output,
-            metadata=dataset_row.metadata,
-            attributes=task_run.attributes,
-            metrics=task_run.metrics,
-        )
+        case_span.set_attribute('output', scoring_context.output)
+        case_span.set_attribute('task_duration', scoring_context.duration)
+        case_span.set_attribute('metrics', scoring_context.metrics)
+        case_span.set_attribute('attributes', scoring_context.attributes)
 
         assertions = []
         if dataset_row.assertions:
@@ -202,15 +200,15 @@ async def run_case(
     return EvalReportCase(
         name=dataset_row.name,
         inputs=report_inputs,
-        output=output,
+        output=scoring_context.output,
         metadata=dataset_row.metadata,
         expected_output=dataset_row.expected_output,
         scores=scores,
         labels=labels,
-        metrics=task_run.metrics,
-        attributes=task_run.attributes,
+        metrics=scoring_context.metrics,
+        attributes=scoring_context.attributes,
         assertions=assertions,
-        task_duration=task_duration,
+        task_duration=scoring_context.duration,
         total_duration=_get_span_duration(case_span),
         trace_id=trace_id,
         span_id=span_id,

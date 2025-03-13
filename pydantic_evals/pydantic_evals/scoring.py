@@ -19,8 +19,9 @@ class ScoringContext(Generic[InputsT, OutputT, MetadataT]):
     name: str
     inputs: InputsT
     metadata: MetadataT
-    output: OutputT
     expected_output: OutputT | None
+    output: OutputT
+    duration: float
 
     attributes: dict[str, Any]
     metrics: dict[str, int | float]

@@ -7,6 +7,8 @@ from typing_extensions import TypeVar
 
 __all__ = ('ScoringContext',)
 
+from pydantic_evals.span_tree import SpanTree
+
 InputsT = TypeVar('InputsT', default=dict[str, Any])
 OutputT = TypeVar('OutputT', default=dict[str, Any])
 MetadataT = TypeVar('MetadataT', default=dict[str, Any])
@@ -19,8 +21,11 @@ class ScoringContext(Generic[InputsT, OutputT, MetadataT]):
     name: str
     inputs: InputsT
     metadata: MetadataT
-    output: OutputT
     expected_output: OutputT | None
+
+    output: OutputT
+    duration: float
+    span_tree: SpanTree
 
     attributes: dict[str, Any]
     metrics: dict[str, int | float]
@@ -31,6 +36,11 @@ class ScoringContext(Generic[InputsT, OutputT, MetadataT]):
     scores: dict[str, int | float] = field(init=False, default_factory=dict)
     # TODO: Allow storing a reason with the labels
     labels: dict[str, bool | str] = field(init=False, default_factory=dict)
+
+    def __post_init__(self):
+        print('-----')
+        print(repr(self.span_tree))
+        print('-----')
 
     def record_score(self, name: str, value: int | float) -> None:
         self.scores[name] = value

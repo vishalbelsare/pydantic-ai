@@ -1,3 +1,4 @@
+from pydantic_evals.assessments.spec import AssessmentResult
 from pydantic_evals.demo.time_range import TimeRangeResponse, infer_time_range
 from pydantic_evals.demo.time_range.models import TimeRangeDataset, TimeRangeInputs
 from pydantic_evals.evals import Evaluation, ScoringContext
@@ -23,12 +24,18 @@ async def main():
 
     dataset = TimeRangeDataset.from_yaml()
 
-    async def handler(ctx: ScoringContext[TimeRangeInputs, TimeRangeResponse]):
-        result = await judge_time_range_case(inputs=ctx.inputs, output=ctx.output)
-        ctx.record_label('is_reasonable', 'yes' if result.pass_ else 'no')
-        ctx.record_score('accuracy', result.score)
+    evaluation = Evaluation[TimeRangeInputs, TimeRangeResponse](
+        infer_time_range,
+        cases=dataset.eval_cases(),
+    )
 
-    evaluation = Evaluation(infer_time_range, scoring=handler, cases=dataset.deserialized_rows())
+    @evaluation.default_assessment
+    async def handler(ctx: ScoringContext[TimeRangeInputs, TimeRangeResponse]):  # pyright: ignore[reportUnusedFunction]
+        result = await judge_time_range_case(inputs=ctx.inputs, output=ctx.output)
+        return [
+            AssessmentResult(name='is_reasonable', value='yes' if result.pass_ else 'no'),
+            AssessmentResult(name='accuracy', value=result.score),
+        ]
 
     report = await evaluation.run(max_concurrency=10)
 

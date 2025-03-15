@@ -64,5 +64,5 @@ class TimeRangeDataset(Dataset[TimeRangeInputs, TimeRangeResponse, dict[str, Any
     pass
 
 
-if __name__ == '__main__':
-    TimeRangeDataset.generate_dataset_examples()
+# if __name__ == '__main__':
+#     TimeRangeDataset.generate_dataset_examples()

@@ -9,9 +9,8 @@ rows:
     min_timestamp_with_offset: '2023-10-08T13:55:00Z'
     max_timestamp_with_offset: '2023-10-08T14:05:00Z'
     explanation: Assuming the user wants a 10-minute window around 14:00 in 3 days.
-  assertions:
-  - call: is_instance
-    type_name: TimeRangeBuilderSuccess
+  assessments:
+  - is_instance: TimeRangeBuilderSuccess
 - name: Specific past date
   inputs:
     prompt: What was the weather like on October 1, 2023?
@@ -22,7 +21,7 @@ rows:
     max_timestamp_with_offset: '2023-10-01T23:59:59Z'
     explanation: Assuming the user wants the weather report for the entire day of
       October 1, 2023.
-  assertions: []
+  assessments: []
 - name: Ambiguous future event
   inputs:
     prompt: Let's plan for the next holiday season.
@@ -31,8 +30,6 @@ rows:
   expected_output:
     error_message: The prompt 'next holiday season' is too ambiguous to generate a
       specific time range as holidays vary by region and context.
-  assertions:
-    - call: llm_rubric
-      rubric: should return an error message
-    - call: is_instance
-      type_name: TimeRangeBuilderError
+  assessments:
+    - llm_rubric: should return an error message
+    - is_instance: TimeRangeBuilderError

@@ -17,11 +17,11 @@ async def llm_rubric(
 ) -> AssessmentResult:
     """Judge whether the output of a language model meets the criteria of a provided rubric."""
     if include_input:
-        from pydantic_evals.llm_as_a_judge import judge_input_output
+        from .llm_as_a_judge import judge_input_output
 
         grading_output = await judge_input_output(ctx.inputs, ctx.output, rubric, model)
     else:
-        from pydantic_evals.llm_as_a_judge import judge_output
+        from .llm_as_a_judge import judge_output
 
         grading_output = await judge_output(ctx.output, rubric, model)
     return AssessmentResult(value=grading_output.pass_, reason=grading_output.reason)

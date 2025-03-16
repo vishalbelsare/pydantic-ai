@@ -1,8 +1,8 @@
+from pydantic_evals.assessments.llm_as_a_judge import GradingOutput, judge_input_output
 from pydantic_evals.assessments.spec import AssessmentResult
 from pydantic_evals.demo.time_range import TimeRangeResponse, infer_time_range
 from pydantic_evals.demo.time_range.models import TimeRangeDataset, TimeRangeInputs
 from pydantic_evals.evals import Evaluation, ScoringContext
-from pydantic_evals.llm_as_a_judge import GradingOutput, judge_input_output
 
 
 async def judge_time_range_case(inputs: TimeRangeInputs, output: TimeRangeResponse) -> GradingOutput:

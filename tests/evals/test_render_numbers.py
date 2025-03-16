@@ -1,7 +1,7 @@
 import pytest
 from inline_snapshot import snapshot
 
-from pydantic_evals.render_numbers import (
+from pydantic_evals.reporting.render_numbers import (
     default_render_duration,
     default_render_duration_diff,
     default_render_number,

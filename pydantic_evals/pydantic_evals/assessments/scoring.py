@@ -5,7 +5,7 @@ from typing import Any, Generic
 
 from typing_extensions import TypeVar
 
-from ..span_tree import SpanTree
+from ..otel.span_tree import SpanTree
 
 __all__ = ('ScoringContext',)
 

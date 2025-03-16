@@ -18,10 +18,10 @@ from typing_extensions import TypeVar
 
 from .assessments.scoring import ScoringContext
 from .assessments.spec import Assessment, AssessmentDetail, AssessmentSpec, BoundAssessmentFunction
-from .context_in_memory_span_exporter import context_subtree_spans
-from .datasets import DatasetRow, EvaluationRow
-from .reports import EvalReport, EvalReportCase, EvalReportCaseAggregate
-from .span_tree import SpanTree
+from .datasets import EvaluationRow
+from .otel.context_in_memory_span_exporter import context_subtree_spans
+from .otel.span_tree import SpanTree
+from .reporting.reports import EvalReport, EvalReportCase, EvalReportCaseAggregate
 
 # while waiting for https://github.com/pydantic/logfire/issues/745
 try:
@@ -217,12 +217,6 @@ async def _run_task(
         attributes=task_run.attributes,
         metrics=task_run.metrics,
     )
-
-
-@dataclass
-class EvalCase(Generic[InputsT, OutputT, MetadataT]):
-    dataset_row: DatasetRow[InputsT, OutputT, MetadataT]
-    handler: Callable[[ScoringContext[InputsT, OutputT, MetadataT]], Awaitable[None]] | None
 
 
 async def run_case(

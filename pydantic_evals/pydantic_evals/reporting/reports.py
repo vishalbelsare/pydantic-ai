@@ -13,7 +13,7 @@ from typing_extensions import TypedDict
 
 from pydantic_evals._utils import UNSET, Unset
 
-from .assessments.spec import AssessmentDetail
+from ..assessments.spec import AssessmentDetail
 from .render_numbers import (
     default_render_duration,
     default_render_duration_diff,

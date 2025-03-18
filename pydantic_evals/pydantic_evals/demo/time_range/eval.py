@@ -24,8 +24,8 @@ async def main():
     dataset = TimeRangeDataset.from_yaml()
 
     evaluation = Evaluation(
-        infer_time_range,
-        cases=dataset.eval_cases(),
+        task=infer_time_range,
+        data=dataset.eval_cases(),
     )
 
     @evaluation.default_assessment

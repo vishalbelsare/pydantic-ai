@@ -29,7 +29,9 @@ async def is_instance(ctx: ScoringContext[object, object, object], type_name: st
     """Check if the output is an instance of a type with the given name."""
     output = ctx.output
     for cls in type(output).__mro__:
-        if cls.__name__ == type_name:
+        if cls.__name__ == type_name or cls.__qualname__ == type_name:
             return AssessmentResult(value=True)
 
-    return AssessmentResult(value=False, reason=f'output is of type {type(output).__qualname__}')
+    return AssessmentResult(
+        value=False, reason=f'output is of type {type(output).__name__} ({type(output).__qualname__})'
+    )

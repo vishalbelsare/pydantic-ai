@@ -75,7 +75,7 @@ class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid'):
     @classmethod
     @functools.cache
     def _row_type(cls) -> type[EvaluationRow[InputsT, OutputT, MetadataT]]:
-        return EvaluationRow[cls._params]  # type: ignore
+        return EvaluationRow[cls._params()]  # type: ignore
 
     @classmethod
     @functools.cache

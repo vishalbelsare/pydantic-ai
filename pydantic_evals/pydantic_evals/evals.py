@@ -46,18 +46,18 @@ class Evaluation(Generic[InputsT, OutputT, MetadataT]):
     This should generally not be instantiated directly; instead, use the `evaluation` context manager.
     """
 
-    task: Callable[[InputsT], Awaitable[OutputT]]
-
     name: str
-    span: logfire.LogfireSpan = field(repr=False)
+    task: Callable[[InputsT], Awaitable[OutputT]]
+    data: list[EvaluationRow[InputsT, OutputT, MetadataT]] = field(repr=False)
+    scorers: list[Assessment[InputsT, OutputT, MetadataT]]
 
     def __init__(
         self,
-        task: Callable[[InputsT], Awaitable[OutputT]],
         *,
         name: str | None = None,
-        cases: list[EvaluationRow[InputsT, OutputT, MetadataT]] | None = None,
-        default_assessments: list[Assessment[InputsT, OutputT, MetadataT]] | None = None,
+        task: Callable[[InputsT], Awaitable[OutputT]],
+        data: list[EvaluationRow[InputsT, OutputT, MetadataT]] | None = None,
+        scorers: list[Assessment[InputsT, OutputT, MetadataT]] | None = None,
     ):
         if name is None:
             name = get_unwrapped_function_name(task)
@@ -65,18 +65,18 @@ class Evaluation(Generic[InputsT, OutputT, MetadataT]):
         self.task = task
         self.name = name
 
-        self.cases = cases or []
+        self.data = data or []
         # self.eval_cases: list[EvalCase[InputsT, OutputT, MetadataT]] = [EvalCase(c, scoring) for c in cases or []]
-        self.span = _logfire.span('evaluate {name}', name=self.name)
+        self.scorers: list[Assessment[InputsT, OutputT, MetadataT]] = scorers or []
 
-        self._default_assessments: list[Assessment[InputsT, OutputT, MetadataT]] = default_assessments or []
+        self._span: logfire.LogfireSpan = _logfire.span('evaluate {name}', name=self.name)
         self._assessments_by_name: dict[str, list[Assessment[InputsT, OutputT, MetadataT]]] = defaultdict(list)
 
     def default_assessment(
         self, function: BoundAssessmentFunction[InputsT, OutputT, MetadataT], /
     ) -> BoundAssessmentFunction[InputsT, OutputT, MetadataT]:
         """A decorator that applies the decorated function as an assessment to all cases in the evaluation."""
-        self._default_assessments.append(Assessment[InputsT, OutputT, MetadataT].from_function(function))
+        self.scorers.append(Assessment[InputsT, OutputT, MetadataT].from_function(function))
         return function
 
     def case_assessment(
@@ -92,7 +92,7 @@ class Evaluation(Generic[InputsT, OutputT, MetadataT]):
         def decorator(
             function: BoundAssessmentFunction[InputsT, OutputT, MetadataT],
         ) -> BoundAssessmentFunction[InputsT, OutputT, MetadataT]:
-            spec = AssessmentSpec(function.__name__)
+            spec = AssessmentSpec(call=function.__name__)
             self._assessments_by_name[name].append(
                 Assessment[InputsT, OutputT, MetadataT](spec=spec, function=function)
             )
@@ -121,37 +121,37 @@ class Evaluation(Generic[InputsT, OutputT, MetadataT]):
             expected_output=expected_output,
             assessments=assessments or [],
         )
-        self.cases.append(row)
+        self.data.append(row)
 
         def assess_case(
             function: BoundAssessmentFunction[InputsT, OutputT, MetadataT],
         ) -> BoundAssessmentFunction[InputsT, OutputT, MetadataT]:
-            spec = AssessmentSpec(function.__name__)
+            spec = AssessmentSpec(call=function.__name__)
             row.assessments.append(Assessment[InputsT, OutputT, MetadataT](spec=spec, function=function))
             return function
 
         return assess_case
 
     async def run(self, max_concurrency: int | None = None) -> EvalReport:
-        with self.span:
+        with self._span:
             limiter = asyncio.Semaphore(max_concurrency) if max_concurrency is not None else nullcontext()
 
             async def _handle_case(case: EvaluationRow[InputsT, OutputT, MetadataT]) -> EvalReportCase:
                 async with limiter:
-                    assessments = self._default_assessments + self._assessments_by_name.get(case.name, [])
+                    assessments = self.scorers + self._assessments_by_name.get(case.name, [])
                     return await run_case(self.task, case, assessments)
 
             async_tasks: list[asyncio.Task[EvalReportCase]] = []
             async with asyncio.TaskGroup() as group:
-                for case in self.cases:
+                for case in self.data:
                     async_tasks.append(group.create_task(_handle_case(case), name=case.name))
 
             report = EvalReport(name=self.name, cases=[x.result() for x in async_tasks])
 
             # TODO(DavidM): This attribute will be too big in general; remove it once we can use child spans in details panel:
-            self.span.set_attribute('cases', report.cases)
+            self._span.set_attribute('cases', report.cases)
             # TODO(DavidM): Remove this 'averages' attribute once we compute it in the details panel
-            self.span.set_attribute('averages', EvalReportCaseAggregate.average(report.cases))
+            self._span.set_attribute('averages', EvalReportCaseAggregate.average(report.cases))
         return report
 
 

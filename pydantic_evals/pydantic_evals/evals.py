@@ -3,19 +3,18 @@
 from __future__ import annotations as _annotations
 
 import asyncio
-import inspect
 from collections import defaultdict
 from collections.abc import Awaitable
 from contextlib import nullcontext
 from contextvars import ContextVar
 from dataclasses import dataclass, field
-from functools import partial
 from typing import Any, Callable, Generic
 
 import logfire
 from pydantic_core import to_jsonable_python
 from typing_extensions import TypeVar
 
+from ._utils import get_unwrapped_function_name
 from .assessments.scoring import ScoringContext
 from .assessments.spec import Assessment, AssessmentDetail, AssessmentSpec, BoundAssessmentFunction
 from .datasets import EvaluationRow
@@ -64,7 +63,7 @@ class Evaluation(Generic[InputsT, OutputT, MetadataT]):
         default_assessments: list[Assessment[InputsT, OutputT, MetadataT]] | None = None,
     ):
         if name is None:
-            name = _get_task_name(task)
+            name = get_unwrapped_function_name(task)
 
         self.task = task
         self.name = name
@@ -186,7 +185,7 @@ async def _run_task(
         raise RuntimeError('A task run has already been entered. Task runs should not be nested')
     token = _CURRENT_TASK_RUN.set(task_run)
     try:
-        with _logfire.span('execute {task}', task=_get_task_name(task)) as task_span:
+        with _logfire.span('execute {task}', task=get_unwrapped_function_name(task)) as task_span:
             with context_subtree_spans() as finished_spans:
                 task_output = await task(case.inputs)
     finally:
@@ -229,7 +228,7 @@ async def run_case(
 
     with _logfire.span(
         '{task_name}: {case_name}',
-        task_name=_get_task_name(task),
+        task_name=get_unwrapped_function_name(task),
         case_name=case.name,
         inputs=case.inputs,
         metadata=case.metadata,
@@ -281,27 +280,17 @@ _CURRENT_TASK_RUN = ContextVar[_TaskRun | None]('_CURRENT_TASK_RUN', default=Non
 
 
 def set_eval_attribute(name: str, value: Any) -> None:
-    """Set the named attribute for the current eval task run."""
+    """Set the named attribute for the current eval task run. Do nothing if not in an eval task run."""
     current_case = _CURRENT_TASK_RUN.get()
     if current_case is not None:
         current_case.record_attribute(name, value)
 
 
 def increment_eval_metric(name: str, amount: int | float) -> None:
-    """Increment the named metric for the current eval task run."""
+    """Increment the named metric for the current eval task run. Do nothing if not in an eval task run."""
     current_case = _CURRENT_TASK_RUN.get()
     if current_case is not None:
         current_case.increment_metric(name, amount)
-
-
-def _get_task_name(func: Callable[..., Any]) -> str:
-    def _unwrap(f: Callable[..., Any]) -> Callable[..., Any]:
-        # Unwraps f, also unwrapping partials, for the sake of getting f's name
-        if isinstance(f, partial):
-            return _unwrap(f.func)
-        return inspect.unwrap(f)
-
-    return _unwrap(func).__qualname__
 
 
 def _get_span_duration(span: logfire.LogfireSpan) -> float:

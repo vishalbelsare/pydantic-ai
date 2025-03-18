@@ -12,6 +12,7 @@ from pydantic import RootModel, TypeAdapter, ValidationError, field_validator
 from pydantic._internal import _typing_extra
 from typing_extensions import TypedDict, TypeVar
 
+from .._utils import get_unwrapped_function_name
 from .scoring import ScoringContext
 
 InputsT = TypeVar('InputsT', default=dict[str, Any])
@@ -56,11 +57,19 @@ class AssessmentResult:
     """The result of running an assessment."""
 
     value: AssessmentValue
-    name: str | None = None  # If none, the name of the assessment function will be used
     reason: str | None = None
 
 
-AssessmentFunctionResult = AssessmentValue | list[AssessmentValue] | AssessmentResult | list[AssessmentResult]
+AssessmentFunctionResult = AssessmentValue | AssessmentResult | Mapping[str, AssessmentValue | AssessmentResult]
+
+
+def _convert_to_mapping(
+    result: AssessmentFunctionResult, *, scalar_name: str
+) -> Mapping[str, AssessmentValue | AssessmentResult]:
+    if isinstance(result, (bool, int, float, str, AssessmentResult)):
+        return {scalar_name: result}
+    return result
+
 
 # TODO: Add bound=AssessmentValue to the following typevar after we upgrade to pydantic 2.11
 AssessmentValueT = TypeVar('AssessmentValueT', default=AssessmentValue, covariant=True)
@@ -107,7 +116,7 @@ class Assessment(Generic[InputsT, OutputT, MetadataT]):
     def from_function(
         function: BoundAssessmentFunction[InputsT, OutputT, MetadataT],
     ) -> Assessment[InputsT, OutputT, MetadataT]:
-        spec = AssessmentSpec(function.__name__)
+        spec = AssessmentSpec(get_unwrapped_function_name(function))
         return Assessment[InputsT, OutputT, MetadataT](spec=spec, function=function)
 
     @staticmethod
@@ -144,18 +153,13 @@ class Assessment(Generic[InputsT, OutputT, MetadataT]):
             sync_function = cast(SyncBoundAssessmentFunction[InputsT, OutputT, MetadataT], self.function)
             results = await anyio.to_thread.run_sync(sync_function, ctx)
 
-        if not isinstance(results, list):
-            results = [results]
+        results = _convert_to_mapping(results, scalar_name=self.spec.call)
 
         details: list[AssessmentDetail] = []
-        for result in results:
+        for name, result in results.items():
             if not isinstance(result, AssessmentResult):
                 result = AssessmentResult(value=result)
-            details.append(
-                AssessmentDetail(
-                    name=result.name or self.spec.call, value=result.value, reason=result.reason, source=self.spec
-                )
-            )
+            details.append(AssessmentDetail(name=name, value=result.value, reason=result.reason, source=self.spec))
 
         return details
 

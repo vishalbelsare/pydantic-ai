@@ -15,8 +15,7 @@ from pydantic_core import to_jsonable_python
 from typing_extensions import TypeVar
 
 from ._utils import get_unwrapped_function_name
-from .assessments.scoring import ScoringContext
-from .assessments.spec import Assessment, AssessmentDetail, AssessmentSpec, BoundAssessmentFunction
+from .assessments.spec import Assessment, AssessmentDetail, AssessmentSpec, BoundAssessmentFunction, ScoringContext
 from .datasets import EvaluationRow
 from .otel.context_in_memory_span_exporter import context_subtree_spans
 from .otel.span_tree import SpanTree

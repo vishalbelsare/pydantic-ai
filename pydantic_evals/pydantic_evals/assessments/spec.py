@@ -13,11 +13,28 @@ from pydantic._internal import _typing_extra
 from typing_extensions import TypedDict, TypeVar
 
 from .._utils import get_unwrapped_function_name
-from .scoring import ScoringContext
+from ..otel.span_tree import SpanTree
 
 InputsT = TypeVar('InputsT', default=dict[str, Any])
 OutputT = TypeVar('OutputT', default=dict[str, Any])
 MetadataT = TypeVar('MetadataT', default=dict[str, Any])
+
+
+@dataclass
+class ScoringContext(Generic[InputsT, OutputT, MetadataT]):
+    """Context for scoring an evaluation case."""
+
+    name: str
+    inputs: InputsT
+    metadata: MetadataT
+    expected_output: OutputT | None
+
+    output: OutputT
+    duration: float
+    span_tree: SpanTree
+
+    attributes: dict[str, Any]
+    metrics: dict[str, int | float]
 
 
 class AssessmentSpec(RootModel[str | dict[str, Any]]):

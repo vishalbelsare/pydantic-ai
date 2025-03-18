@@ -4,8 +4,7 @@ from typing import Any
 
 from pydantic_ai import models
 
-from .scoring import ScoringContext
-from .spec import AssessmentResult, assessment
+from .spec import AssessmentResult, ScoringContext, assessment
 
 
 @assessment

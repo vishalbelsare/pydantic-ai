@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "pydantic-evals"
-version = "0.0.1"
+version = "0.0.41"
 description = "Framework for evaluating stochastic code execution, especially code making use of LLMs"
 authors = [
     { name = "David Montague", email = "david@pydantic.dev" },

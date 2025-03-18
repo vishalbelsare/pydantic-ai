@@ -1,7 +1,5 @@
 from __future__ import annotations as _annotations
 
-from typing import Any
-
 from pydantic_ai import models
 
 from .spec import AssessmentResult, ScoringContext, assessment
@@ -9,7 +7,7 @@ from .spec import AssessmentResult, ScoringContext, assessment
 
 @assessment
 async def llm_rubric(
-    ctx: ScoringContext[Any, Any, Any],
+    ctx: ScoringContext[object, object, object],
     rubric: str,
     model: models.KnownModelName = 'gpt-4o',
     include_input: bool = False,
@@ -27,7 +25,7 @@ async def llm_rubric(
 
 
 @assessment
-async def is_instance(ctx: ScoringContext[Any, Any, Any], type_name: str) -> AssessmentResult:
+async def is_instance(ctx: ScoringContext[object, object, object], type_name: str) -> AssessmentResult:
     """Check if the output is an instance of a type with the given name."""
     output = ctx.output
     for cls in type(output).__mro__:

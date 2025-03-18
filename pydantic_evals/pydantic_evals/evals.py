@@ -1,5 +1,3 @@
-# TODO: Add support for dataset-wide and case-specific assertions.
-# TODO: Add a score to the evaluate span that tracks the percentage of cases that pass all assertions.
 from __future__ import annotations as _annotations
 
 import asyncio
@@ -150,9 +148,9 @@ class Evaluation(Generic[InputsT, OutputT, MetadataT]):
 
             report = EvalReport(name=self.name, cases=[x.result() for x in async_tasks])
 
-            # TODO: This attribute will be too big in general; remove it once we can use child spans in details panel:
+            # TODO(DavidM): This attribute will be too big in general; remove it once we can use child spans in details panel:
             self.span.set_attribute('cases', report.cases)
-            # TODO: Maybe remove this 'averages' attribute if we can compute it from child spans
+            # TODO(DavidM): Remove this 'averages' attribute once we compute it in the details panel
             self.span.set_attribute('averages', EvalReportCaseAggregate.average(report.cases))
         return report
 
@@ -190,12 +188,16 @@ async def _run_task(
     finally:
         _CURRENT_TASK_RUN.reset(token)
 
-    # TODO: Make this metric-attributes functionality user-configurable in some way
-    #   Note: this is the main reason why I think we should require at least otel as a dependency, if not logfire;
-    #   otherwise, we don't have a great way to get usage data from arbitrary frameworks
+    # TODO: Question: Should we make this metric-attributes functionality more user-configurable in some way before merging?
+    #   Note: the use of otel for collecting these metrics is the main reason why I think we should require at least otel as a dependency, if not logfire;
+    #   otherwise, we don't have a great way to get usage data from arbitrary frameworks.
+    #   Ideally we wouldn't need to hard-code the specific logic here, but I'm not sure a great way to expose it to
+    #   users. Maybe via an argument of type Callable[[SpanTree], dict[str, int | float]] or similar?
     for span in finished_spans:
         attributes = span.attributes
         assert attributes is not None  # this appears to be guaranteed, despite type-hinting to the contrary
+        if attributes.get('gen_ai.operation.name') == 'chat':
+            task_run.increment_metric('requests', 1)
         for k, v in attributes.items():
             if not isinstance(v, (int, float)):
                 continue

@@ -77,15 +77,6 @@ async def judge_input_output(
     return (await _judge_input_output_agent.run(user_prompt, model=model)).data
 
 
-# async def judge(rubric: str, output: Any, inputs: Any = UNSET, expected_output: Any = UNSET, model: models.Model | models.KnownModelName = 'openai:gpt-4o') -> GradingOutput:
-#     # TODO: Implement something like this that has a cleaner API for providing different kinds of data to the LLM
-#     if inputs is UNSET:
-#         return await judge_output(output, rubric, model=model)
-#     if expected_output is UNSET:
-#         return await judge_input_output(inputs, output, rubric, model=model)
-#     raise ValueError('expected_output must be unset if inputs is set')
-
-
 def _stringify(value: Any) -> str:
     if isinstance(value, str):
         return value

@@ -364,7 +364,7 @@ class EvalReportCase(BaseModel):
     task_duration: float
     total_duration: float  # includes assessment time
 
-    # TODO: Maybe drop these once we can reference child spans in details panel:
+    # TODO(DavidM): Drop these once we can reference child spans in details panel:
     trace_id: str
     span_id: str
 

@@ -1,4 +1,3 @@
-# TODO: Add assertions to DatasetRow and shared_assertions to Dataset
 from __future__ import annotations as _annotations
 
 import functools
@@ -55,6 +54,7 @@ class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid'):
     """A dataset of test cases, each consisting of input, expected output, and metadata."""
 
     rows: list[DatasetRow[InputsT, OutputT, MetadataT]]
+    default_assessments: list[AssessmentSpec] = Field(default_factory=list)
 
     _assessment_registry: ClassVar[dict[str, AssessmentFunction[Any, Any, Any]]] = {}
     """This should be AssessmentFunction[InputsT, OutputT, MetadataT], but classvars can't be generic in Python."""
@@ -107,7 +107,7 @@ class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid'):
         row_type = self._row_type()
         for row in self.rows:
             assessments: list[Assessment[Any, Any, Any]] = []
-            for spec in row.assessments:
+            for spec in row.assessments + self.default_assessments:
                 try:
                     assessment = Assessment[InputsT, OutputT, MetadataT].from_registry(registry, row.name, spec)
                 except ValueError as e:
@@ -127,6 +127,7 @@ class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid'):
             raise ExceptionGroup('Failed to load assessments from registry', errors)
         return evaluation_rows
 
+    # TODO: Task: Always save a schema file when saving the dataset
     def save(self, path: Path | str = DEFAULT_DATASET_PATH, schema_ref: str | None = None) -> None:
         path = self._get_relative_path(path)
         content = yaml.dump(to_jsonable_python(self), sort_keys=False)
@@ -255,9 +256,7 @@ class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid'):
 
         return ClsDataset.model_json_schema()
 
-    # TODO: Always save a schema file when saving the dataset
-
-    # TODO: Implement function to generate examples for a dataset using an LLM
+    # TODO: Task: Uncomment and finish implementing function to generate examples for a dataset using an LLM
     # @classmethod
     # def generate_dataset_examples(
     #     cls,
@@ -375,21 +374,3 @@ def _get_relative_path_reference(target: Path, source: Path, _prefix: str = '') 
         return Path(f'{_prefix}{Path(target).relative_to(source)}')
     except ValueError:
         return _get_relative_path_reference(target, source.parent, _prefix=f'{_prefix}../')
-
-
-# TODO: Use this elsewhere in the library to make it easier to reuse
-# def infer_name(value: Any, function_frame: types.FrameType | None) -> str | None:
-#     """Infer the variable name from the call frame.
-#
-#     Usage should be `infer_name(value, inspect.currentframe())`.
-#     """
-#     if function_frame is not None and (parent_frame := function_frame.f_back):  # pragma: no branch
-#         for name, item in parent_frame.f_locals.items():
-#             if item is value:
-#                 return name
-#         if parent_frame.f_locals != parent_frame.f_globals:
-#             # if we couldn't find the agent in locals and globals are a different dict, try globals
-#             for name, item in parent_frame.f_globals.items():
-#                 if item is value:
-#                     return name
-#     return None

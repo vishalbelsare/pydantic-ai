@@ -45,7 +45,7 @@ def _add_context_span_exporter():
     # `logfire._internal.tracer.ProxyTracerProvider`, in which case the `add_span_processor` method will be present
     if not hasattr(tracer_provider, 'add_span_processor'):
         if isinstance(tracer_provider, ProxyTracerProvider):
-            # TODO: Should not require logfire or opentelemetry as  dependencies
+            # TODO: Question: Are we okay requiring opentelemetry and/or logfire as dependencies?
             raise TypeError(
                 'A tracer provider has not been set. You need to call `logfire.configure(...)` or `opentelemetry.trace.set_tracer_provider(...)` before reaching this point'
             )

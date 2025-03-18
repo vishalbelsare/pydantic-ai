@@ -88,7 +88,7 @@ def _convert_to_mapping(
     return result
 
 
-# TODO: Add bound=AssessmentValue to the following typevar after we upgrade to pydantic 2.11
+# TODO(DavidM): Add bound=AssessmentValue to the following typevar after we upgrade to pydantic 2.11
 AssessmentValueT = TypeVar('AssessmentValueT', default=AssessmentValue, covariant=True)
 
 

@@ -16,7 +16,7 @@ async def judge_time_range_case(inputs: TimeRangeInputs, output: TimeRangeRespon
 
 
 async def main():
-    """TODO: Move the pydantic_evals.demo package before merging."""
+    """TODO: Task: Convert this pydantic_evals.demo package into docs."""
     import logfire
 
     logfire.configure(send_to_logfire='if-token-present', console=logfire.ConsoleOptions(verbose=True))

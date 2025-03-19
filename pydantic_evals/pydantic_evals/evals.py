@@ -2,7 +2,7 @@ from __future__ import annotations as _annotations
 
 import asyncio
 from collections import defaultdict
-from collections.abc import Awaitable
+from collections.abc import Awaitable, Sequence
 from contextlib import nullcontext
 from contextvars import ContextVar
 from dataclasses import dataclass, field
@@ -56,8 +56,8 @@ class Evaluation(Generic[InputsT, OutputT, MetadataT]):
         *,
         name: str | None = None,
         task: Callable[[InputsT], Awaitable[OutputT]],
-        data: list[EvaluationRow[InputsT, OutputT, MetadataT]] | None = None,
-        scorers: list[BoundAssessmentFunction[InputsT, OutputT, MetadataT]] | None = None,
+        data: Sequence[EvaluationRow[InputsT, OutputT, MetadataT]] = (),
+        scorers: Sequence[BoundAssessmentFunction[InputsT, OutputT, MetadataT]] = (),
     ):
         if name is None:
             name = get_unwrapped_function_name(task)
@@ -65,11 +65,9 @@ class Evaluation(Generic[InputsT, OutputT, MetadataT]):
         self.task = task
         self.name = name
 
-        self.data = data or []
+        self.data = list(data)
         # self.eval_cases: list[EvalCase[InputsT, OutputT, MetadataT]] = [EvalCase(c, scoring) for c in cases or []]
-        self.scorers: list[Assessment[InputsT, OutputT, MetadataT]] = [
-            Assessment[InputsT, OutputT, MetadataT].from_function(f) for f in (scorers or [])
-        ]
+        self.scorers = [Assessment[InputsT, OutputT, MetadataT].from_function(f) for f in scorers]
 
         self._span: logfire.LogfireSpan = _logfire.span('evaluate {name}', name=self.name)
         self._assessments_by_name: dict[str, list[Assessment[InputsT, OutputT, MetadataT]]] = defaultdict(list)

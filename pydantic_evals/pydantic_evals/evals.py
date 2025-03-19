@@ -2,7 +2,7 @@ from __future__ import annotations as _annotations
 
 import asyncio
 from collections import defaultdict
-from collections.abc import Awaitable
+from collections.abc import Awaitable, Sequence
 from contextlib import nullcontext
 from contextvars import ContextVar
 from dataclasses import dataclass, field
@@ -13,7 +13,7 @@ from pydantic_core import to_jsonable_python
 from typing_extensions import TypeVar
 
 from ._utils import get_unwrapped_function_name
-from .assessments.spec import Assessment, AssessmentDetail, AssessmentSpec, BoundAssessmentFunction, ScoringContext
+from .assessments.spec import Assessment, AssessmentDetail, BoundAssessmentFunction, ScoringContext
 from .datasets import EvaluationRow
 from .otel.context_in_memory_span_exporter import context_subtree
 from .reporting.reports import EvalReport, EvalReportCase, EvalReportCaseAggregate
@@ -47,7 +47,7 @@ class Evaluation(Generic[InputsT, OutputT, MetadataT]):
 
     name: str
     task: Callable[[InputsT], Awaitable[OutputT]]
-    data: list[EvaluationRow[InputsT, OutputT, MetadataT]] = field(repr=False)
+    cases: list[EvaluationRow[InputsT, OutputT, MetadataT]] = field(repr=False)
     scorers: list[Assessment[InputsT, OutputT, MetadataT]]
 
     def __init__(
@@ -55,8 +55,8 @@ class Evaluation(Generic[InputsT, OutputT, MetadataT]):
         *,
         name: str | None = None,
         task: Callable[[InputsT], Awaitable[OutputT]],
-        data: list[EvaluationRow[InputsT, OutputT, MetadataT]] | None = None,
-        scorers: list[BoundAssessmentFunction[InputsT, OutputT, MetadataT]] | None = None,
+        cases: Sequence[EvaluationRow[InputsT, OutputT, MetadataT]] = (),
+        scorers: Sequence[BoundAssessmentFunction[InputsT, OutputT, MetadataT]] = (),
     ):
         if name is None:
             name = get_unwrapped_function_name(task)
@@ -64,11 +64,9 @@ class Evaluation(Generic[InputsT, OutputT, MetadataT]):
         self.task = task
         self.name = name
 
-        self.data = data or []
+        self.cases = list(cases)
         # self.eval_cases: list[EvalCase[InputsT, OutputT, MetadataT]] = [EvalCase(c, scoring) for c in cases or []]
-        self.scorers: list[Assessment[InputsT, OutputT, MetadataT]] = [
-            Assessment[InputsT, OutputT, MetadataT].from_function(f) for f in (scorers or [])
-        ]
+        self.scorers = [Assessment[InputsT, OutputT, MetadataT].from_function(f) for f in scorers]
 
         self._span: logfire.LogfireSpan = _logfire.span('evaluate {name}', name=self.name)
         self._assessments_by_name: dict[str, list[Assessment[InputsT, OutputT, MetadataT]]] = defaultdict(list)
@@ -93,10 +91,7 @@ class Evaluation(Generic[InputsT, OutputT, MetadataT]):
         def decorator(
             function: BoundAssessmentFunction[InputsT, OutputT, MetadataT],
         ) -> BoundAssessmentFunction[InputsT, OutputT, MetadataT]:
-            spec = AssessmentSpec(call=function.__name__)
-            self._assessments_by_name[name].append(
-                Assessment[InputsT, OutputT, MetadataT](spec=spec, function=function)
-            )
+            self._assessments_by_name[name].append(Assessment[InputsT, OutputT, MetadataT].from_function(function))
             return function
 
         return decorator
@@ -122,13 +117,12 @@ class Evaluation(Generic[InputsT, OutputT, MetadataT]):
             expected_output=expected_output,
             assessments=assessments or [],
         )
-        self.data.append(row)
+        self.cases.append(row)
 
         def assess_case(
             function: BoundAssessmentFunction[InputsT, OutputT, MetadataT],
         ) -> BoundAssessmentFunction[InputsT, OutputT, MetadataT]:
-            spec = AssessmentSpec(call=function.__name__)
-            row.assessments.append(Assessment[InputsT, OutputT, MetadataT](spec=spec, function=function))
+            row.assessments.append(Assessment[InputsT, OutputT, MetadataT].from_function(function))
             return function
 
         return assess_case
@@ -144,7 +138,7 @@ class Evaluation(Generic[InputsT, OutputT, MetadataT]):
 
             async_tasks: list[asyncio.Task[EvalReportCase]] = []
             async with asyncio.TaskGroup() as group:
-                for case in self.data:
+                for case in self.cases:
                     async_tasks.append(group.create_task(_handle_case(case), name=case.name))
 
             report = EvalReport(name=self.name, cases=[x.result() for x in async_tasks])

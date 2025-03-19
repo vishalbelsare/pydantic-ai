@@ -30,7 +30,7 @@ async def main():
             'accuracy': result.score,
         }
 
-    evaluation = Evaluation(task=infer_time_range, data=dataset.evaluation_rows(), scorers=[assess_case])
+    evaluation = Evaluation(task=infer_time_range, cases=dataset.evaluation_rows(), scorers=[assess_case])
 
     report = await evaluation.run(max_concurrency=10)
 

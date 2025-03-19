@@ -48,7 +48,7 @@ class Evaluation(Generic[InputsT, OutputT, MetadataT]):
 
     name: str
     task: Callable[[InputsT], Awaitable[OutputT]]
-    data: list[EvaluationRow[InputsT, OutputT, MetadataT]] = field(repr=False)
+    cases: list[EvaluationRow[InputsT, OutputT, MetadataT]] = field(repr=False)
     scorers: list[Assessment[InputsT, OutputT, MetadataT]]
 
     def __init__(
@@ -56,7 +56,7 @@ class Evaluation(Generic[InputsT, OutputT, MetadataT]):
         *,
         name: str | None = None,
         task: Callable[[InputsT], Awaitable[OutputT]],
-        data: Sequence[EvaluationRow[InputsT, OutputT, MetadataT]] = (),
+        cases: Sequence[EvaluationRow[InputsT, OutputT, MetadataT]] = (),
         scorers: Sequence[BoundAssessmentFunction[InputsT, OutputT, MetadataT]] = (),
     ):
         if name is None:
@@ -65,7 +65,7 @@ class Evaluation(Generic[InputsT, OutputT, MetadataT]):
         self.task = task
         self.name = name
 
-        self.data = list(data)
+        self.cases = list(cases)
         # self.eval_cases: list[EvalCase[InputsT, OutputT, MetadataT]] = [EvalCase(c, scoring) for c in cases or []]
         self.scorers = [Assessment[InputsT, OutputT, MetadataT].from_function(f) for f in scorers]
 
@@ -118,7 +118,7 @@ class Evaluation(Generic[InputsT, OutputT, MetadataT]):
             expected_output=expected_output,
             assessments=assessments or [],
         )
-        self.data.append(row)
+        self.cases.append(row)
 
         def assess_case(
             function: BoundAssessmentFunction[InputsT, OutputT, MetadataT],
@@ -139,7 +139,7 @@ class Evaluation(Generic[InputsT, OutputT, MetadataT]):
 
             async_tasks: list[asyncio.Task[EvalReportCase]] = []
             async with asyncio.TaskGroup() as group:
-                for case in self.data:
+                for case in self.cases:
                     async_tasks.append(group.create_task(_handle_case(case), name=case.name))
 
             report = EvalReport(name=self.name, cases=[x.result() for x in async_tasks])

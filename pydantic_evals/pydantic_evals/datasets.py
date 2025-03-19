@@ -47,9 +47,6 @@ class EvaluationRow(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forb
     assessments: list[Assessment[InputsT, OutputT, MetadataT]]
 
 
-F = TypeVar('F', bound=AssessmentFunction[Any, Any, Any])
-
-
 class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid'):
     """A dataset of test cases, each consisting of input, expected output, and metadata."""
 
@@ -68,13 +65,12 @@ class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid'):
     def assessment_registry(cls) -> dict[str, AssessmentFunction[InputsT, OutputT, MetadataT]]:
         combined_registry: dict[str, AssessmentFunction[Any, Any, Any]] = {**get_default_registry()}
         for c in cls.__mro__[::-1]:
-            if hasattr(c, '_assessment_registry'):
-                combined_registry.update(c._assessment_registry)  # type: ignore
+            combined_registry.update(getattr(c, '_assessment_registry', {}))
         return combined_registry
 
     @classmethod
     @functools.cache
-    def _row_type(cls) -> type[EvaluationRow[InputsT, OutputT, MetadataT]]:
+    def _evaluation_row_type(cls) -> type[EvaluationRow[InputsT, OutputT, MetadataT]]:
         return EvaluationRow[cls._params()]  # type: ignore
 
     @classmethod
@@ -82,9 +78,7 @@ class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid'):
     def _params(cls) -> tuple[type[InputsT], type[OutputT], type[MetadataT]]:
         for c in cls.__mro__:
             metadata = getattr(c, '__pydantic_generic_metadata__')
-            if len(args := metadata.get('args', ())) == 3:
-                return args
-            elif len(args := getattr(c, '__args__', ())) == 3:
+            if len(args := (metadata.get('args', ()) or getattr(c, '__args__', ()))) == 3:
                 return args
         raise ValueError(f'Could not determine the generic parameters for {cls}')
 
@@ -99,12 +93,12 @@ class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid'):
         cls._assessment_registry[f.__name__] = f
         return f
 
-    def eval_cases(self) -> list[EvaluationRow[InputsT, OutputT, MetadataT]]:
+    def evaluation_rows(self) -> list[EvaluationRow[InputsT, OutputT, MetadataT]]:
         registry = self.assessment_registry()
 
         evaluation_rows: list[EvaluationRow[InputsT, OutputT, MetadataT]] = []
         errors: list[ValueError] = []
-        row_type = self._row_type()
+        row_type = self._evaluation_row_type()
         for row in self.rows:
             assessments: list[Assessment[Any, Any, Any]] = []
             for spec in row.assessments + self.default_assessments:
@@ -124,7 +118,7 @@ class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid'):
                 )
             )
         if errors:
-            raise ExceptionGroup('Failed to load assessments from registry', errors)
+            raise ExceptionGroup(f'{len(errors)} error(s) loading assessments from registry', errors[:3])
         return evaluation_rows
 
     # TODO: Task: Always save a schema file when saving the dataset
@@ -167,7 +161,7 @@ class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid'):
                 if first_line.startswith('# yaml-language-server: $schema='):
                     schema_path = (dataset_path.parent / first_line.split('=', 1)[1]).resolve()
             if schema_path is None:
-                schema_path = dataset_path.parent / f'./{dataset_path.stem}_schema.json'
+                schema_path = cls._get_schema_path(dataset_path.parent)
         else:
             schema_path = cls._get_relative_path(schema_path)
 
@@ -204,32 +198,32 @@ class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid'):
         assessment_types: list[Any] = []
         for name, function in registry.items():
             signature = inspect.signature(function)
-            first_param = list(signature.parameters.values())[0]
+
+            scoring_context_param, *other_params = signature.parameters.values()
             type_hints = _typing_extra.get_function_type_hints(function)
-            type_hints.pop(first_param.name)
+            type_hints.pop(scoring_context_param.name, None)
             type_hints.pop('return', None)
             required_type_hints: dict[str, Any] = {}
 
-            for p in signature.parameters.values():
-                if p.name == first_param.name:
-                    continue
-                if p.name not in type_hints:
-                    type_hints[p.name] = Any
+            for p in other_params:
+                type_hints.setdefault(p.name, Any)
                 if p.default is not p.empty:
                     type_hints[p.name] = NotRequired[type_hints[p.name]]
                 else:
                     required_type_hints[p.name] = type_hints[p.name]
 
-            if len(type_hints) == 0:
+            if len(type_hints) == 0 or not required_type_hints:
+                # Shortest option: just the call name
                 assessment_types.append(Literal[name])
-            elif len(type_hints) == 1:
-                type_hint_type = next(iter(type_hints.values()))  # pyright: ignore
+            if len(type_hints) == 1:
+                # Short option: only have one parameter, so we can drop the nesting
+                [type_hint_type] = type_hints.values()  # pyright: ignore
                 td = TypedDict(f'short_assessment_{name}', {name: type_hint_type})  # pyright: ignore
                 td.__pydantic_config__ = {'extra': 'forbid'}  # pyright: ignore
                 assessment_types.append(td)
-            else:
-                if len(required_type_hints) == 1 and len(type_hints) > 1:
-                    # Short option: only one required parameter, so we can drop the nesting
+            if len(type_hints) > 1:
+                if len(required_type_hints) == 1:
+                    # Short option: only have one required parameter, so we can drop the nesting
                     type_hint_type = next(iter(required_type_hints.values()))  # pyright: ignore
                     td = TypedDict(f'short_assessment_{name}', {name: type_hint_type})  # pyright: ignore
                     td.__pydantic_config__ = {'extra': 'forbid'}  # pyright: ignore
@@ -241,6 +235,8 @@ class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid'):
                 td = TypedDict(f'assessment_{name}', {name: params_td})  # pyright: ignore
                 td.__pydantic_config__ = {'extra': 'forbid'}  # pyright: ignore
                 assessment_types.append(td)
+            # Note: We might want to also generate the JSON schema for the format `call: '...', args: [...], kwargs: {...}`.
+            #   It would be a bit complex to implement but not impossible.
 
         params = cls._params()
 
@@ -300,12 +296,13 @@ class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid'):
 
     @classmethod
     def _get_relative_path(cls, path: Path | str) -> Path:
-        """Resolve relative paths as relative to the module in which the (sub)class is defined."""
+        """Resolve relative paths as relative to the module in which the subclass is defined."""
         path = Path(path)
 
         if path.is_absolute():
             return path
 
+        # TODO: Should we use the cwd instead of the module path? Then it would work for non-proper-subclasses..
         module_path = sys.modules[cls.__module__].__file__
         if module_path == __file__:
             raise ValueError(f'You should only call this method from a proper subclass of `{cls.__name__}`')

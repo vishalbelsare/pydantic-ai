@@ -32,7 +32,7 @@ def default_render_number(value: float | int) -> str:
 
     # Special case for zero:
     if abs_val == 0:
-        return f'{value:.{VALUE_SIG_FIGS}f}'
+        return f'{value:,.{VALUE_SIG_FIGS}f}'
 
     if abs_val >= 1:
         # Count the digits in the integer part.
@@ -45,7 +45,7 @@ def default_render_number(value: float | int) -> str:
         exponent = math.floor(math.log10(abs_val))
         decimals = -exponent + VALUE_SIG_FIGS - 1  # because the first nonzero digit is in the 10^exponent place.
 
-    return f'{value:.{decimals}f}'
+    return f'{value:,.{decimals}f}'
 
 
 def default_render_percentage(value: float) -> str:
@@ -53,7 +53,7 @@ def default_render_percentage(value: float) -> str:
 
     * Include at least one decimal place and at least 3 significant figures.
     """
-    return f'{value:.{VALUE_SIG_FIGS - 2}%}'
+    return f'{value:,.{VALUE_SIG_FIGS - 2}%}'
 
 
 def default_render_number_diff(old: float | int, new: float | int) -> str | None:
@@ -120,7 +120,7 @@ def _render_signed(val: float, sig_figs: int) -> str:
     If the result does not use scientific notation and lacks a decimal point,
     force a '.0' suffix. Always include a leading '+' for nonnegative numbers.
     """
-    s = format(abs(val), f'.{sig_figs}g')
+    s = format(abs(val), f',.{sig_figs}g')
     if 'e' not in s and '.' not in s:
         s += '.0'
     return f'{"+" if val >= 0 else "-"}{s}'
@@ -152,9 +152,9 @@ def _render_relative(new: float, base: float, small_base_threshold: float) -> st
         # Multiplier style.
         multiplier = new / base
         if abs(multiplier) < MULTIPLIER_ONE_DECIMAL_THRESHOLD:
-            mult_str = f'{multiplier:.1f}x'
+            mult_str = f'{multiplier:,.1f}x'
         else:
-            mult_str = f'{multiplier:.0f}x'
+            mult_str = f'{multiplier:,.0f}x'
         return mult_str
 
 
@@ -181,6 +181,6 @@ def _render_duration(seconds: float, force_signed: bool) -> str:
         unit = 's'
 
     if force_signed:
-        return f'{value:+.{precision}f}{unit}'
+        return f'{value:+,.{precision}f}{unit}'
     else:
-        return f'{value:.{precision}f}{unit}'
+        return f'{value:,.{precision}f}{unit}'

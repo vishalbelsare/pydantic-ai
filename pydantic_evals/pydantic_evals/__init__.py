@@ -6,7 +6,6 @@ TODO(DavidM): Add commit hash, timestamp, and other metadata to reports (like py
 TODO(DavidM): Implement a CLI with some pytest-like filtering API to make it easier to run only specific cases
 """
 
-# TODO(DavidM): Support the use of span links to store scores, this provides a way to update them, add them later, etc.
 # TODO: Question: How should we decorate functions to make it possible to eval them later?
 #  E.g., could use some kind of `eval_function` decorator, which ensures that calls to the function send eval-review-compatible data to logfire
 #  Basically we need to record the inputs and output. @logfire.instrument might be enough if we make it possible to record the output

@@ -4,7 +4,7 @@ import inspect
 from collections.abc import Awaitable, Mapping
 from dataclasses import dataclass
 from functools import wraps
-from typing import Any, Callable, Concatenate, Generic, NotRequired, cast
+from typing import Any, Callable, Concatenate, Final, Generic, NotRequired, cast
 
 import anyio.to_thread
 from pydantic import (
@@ -20,7 +20,7 @@ from pydantic import (
 )
 from pydantic._internal import _typing_extra
 from pydantic_core.core_schema import SerializerFunctionWrapHandler
-from typing_extensions import TypedDict, TypeGuard, TypeVar
+from typing_extensions import Self, TypedDict, TypeVar
 
 from .._utils import get_unwrapped_function_name
 from ..otel.span_tree import SpanTree
@@ -48,7 +48,16 @@ class ScoringContext(Generic[InputsT, OutputT, MetadataT]):
 
 
 class AssessmentSpec(BaseModel):
-    """The specification of an assessment to be run."""
+    """The specification of an assessment to be run.
+
+    Note that special "short forms" are supported during serialization/deserialization.
+
+    In particular, each of the following forms is supported for specifying an assessment using a callable known as `my_call`:
+    * `'my_call'` Just the (string) name of the call is used if there are no arguments or kwargs to the call other than the scoring context
+    * `{'my_call': first_arg}` A single argument is passed as the first argument to the `my_call` assessment
+    * `{'my_call': {k1: v1, k2: v2}}` Multiple kwargs are passed to the `my_call` assessment
+    * `{'call': 'my_call', 'args': [first_arg], 'kwargs': {k1: v1, k2: v2}}` The full form of the assessment spec, with all arguments and kwargs specified
+    """
 
     call: str
     args: list[Any] = Field(default_factory=list)
@@ -87,6 +96,8 @@ class _SerializedAssessmentSpec(RootModel[str | dict[str, Any]]):
     """The specification of an assessment to be run.
 
     Corresponds to the serialized form of an assessment call in a yaml file.
+
+    This is just an auxiliary class used to serialize/deserialize instances of AssessmentSpec.
     """
 
     @field_validator('root')
@@ -106,7 +117,6 @@ class _SerializedAssessmentSpec(RootModel[str | dict[str, Any]]):
 
     @property
     def _args_kwargs(self) -> tuple[list[Any], dict[str, Any]]:
-        # dicts are treated as kwargs, non-dicts are passed as the first argument
         if isinstance(self.root, str):
             return [], {}  # a plain str means a function call without any arguments
         value = next(iter(self.root.values()))
@@ -114,8 +124,10 @@ class _SerializedAssessmentSpec(RootModel[str | dict[str, Any]]):
         if isinstance(value, dict):
             keys: list[Any] = list(value.keys())  # pyright: ignore[reportUnknownArgumentType]
             if all(isinstance(k, str) for k in keys):
+                # dict[str, Any]s are treated as kwargs
                 return [], cast(dict[str, Any], value)
 
+        # Anything else is passed as the first argument
         return [value], {}
 
     def to_assessment_spec(self) -> AssessmentSpec:
@@ -141,9 +153,9 @@ AssessmentFunctionResult = AssessmentValue | AssessmentResult | Mapping[str, Ass
 def _convert_to_mapping(
     result: AssessmentFunctionResult, *, scalar_name: str
 ) -> Mapping[str, AssessmentValue | AssessmentResult]:
-    if isinstance(result, (bool, int, float, str, AssessmentResult)):
-        return {scalar_name: result}
-    return result
+    if isinstance(result, Mapping):
+        return result
+    return {scalar_name: result}
 
 
 # TODO(DavidM): Add bound=AssessmentValue to the following typevar after we upgrade to pydantic 2.11
@@ -160,55 +172,44 @@ class AssessmentDetail(Generic[AssessmentValueT]):
     source: AssessmentSpec
 
 
-SyncAssessmentFunction = Callable[
-    Concatenate[ScoringContext[InputsT, OutputT, MetadataT], ...], AssessmentFunctionResult
+AssessmentFunction = Callable[
+    Concatenate[ScoringContext[InputsT, OutputT, MetadataT], ...],
+    AssessmentFunctionResult | Awaitable[AssessmentFunctionResult],
 ]
-AsyncAssessmentFunction = Callable[
-    Concatenate[ScoringContext[InputsT, OutputT, MetadataT], ...], Awaitable[AssessmentFunctionResult]
-]
-AssessmentFunction = (
-    SyncAssessmentFunction[InputsT, OutputT, MetadataT] | AsyncAssessmentFunction[InputsT, OutputT, MetadataT]
-)
 AssessmentRegistry = Mapping[str, AssessmentFunction[InputsT, OutputT, MetadataT]]
-
-SyncBoundAssessmentFunction = Callable[[ScoringContext[InputsT, OutputT, MetadataT]], AssessmentFunctionResult]
-AsyncBoundAssessmentFunction = Callable[
-    [ScoringContext[InputsT, OutputT, MetadataT]], Awaitable[AssessmentFunctionResult]
+BoundAssessmentFunction = Callable[
+    [ScoringContext[InputsT, OutputT, MetadataT]], AssessmentFunctionResult | Awaitable[AssessmentFunctionResult]
 ]
-BoundAssessmentFunction = (
-    SyncBoundAssessmentFunction[InputsT, OutputT, MetadataT] | AsyncBoundAssessmentFunction[InputsT, OutputT, MetadataT]
-)
 
 
 @dataclass
 class Assessment(Generic[InputsT, OutputT, MetadataT]):
-    """An assertion to be run on a scoring context."""
+    """An assessment to be run on a scoring context."""
 
     spec: AssessmentSpec
     function: BoundAssessmentFunction[InputsT, OutputT, MetadataT]
 
-    @staticmethod
+    @classmethod
     def from_function(
+        cls,
         function: BoundAssessmentFunction[InputsT, OutputT, MetadataT],
-    ) -> Assessment[InputsT, OutputT, MetadataT]:
+    ) -> Self:
         spec = AssessmentSpec(call=get_unwrapped_function_name(function))
-        return Assessment[InputsT, OutputT, MetadataT](spec=spec, function=function)
+        return cls(spec=spec, function=function)
 
-    @staticmethod
+    @classmethod
     def from_registry(
-        registry: AssessmentRegistry[InputsT, OutputT, MetadataT], case_name: str, spec: AssessmentSpec
-    ) -> Assessment[InputsT, OutputT, MetadataT]:
+        cls, registry: AssessmentRegistry[InputsT, OutputT, MetadataT], case_name: str, spec: AssessmentSpec
+    ) -> Self:
         function = Assessment[InputsT, OutputT, MetadataT]._validate_against_registry(registry, case_name, spec)
         bound_function = _bind_assessment_function(function, spec.args, spec.kwargs)
-        return Assessment[InputsT, OutputT, MetadataT](spec=spec, function=bound_function)
+        return cls(spec=spec, function=bound_function)
 
     async def execute(self, ctx: ScoringContext[InputsT, OutputT, MetadataT]) -> list[AssessmentDetail]:
         if inspect.iscoroutinefunction(self.function):
-            async_function = cast(AsyncBoundAssessmentFunction[InputsT, OutputT, MetadataT], self.function)
-            results = await async_function(ctx)
+            results = cast(AssessmentFunctionResult, await self.function(ctx))
         else:
-            sync_function = cast(SyncBoundAssessmentFunction[InputsT, OutputT, MetadataT], self.function)
-            results = await anyio.to_thread.run_sync(sync_function, ctx)
+            results = cast(AssessmentFunctionResult, await anyio.to_thread.run_sync(self.function, ctx))
 
         results = _convert_to_mapping(results, scalar_name=self.spec.call)
 
@@ -224,6 +225,9 @@ class Assessment(Generic[InputsT, OutputT, MetadataT]):
     def _validate_against_registry(
         registry: AssessmentRegistry[InputsT, OutputT, MetadataT], case_name: str, spec: AssessmentSpec
     ) -> AssessmentFunction[InputsT, OutputT, MetadataT]:
+        # Note: a lot of this code is duplicated in pydantic_evals.datasets.Dataset.model_json_schema_with_assessments,
+        # but I don't see a good way to refactor/unify it yet. (Feel free to try!)
+
         function = registry.get(spec.call)
         if function is None:
             raise ValueError(
@@ -232,17 +236,21 @@ class Assessment(Generic[InputsT, OutputT, MetadataT]):
 
         signature = inspect.signature(function)
 
-        scoring_context_param = list(signature.parameters.values())[0]
+        scoring_context_param, *other_params = signature.parameters.values()
         type_hints = _typing_extra.get_function_type_hints(function)
-        type_hints.pop(scoring_context_param.name)
+        type_hints.pop(scoring_context_param.name, None)
         type_hints.pop('return', None)
-        for p in signature.parameters.values():
+        for p in other_params:
+            type_hints.setdefault(p.name, Any)
             if p.default is not p.empty:
                 type_hints[p.name] = NotRequired[type_hints[p.name]]
 
         td = TypedDict(function.__name__, type_hints)  # type: ignore
         td.__pydantic_config__ = {'extra': 'forbid'}  # type: ignore
         adapter = TypeAdapter(td)
+
+        # TODO(DavidM): We should cache the call above this point; it only depends on the registry and spec.call
+        #   and may come with non-trivial overhead for large datasets
 
         try:
             # Include `...` as the first argument to account for the scoring_context parameter
@@ -254,20 +262,23 @@ class Assessment(Generic[InputsT, OutputT, MetadataT]):
         try:
             adapter.validate_python(bound_arguments)
         except ValidationError as e:
-            error_message = str(e)
-            error_message = error_message.replace(' for typed-dict', ':')
-            raise ValueError(f'Assessment {spec.call!r} in case {case_name!r} has {error_message}')
+            error_message = str(e).replace(' for typed-dict', ':')
+            raise ValueError(f'Assessment {spec.call!r} in case {case_name!r} has {error_message}') from e
 
         return function
 
 
-_DEFAULT_REGISTRY: dict[str, AssessmentFunction[Any, Any, Any]] = {}
+_DEFAULT_REGISTRY: Final[AssessmentRegistry[Any, Any, Any]] = {}  # Final ensures pyright knows this is a dict
 
 F = TypeVar('F', bound=AssessmentFunction[Any, Any, Any])
 
 
 def assessment(f: F) -> F:
     """Decorator that registers an assessment function in the default registry."""
+    if f.__name__ in _DEFAULT_REGISTRY:
+        raise ValueError(
+            f'An assessment with name {f.__name__!r} is already registered ({_DEFAULT_REGISTRY[f.__name__]})'
+        )
     _DEFAULT_REGISTRY[f.__name__] = f
     return f
 
@@ -294,7 +305,7 @@ def _bind_assessment_function(
     inspect.signature(function).bind(..., *args, **kwargs)
 
     # Decide which wrapper to return based on whether `function` is async.
-    if _is_async(function):
+    if inspect.iscoroutinefunction(function):
 
         @wraps(function)
         async def bound_async_function(ctx: ScoringContext[InputsT, OutputT, MetadataT]) -> AssessmentFunctionResult:
@@ -302,22 +313,9 @@ def _bind_assessment_function(
 
         return bound_async_function
     else:
-        assert _is_sync(function)
 
         @wraps(function)
         def bound_function(ctx: ScoringContext[InputsT, OutputT, MetadataT]) -> AssessmentFunctionResult:
-            return function(ctx, *args, **kwargs)
+            return cast(AssessmentFunctionResult, function(ctx, *args, **kwargs))
 
         return bound_function
-
-
-def _is_async(
-    function: AssessmentFunction[InputsT, OutputT, MetadataT],
-) -> TypeGuard[AsyncAssessmentFunction[InputsT, OutputT, MetadataT]]:
-    return inspect.iscoroutinefunction(function)
-
-
-def _is_sync(
-    function: AssessmentFunction[InputsT, OutputT, MetadataT],
-) -> TypeGuard[SyncAssessmentFunction[InputsT, OutputT, MetadataT]]:
-    return not inspect.iscoroutinefunction(function)

@@ -23,18 +23,14 @@ async def main():
 
     dataset = TimeRangeDataset.from_yaml()
 
-    evaluation = Evaluation(
-        task=infer_time_range,
-        data=dataset.eval_cases(),
-    )
-
-    @evaluation.default_assessment
-    async def handler(ctx: ScoringContext[TimeRangeInputs, TimeRangeResponse]):  # pyright: ignore[reportUnusedFunction]
+    async def assess_case(ctx: ScoringContext[TimeRangeInputs, TimeRangeResponse]):
         result = await judge_time_range_case(inputs=ctx.inputs, output=ctx.output)
         return {
             'is_reasonable': 'yes' if result.pass_ else 'no',
             'accuracy': result.score,
         }
+
+    evaluation = Evaluation(task=infer_time_range, data=dataset.evaluation_rows(), scorers=[assess_case])
 
     report = await evaluation.run(max_concurrency=10)
 

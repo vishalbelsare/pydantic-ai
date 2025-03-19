@@ -29,7 +29,7 @@ else:
 
     logfire._internal.stack_info.NON_USER_CODE_PREFIXES += (str(Path(__file__).parent.absolute()),)
 
-__all__ = ('Evaluation', 'increment_eval_metric')
+__all__ = ('Evaluation', 'increment_eval_metric', 'set_eval_attribute')
 
 _logfire = logfire.Logfire(otel_scope='pydantic-evals')
 
@@ -57,7 +57,7 @@ class Evaluation(Generic[InputsT, OutputT, MetadataT]):
         name: str | None = None,
         task: Callable[[InputsT], Awaitable[OutputT]],
         data: list[EvaluationRow[InputsT, OutputT, MetadataT]] | None = None,
-        scorers: list[Assessment[InputsT, OutputT, MetadataT]] | None = None,
+        scorers: list[BoundAssessmentFunction[InputsT, OutputT, MetadataT]] | None = None,
     ):
         if name is None:
             name = get_unwrapped_function_name(task)
@@ -67,7 +67,9 @@ class Evaluation(Generic[InputsT, OutputT, MetadataT]):
 
         self.data = data or []
         # self.eval_cases: list[EvalCase[InputsT, OutputT, MetadataT]] = [EvalCase(c, scoring) for c in cases or []]
-        self.scorers: list[Assessment[InputsT, OutputT, MetadataT]] = scorers or []
+        self.scorers: list[Assessment[InputsT, OutputT, MetadataT]] = [
+            Assessment[InputsT, OutputT, MetadataT].from_function(f) for f in (scorers or [])
+        ]
 
         self._span: logfire.LogfireSpan = _logfire.span('evaluate {name}', name=self.name)
         self._assessments_by_name: dict[str, list[Assessment[InputsT, OutputT, MetadataT]]] = defaultdict(list)

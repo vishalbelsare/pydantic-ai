@@ -243,12 +243,13 @@ class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid'):
         params = cls._params()
 
         class ClsDatasetRow(DatasetRow[params[0], params[1], params[2]]):
-            assessments: list[Union[tuple(assessment_types)]] = Field(default_factory=list)  # pyright: ignore  # noqa UP007
+            assessments: list[Union[tuple(assessment_types)]] = []  # pyright: ignore  # noqa UP007
 
         ClsDatasetRow.__name__ = cls.__name__ + 'Row'
 
-        class ClsDataset(cls):
-            rows: list[ClsDatasetRow]  # pyright: ignore
+        class ClsDataset(BaseModel, extra='forbid'):
+            rows: list[ClsDatasetRow]
+            default_assessments: list[Union[tuple(assessment_types)]] = []  # pyright: ignore  # noqa UP007
 
         ClsDataset.__name__ = cls.__name__
 

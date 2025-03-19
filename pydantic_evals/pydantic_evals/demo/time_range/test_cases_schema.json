@@ -30,6 +30,7 @@
           "title": "Expected Output"
         },
         "assessments": {
+          "default": [],
           "items": {
             "anyOf": [
               {
@@ -383,6 +384,24 @@
         "$ref": "#/$defs/ClsDatasetRow"
       },
       "title": "Rows",
+      "type": "array"
+    },
+    "default_assessments": {
+      "default": [],
+      "items": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/short_assessment_llm_rubric"
+          },
+          {
+            "$ref": "#/$defs/assessment_llm_rubric"
+          },
+          {
+            "$ref": "#/$defs/short_assessment_is_instance"
+          }
+        ]
+      },
+      "title": "Default Assessments",
       "type": "array"
     }
   },

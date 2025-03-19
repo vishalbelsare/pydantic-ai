@@ -8,6 +8,8 @@ from typing import Any, ClassVar, Generic, Literal, NotRequired, Self, Union
 
 from pydantic._internal import _typing_extra
 
+from ._utils import get_unwrapped_function_name
+
 if sys.version_info < (3, 11):
     from exceptiongroup import ExceptionGroup
 else:
@@ -90,7 +92,7 @@ class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid'):
 
         This provides a generic-type-checking alternative to the `@assessment` decorator.
         """
-        cls._assessment_registry[f.__name__] = f
+        cls._assessment_registry[get_unwrapped_function_name(f)] = f
         return f
 
     def evaluation_rows(self) -> list[EvaluationRow[InputsT, OutputT, MetadataT]]:

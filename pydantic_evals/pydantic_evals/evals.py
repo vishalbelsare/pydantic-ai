@@ -13,7 +13,7 @@ from pydantic_core import to_jsonable_python
 from typing_extensions import TypeVar
 
 from ._utils import get_unwrapped_function_name
-from .assessments.spec import Assessment, AssessmentDetail, AssessmentSpec, BoundAssessmentFunction, ScoringContext
+from .assessments.spec import Assessment, AssessmentDetail, BoundAssessmentFunction, ScoringContext
 from .datasets import EvaluationRow
 from .otel.context_in_memory_span_exporter import context_subtree_spans
 from .otel.span_tree import SpanTree
@@ -92,10 +92,7 @@ class Evaluation(Generic[InputsT, OutputT, MetadataT]):
         def decorator(
             function: BoundAssessmentFunction[InputsT, OutputT, MetadataT],
         ) -> BoundAssessmentFunction[InputsT, OutputT, MetadataT]:
-            spec = AssessmentSpec(call=function.__name__)
-            self._assessments_by_name[name].append(
-                Assessment[InputsT, OutputT, MetadataT](spec=spec, function=function)
-            )
+            self._assessments_by_name[name].append(Assessment[InputsT, OutputT, MetadataT].from_function(function))
             return function
 
         return decorator
@@ -126,8 +123,7 @@ class Evaluation(Generic[InputsT, OutputT, MetadataT]):
         def assess_case(
             function: BoundAssessmentFunction[InputsT, OutputT, MetadataT],
         ) -> BoundAssessmentFunction[InputsT, OutputT, MetadataT]:
-            spec = AssessmentSpec(call=function.__name__)
-            row.assessments.append(Assessment[InputsT, OutputT, MetadataT](spec=spec, function=function))
+            row.assessments.append(Assessment[InputsT, OutputT, MetadataT].from_function(function))
             return function
 
         return assess_case

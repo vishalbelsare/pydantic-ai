@@ -10,7 +10,21 @@ from opentelemetry.sdk.trace import ReadableSpan
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor, SpanExporter, SpanExportResult
 from opentelemetry.trace import ProxyTracerProvider, get_tracer_provider
 
+from .span_tree import SpanTree
+
 _EXPORTER_CONTEXT_ID = ContextVar[str | None]('_EXPORTER_CONTEXT_ID', default=None)
+
+
+@contextmanager
+def context_subtree() -> typing.Iterator[SpanTree]:
+    """Context manager that yields a `SpanTree` containing all spans collected during the context.
+
+    The tree will be empty until the context is exited.
+    """
+    tree = SpanTree()
+    with context_subtree_spans() as spans:
+        yield tree
+    tree.add_spans(spans)
 
 
 @contextmanager

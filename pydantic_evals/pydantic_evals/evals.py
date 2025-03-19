@@ -15,8 +15,7 @@ from typing_extensions import TypeVar
 from ._utils import get_unwrapped_function_name
 from .assessments.spec import Assessment, AssessmentDetail, AssessmentSpec, BoundAssessmentFunction, ScoringContext
 from .datasets import EvaluationRow
-from .otel.context_in_memory_span_exporter import context_subtree_spans
-from .otel.span_tree import SpanTree
+from .otel.context_in_memory_span_exporter import context_subtree
 from .reporting.reports import EvalReport, EvalReportCase, EvalReportCaseAggregate
 
 # while waiting for https://github.com/pydantic/logfire/issues/745
@@ -185,7 +184,7 @@ async def _run_task(
     token = _CURRENT_TASK_RUN.set(task_run)
     try:
         with _logfire.span('execute {task}', task=get_unwrapped_function_name(task)) as task_span:
-            with context_subtree_spans() as finished_spans:
+            with context_subtree() as span_tree:
                 task_output = await task(case.inputs)
     finally:
         _CURRENT_TASK_RUN.reset(token)
@@ -195,12 +194,10 @@ async def _run_task(
     #   otherwise, we don't have a great way to get usage data from arbitrary frameworks.
     #   Ideally we wouldn't need to hard-code the specific logic here, but I'm not sure a great way to expose it to
     #   users. Maybe via an argument of type Callable[[SpanTree], dict[str, int | float]] or similar?
-    for span in finished_spans:
-        attributes = span.attributes
-        assert attributes is not None  # this appears to be guaranteed, despite type-hinting to the contrary
-        if attributes.get('gen_ai.operation.name') == 'chat':
+    for node in span_tree.flattened():
+        if node.attributes.get('gen_ai.operation.name') == 'chat':
             task_run.increment_metric('requests', 1)
-        for k, v in attributes.items():
+        for k, v in node.attributes.items():
             if not isinstance(v, (int, float)):
                 continue
             if k.startswith('gen_ai.usage.details.'):
@@ -215,7 +212,7 @@ async def _run_task(
         expected_output=case.expected_output,
         output=task_output,
         duration=_get_span_duration(task_span),
-        span_tree=SpanTree(finished_spans),
+        span_tree=span_tree,
         attributes=task_run.attributes,
         metrics=task_run.metrics,
     )

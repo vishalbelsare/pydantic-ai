@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import datetime, timedelta, timezone
 from textwrap import indent
 from typing import Any, Callable
 
 from opentelemetry.sdk.trace import ReadableSpan
 from opentelemetry.trace import SpanContext
+from opentelemetry.util.types import AttributeValue
+
+SpanId = int
 
 
 class SpanNode:
@@ -17,7 +21,11 @@ class SpanNode:
         assert self._span.context is not None, f'{span=} has no context'
 
         self.parent: SpanNode | None = None
-        self.children: list[SpanNode] = []
+        self.children_by_id: dict[SpanId, SpanNode] = {}  # note: we rely on insertion order to determine child order
+
+    @property
+    def children(self) -> list[SpanNode]:
+        return list(self.children_by_id.values())
 
     @property
     def context(self) -> SpanContext:
@@ -31,7 +39,7 @@ class SpanNode:
         return self._span.parent
 
     @property
-    def span_id(self) -> int:
+    def span_id(self) -> SpanId:
         """Return the integer span_id from the SpanContext."""
         return self.context.span_id
 
@@ -67,9 +75,14 @@ class SpanNode:
         ns_diff = self._span.end_time - self._span.start_time
         return timedelta(seconds=ns_diff / 1e9)
 
+    @property
+    def attributes(self) -> Mapping[str, AttributeValue]:
+        # TODO: Should expose the non-JSON-serialized versions of attributes with nesting
+        return self._span.attributes or {}
+
     def add_child(self, child: SpanNode) -> None:
         """Attach a child node to this node's list of children."""
-        self.children.append(child)
+        self.children_by_id[child.span_id] = child
         child.parent = self
 
     # -------------------------------------------------------------------------
@@ -226,15 +239,24 @@ class SpanTree:
     You can then search or iterate the tree to make your assertions (using DFS for traversal).
     """
 
-    def __init__(self, spans: list[ReadableSpan]):
-        # Ensure spans are ordered by start_timestamp so that roots and children end up in the right order
-        spans.sort(key=lambda span: span.start_time or 0)
-
-        # Create a node for each finished span
+    def __init__(self, spans: list[ReadableSpan] | None = None):
         self.nodes_by_id: dict[int, SpanNode] = {}
+        self.roots: list[SpanNode] = []
+        if spans:
+            self.add_spans(spans)
+
+    def add_spans(self, spans: list[ReadableSpan]) -> None:
+        """Add a list of spans to the tree, rebuilding the tree structure."""
         for span in spans:
             node = SpanNode(span)
             self.nodes_by_id[node.span_id] = node
+        self._rebuild_tree()
+
+    def _rebuild_tree(self):
+        # Ensure spans are ordered by start_timestamp so that roots and children end up in the right order
+        nodes = list(self.nodes_by_id.values())
+        nodes.sort(key=lambda node: node.start_timestamp or datetime.min)
+        self.nodes_by_id = {node.span_id: node for node in nodes}
 
         # Build the parent/child relationships
         for node in self.nodes_by_id.values():
@@ -244,9 +266,9 @@ class SpanTree:
                 if parent_node is not None:
                     parent_node.add_child(node)
 
-        # A node is "root" if its parent is None
-        # or if its parent's span_id is not in our local set.
-        self.roots: list[SpanNode] = []
+        # Determine the roots
+        # A node is a "root" if its parent is None or if its parent's span_id is not in the current set of spans.
+        self.roots = []
         for node in self.nodes_by_id.values():
             parent_ctx = node.parent_context
             if parent_ctx is None or parent_ctx.span_id not in self.nodes_by_id:

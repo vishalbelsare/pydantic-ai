@@ -309,7 +309,7 @@ class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid', a
 
         class ClsDataset(BaseModel, extra='forbid'):
             rows: list[ClsDatasetRow]
-            default_assessments: list[Union[tuple(assessment_types)]] = []  # pyright: ignore  # noqa UP007
+            assessments: list[Union[tuple(assessment_types)]] = []  # pyright: ignore  # noqa UP007
 
         ClsDataset.__name__ = cls.__name__
 

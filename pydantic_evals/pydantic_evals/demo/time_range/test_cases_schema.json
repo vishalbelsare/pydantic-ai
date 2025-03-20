@@ -386,7 +386,7 @@
       "title": "Rows",
       "type": "array"
     },
-    "default_assessments": {
+    "assessments": {
       "default": [],
       "items": {
         "anyOf": [
@@ -401,7 +401,7 @@
           }
         ]
       },
-      "title": "Default Assessments",
+      "title": "Assessments",
       "type": "array"
     }
   },

@@ -205,6 +205,7 @@ class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid', a
         cls,
         dataset_path: Path | str = DEFAULT_DATASET_PATH,
         schema_path: Path | str | None = None,
+        scorers: Sequence[AssessmentFunction[InputsT, OutputT, MetadataT]] = (),
     ) -> str:
         dataset_path = cls._get_relative_path(dataset_path)
 
@@ -219,7 +220,7 @@ class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid', a
         else:
             schema_path = cls._get_relative_path(schema_path)
 
-        schema_content = to_json(cls.model_json_schema_with_assessments(), indent=2).decode() + '\n'
+        schema_content = to_json(cls.model_json_schema_with_assessments(scorers), indent=2).decode() + '\n'
         if not schema_path.exists() or schema_path.read_text() != schema_content:
             schema_path.write_text(schema_content)
 
@@ -227,7 +228,7 @@ class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid', a
         yaml_language_server_line = f'# yaml-language-server: $schema={schema_ref}'
         if dataset_path.exists():
             try:
-                cls.from_yaml(dataset_path)
+                cls.from_yaml(dataset_path, scorers)
             except ValueError as e:
                 if isinstance(e.__cause__, ValidationError):
                     raise ValueError(
@@ -297,7 +298,11 @@ class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid', a
 
         params = cls._params()
 
-        class ClsDatasetRow(DatasetRow[params[0], params[1], params[2]]):
+        class ClsDatasetRow(BaseModel, extra='forbid'):
+            name: str
+            inputs: params[0]  # pyright: ignore
+            metadata: params[2]  # pyright: ignore
+            expected_output: params[1] | None = None  # pyright: ignore
             assessments: list[Union[tuple(assessment_types)]] = []  # pyright: ignore  # noqa UP007
 
         ClsDatasetRow.__name__ = cls.__name__ + 'Row'

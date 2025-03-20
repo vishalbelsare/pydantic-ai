@@ -51,11 +51,22 @@ async def main():
             tools = await session.list_tools()
             print(len(tools.tools))
             #> 1
-            print(repr(tools.tools[0].name))
-            #> 'run_python_code'
-            print(repr(tools.tools[0].inputSchema))
+            print(tools.tools[0].name)
+            #> run_python_code
+            print(tools.tools[0].inputSchema)
             """
-            {'type': 'object', 'properties': {'python_code': {'type': 'string', 'description': 'Python code to run'}}, 'required': ['python_code'], 'additionalProperties': False, '$schema': 'http://json-schema.org/draft-07/schema#'}
+            {
+                'type': 'object',
+                'properties': {
+                    'python_code': {
+                        'type': 'string',
+                        'description': 'Python code to run',
+                    }
+                },
+                'required': ['python_code'],
+                'additionalProperties': False,
+                '$schema': 'http://json-schema.org/draft-07/schema#',
+            }
             """
             result = await session.call_tool('run_python_code', {'python_code': code})
             print(result.content[0].text)

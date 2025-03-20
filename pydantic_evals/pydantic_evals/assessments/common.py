@@ -2,10 +2,10 @@ from __future__ import annotations as _annotations
 
 from pydantic_ai import models
 
-from .spec import AssessmentResult, ScoringContext, assessment
+from .context import ScoringContext
+from .spec import AssessmentResult
 
 
-@assessment
 async def llm_rubric(
     ctx: ScoringContext[object, object, object],
     rubric: str,
@@ -24,7 +24,6 @@ async def llm_rubric(
     return AssessmentResult(value=grading_output.pass_, reason=grading_output.reason)
 
 
-@assessment
 async def is_instance(ctx: ScoringContext[object, object, object], type_name: str) -> AssessmentResult:
     """Check if the output is an instance of a type with the given name."""
     output = ctx.output

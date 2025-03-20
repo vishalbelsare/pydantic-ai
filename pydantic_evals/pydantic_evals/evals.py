@@ -13,8 +13,9 @@ from pydantic_core import to_jsonable_python
 from typing_extensions import TypeVar
 
 from ._utils import get_unwrapped_function_name
-from .assessments.spec import Assessment, AssessmentDetail, BoundAssessmentFunction, ScoringContext
-from .datasets import EvaluationRow
+from .assessments.context import ScoringContext
+from .assessments.spec import Assessment, AssessmentDetail, BoundAssessmentFunction
+from .datasets import DatasetRow
 from .otel.context_in_memory_span_exporter import context_subtree
 from .reporting.reports import EvalReport, EvalReportCase, EvalReportCaseAggregate
 
@@ -47,16 +48,16 @@ class Evaluation(Generic[InputsT, OutputT, MetadataT]):
 
     name: str
     task: Callable[[InputsT], Awaitable[OutputT]]
-    cases: list[EvaluationRow[InputsT, OutputT, MetadataT]] = field(repr=False)
-    scorers: list[Assessment[InputsT, OutputT, MetadataT]]
+    cases: list[DatasetRow[InputsT, OutputT, MetadataT]] = field(repr=False)
+    assessments: list[Assessment[InputsT, OutputT, MetadataT]]
 
     def __init__(
         self,
         *,
         name: str | None = None,
         task: Callable[[InputsT], Awaitable[OutputT]],
-        cases: Sequence[EvaluationRow[InputsT, OutputT, MetadataT]] = (),
-        scorers: Sequence[BoundAssessmentFunction[InputsT, OutputT, MetadataT]] = (),
+        cases: Sequence[DatasetRow[InputsT, OutputT, MetadataT]] = (),
+        assessments: Sequence[BoundAssessmentFunction[InputsT, OutputT, MetadataT]] = (),
     ):
         if name is None:
             name = get_unwrapped_function_name(task)
@@ -65,8 +66,7 @@ class Evaluation(Generic[InputsT, OutputT, MetadataT]):
         self.name = name
 
         self.cases = list(cases)
-        # self.eval_cases: list[EvalCase[InputsT, OutputT, MetadataT]] = [EvalCase(c, scoring) for c in cases or []]
-        self.scorers = [Assessment[InputsT, OutputT, MetadataT].from_function(f) for f in scorers]
+        self.assessments = [Assessment[InputsT, OutputT, MetadataT].from_function(f) for f in assessments]
 
         self._span: logfire.LogfireSpan = _logfire.span('evaluate {name}', name=self.name)
         self._assessments_by_name: dict[str, list[Assessment[InputsT, OutputT, MetadataT]]] = defaultdict(list)
@@ -75,7 +75,7 @@ class Evaluation(Generic[InputsT, OutputT, MetadataT]):
         self, function: BoundAssessmentFunction[InputsT, OutputT, MetadataT], /
     ) -> BoundAssessmentFunction[InputsT, OutputT, MetadataT]:
         """A decorator that applies the decorated function as an assessment to all cases in the evaluation."""
-        self.scorers.append(Assessment[InputsT, OutputT, MetadataT].from_function(function))
+        self.assessments.append(Assessment[InputsT, OutputT, MetadataT].from_function(function))
         return function
 
     def case_assessment(
@@ -102,7 +102,7 @@ class Evaluation(Generic[InputsT, OutputT, MetadataT]):
         inputs: InputsT,
         metadata: MetadataT,
         expected_output: OutputT | None = None,
-        assessments: list[Assessment[InputsT, OutputT, MetadataT]] | None = None,
+        assessments: Sequence[Assessment[InputsT, OutputT, MetadataT]] = (),
     ) -> Callable[
         [BoundAssessmentFunction[InputsT, OutputT, MetadataT]], BoundAssessmentFunction[InputsT, OutputT, MetadataT]
     ]:
@@ -110,13 +110,13 @@ class Evaluation(Generic[InputsT, OutputT, MetadataT]):
 
         Can be used as a decorator if you want to add a case-specific assessment.
         """
-        row = EvaluationRow[InputsT, OutputT, MetadataT](
+        row = DatasetRow[InputsT, OutputT, MetadataT](
             name=name,
             inputs=inputs,
             metadata=metadata,
             expected_output=expected_output,
-            assessments=assessments or [],
         )
+        row.assessments = list(assessments)
         self.cases.append(row)
 
         def assess_case(
@@ -131,9 +131,9 @@ class Evaluation(Generic[InputsT, OutputT, MetadataT]):
         with self._span:
             limiter = asyncio.Semaphore(max_concurrency) if max_concurrency is not None else nullcontext()
 
-            async def _handle_case(case: EvaluationRow[InputsT, OutputT, MetadataT]) -> EvalReportCase:
+            async def _handle_case(case: DatasetRow[InputsT, OutputT, MetadataT]) -> EvalReportCase:
                 async with limiter:
-                    assessments = self.scorers + self._assessments_by_name.get(case.name, [])
+                    assessments = self.assessments + self._assessments_by_name.get(case.name, [])
                     return await run_case(self.task, case, assessments)
 
             async_tasks: list[asyncio.Task[EvalReportCase]] = []
@@ -170,7 +170,7 @@ class _TaskRun:
 
 
 async def _run_task(
-    task: Callable[[InputsT], Awaitable[OutputT]], case: EvaluationRow[InputsT, OutputT, MetadataT]
+    task: Callable[[InputsT], Awaitable[OutputT]], case: DatasetRow[InputsT, OutputT, MetadataT]
 ) -> ScoringContext[InputsT, OutputT, MetadataT]:
     task_run = _TaskRun()
     if _CURRENT_TASK_RUN.get() is not None:
@@ -214,7 +214,7 @@ async def _run_task(
 
 async def run_case(
     task: Callable[[InputsT], Awaitable[OutputT]],
-    case: EvaluationRow[InputsT, OutputT, MetadataT],
+    case: DatasetRow[InputsT, OutputT, MetadataT],
     extra_assessments: list[Assessment[InputsT, OutputT, MetadataT]],
 ) -> EvalReportCase:
     # dataset_row = case.dataset_row

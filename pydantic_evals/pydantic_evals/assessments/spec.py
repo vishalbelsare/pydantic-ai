@@ -4,7 +4,7 @@ import inspect
 from collections.abc import Awaitable, Mapping
 from dataclasses import dataclass
 from functools import wraps
-from typing import Any, Callable, Concatenate, Final, Generic, NotRequired, cast
+from typing import Any, Callable, Concatenate, Generic, NotRequired, cast
 
 import anyio.to_thread
 from pydantic import (
@@ -23,28 +23,11 @@ from pydantic_core.core_schema import SerializerFunctionWrapHandler
 from typing_extensions import Self, TypedDict, TypeVar
 
 from .._utils import get_unwrapped_function_name
-from ..otel.span_tree import SpanTree
+from .context import ScoringContext
 
 InputsT = TypeVar('InputsT', default=dict[str, Any])
 OutputT = TypeVar('OutputT', default=dict[str, Any])
 MetadataT = TypeVar('MetadataT', default=dict[str, Any])
-
-
-@dataclass
-class ScoringContext(Generic[InputsT, OutputT, MetadataT]):
-    """Context for scoring an evaluation case."""
-
-    name: str
-    inputs: InputsT
-    metadata: MetadataT
-    expected_output: OutputT | None
-
-    output: OutputT
-    duration: float
-    span_tree: SpanTree
-
-    attributes: dict[str, Any]
-    metrics: dict[str, int | float]
 
 
 class AssessmentSpec(BaseModel):
@@ -199,7 +182,7 @@ class Assessment(Generic[InputsT, OutputT, MetadataT]):
 
     @classmethod
     def from_registry(
-        cls, registry: AssessmentRegistry[InputsT, OutputT, MetadataT], case_name: str, spec: AssessmentSpec
+        cls, registry: AssessmentRegistry[InputsT, OutputT, MetadataT], case_name: str | None, spec: AssessmentSpec
     ) -> Self:
         function = Assessment[InputsT, OutputT, MetadataT]._validate_against_registry(registry, case_name, spec)
         bound_function = _bind_assessment_function(function, spec.args, spec.kwargs)
@@ -223,7 +206,7 @@ class Assessment(Generic[InputsT, OutputT, MetadataT]):
 
     @staticmethod
     def _validate_against_registry(
-        registry: AssessmentRegistry[InputsT, OutputT, MetadataT], case_name: str, spec: AssessmentSpec
+        registry: AssessmentRegistry[InputsT, OutputT, MetadataT], case_name: str | None, spec: AssessmentSpec
     ) -> AssessmentFunction[InputsT, OutputT, MetadataT]:
         # Note: a lot of this code is duplicated in pydantic_evals.datasets.Dataset.model_json_schema_with_assessments,
         # but I don't see a good way to refactor/unify it yet. (Feel free to try!)
@@ -257,7 +240,8 @@ class Assessment(Generic[InputsT, OutputT, MetadataT]):
             bound_arguments = signature.bind(..., *spec.args, **spec.kwargs).arguments
             bound_arguments.pop(scoring_context_param.name)
         except TypeError as e:
-            raise ValueError(f'Assessment {spec.call!r} in case {case_name!r} failed to bind arguments: {e}')
+            case_detail = f'case {case_name!r}' if case_name is not None else 'dataset'
+            raise ValueError(f'Failed to bind arguments for {case_detail} assessment {spec.call!r}: {e}')
 
         try:
             adapter.validate_python(bound_arguments)
@@ -266,26 +250,6 @@ class Assessment(Generic[InputsT, OutputT, MetadataT]):
             raise ValueError(f'Assessment {spec.call!r} in case {case_name!r} has {error_message}') from e
 
         return function
-
-
-_DEFAULT_REGISTRY: Final[AssessmentRegistry[Any, Any, Any]] = {}  # Final ensures pyright knows this is a dict
-
-F = TypeVar('F', bound=AssessmentFunction[Any, Any, Any])
-
-
-def assessment(f: F) -> F:
-    """Decorator that registers an assessment function in the default registry."""
-    if f.__name__ in _DEFAULT_REGISTRY:
-        raise ValueError(
-            f'An assessment with name {f.__name__!r} is already registered ({_DEFAULT_REGISTRY[f.__name__]})'
-        )
-    _DEFAULT_REGISTRY[f.__name__] = f
-    return f
-
-
-def get_default_registry() -> AssessmentRegistry:
-    """Get the default assessment registry."""
-    return _DEFAULT_REGISTRY
 
 
 def _bind_assessment_function(

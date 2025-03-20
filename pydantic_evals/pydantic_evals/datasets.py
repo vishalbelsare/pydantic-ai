@@ -296,13 +296,13 @@ class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid', a
             # Note: We might want to also generate the JSON schema for the format `call: '...', args: [...], kwargs: {...}`.
             #   It would be a bit complex to implement but not impossible.
 
-        params = cls._params()
+        in_type, out_type, meta_type = cls._params()
 
         class ClsDatasetRow(BaseModel, extra='forbid'):
             name: str
-            inputs: params[0]  # pyright: ignore
-            metadata: params[2]  # pyright: ignore
-            expected_output: params[1] | None = None  # pyright: ignore
+            inputs: in_type
+            metadata: meta_type
+            expected_output: out_type | None = None
             assessments: list[Union[tuple(assessment_types)]] = []  # pyright: ignore  # noqa UP007
 
         ClsDatasetRow.__name__ = cls.__name__ + 'Row'

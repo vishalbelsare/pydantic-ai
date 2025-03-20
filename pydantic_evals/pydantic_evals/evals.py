@@ -102,30 +102,19 @@ class Evaluation(Generic[InputsT, OutputT, MetadataT]):
         inputs: InputsT,
         metadata: MetadataT,
         expected_output: OutputT | None = None,
-        assessments: Sequence[Assessment[InputsT, OutputT, MetadataT]] = (),
-    ) -> Callable[
-        [BoundAssessmentFunction[InputsT, OutputT, MetadataT]], BoundAssessmentFunction[InputsT, OutputT, MetadataT]
-    ]:
-        """Adds a case to the evaluation.
-
-        Can be used as a decorator if you want to add a case-specific assessment.
-        """
+        assessments: Sequence[
+            BoundAssessmentFunction[InputsT, OutputT, MetadataT] | Assessment[InputsT, OutputT, MetadataT]
+        ] = (),
+    ) -> None:
+        """Adds a case to the evaluation."""
         row = DatasetRow[InputsT, OutputT, MetadataT](
             name=name,
             inputs=inputs,
             metadata=metadata,
             expected_output=expected_output,
+            assessments=assessments,
         )
-        row.assessments = list(assessments)
         self.cases.append(row)
-
-        def assess_case(
-            function: BoundAssessmentFunction[InputsT, OutputT, MetadataT],
-        ) -> BoundAssessmentFunction[InputsT, OutputT, MetadataT]:
-            row.assessments.append(Assessment[InputsT, OutputT, MetadataT].from_function(function))
-            return function
-
-        return assess_case
 
     async def run(self, max_concurrency: int | None = None) -> EvalReport:
         with self._span:

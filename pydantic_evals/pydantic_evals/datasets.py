@@ -86,13 +86,18 @@ class DatasetRow(Generic[InputsT, OutputT, MetadataT]):
         inputs: InputsT,
         metadata: MetadataT,
         expected_output: OutputT | None = None,
-        assessments: Sequence[BoundAssessmentFunction[InputsT, OutputT, MetadataT]] = (),
+        assessments: Sequence[
+            BoundAssessmentFunction[InputsT, OutputT, MetadataT] | Assessment[InputsT, OutputT, MetadataT]
+        ] = (),
     ):
         self.name = name
         self.inputs = inputs
         self.metadata = metadata
         self.expected_output = expected_output
-        self.assessments = [Assessment[InputsT, OutputT, MetadataT].from_function(a) for a in assessments]
+        self.assessments = [
+            a if isinstance(a, Assessment) else Assessment[InputsT, OutputT, MetadataT].from_function(a)
+            for a in assessments
+        ]
 
 
 class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid', arbitrary_types_allowed=True):

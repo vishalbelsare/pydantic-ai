@@ -4,7 +4,7 @@ from typing import Any
 
 from logfire.experimental.query_client import AsyncLogfireQueryClient
 from pydantic import TypeAdapter
-from pydantic_evals.datasets import Dataset, SerializedDatasetRow
+from pydantic_evals.dataset import Dataset, DatasetRow
 
 from demo.step_4_evaluate.app_v4_agent_updated import TimeRangeInputs, TimeRangeResponse
 from demo.util.tokens import get_app_read_token
@@ -42,14 +42,12 @@ response_adapter = TypeAdapter[TimeRangeResponse](TimeRangeResponse)
 
 def get_dataset_rows(
     name_prefix: str, data: list[dict[str, Any]]
-) -> list[SerializedDatasetRow[TimeRangeInputs, TimeRangeResponse, dict[str, Any]]]:
+) -> list[DatasetRow[TimeRangeInputs, TimeRangeResponse, dict[str, Any]]]:
     dataset_rows: list[
-        SerializedDatasetRow[TimeRangeInputs, TimeRangeResponse, dict[str, Any]]
+        DatasetRow[TimeRangeInputs, TimeRangeResponse, dict[str, Any]]
     ] = []
     for i, row in enumerate(data, 1):
-        dataset_row = SerializedDatasetRow[
-            TimeRangeInputs, TimeRangeResponse, dict[str, Any]
-        ](
+        dataset_row = DatasetRow[TimeRangeInputs, TimeRangeResponse, dict[str, Any]](
             name=f"{name_prefix}_{i}",
             inputs=TimeRangeInputs(prompt=row["prompt"], now=row["now"]),
             metadata={},
@@ -65,14 +63,16 @@ class TimeRangeDataset(Dataset[TimeRangeInputs, TimeRangeResponse, dict[str, Any
 
 async def main():
     client: AsyncLogfireQueryClient
-    async with AsyncLogfireQueryClient(read_token=read_token) as client:
+    async with AsyncLogfireQueryClient(
+        read_token=read_token, base_url="http://localhost:8000"
+    ) as client:
         successes = await client.query_json_rows(successes_query)
         success_rows = get_dataset_rows("success", successes["rows"])
 
         errors = await client.query_json_rows(errors_query)
         error_rows = get_dataset_rows("error", errors["rows"])
 
-    dataset = TimeRangeDataset(rows=success_rows + error_rows)
+    dataset = TimeRangeDataset(data=success_rows + error_rows, assessments=[])
     # dataset.generate_dataset_files()
     dataset.save(Path(__file__).parent / "retrieved_test_cases.yaml")
 

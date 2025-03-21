@@ -67,7 +67,7 @@ class AssessmentSpec(BaseModel):
         # # In this case, use the standard "long-form" serialization
         # if len(self.args) > 1:
         #     return handler(self)
-        # 
+        #
         # # TODO: Go back to using this code for yaml:
         # # Note: The rest of this logic needs to be kept in sync with the definition of _SerializedAssessmentSpec
         # # In this case, use the shortest compatible form of serialization:

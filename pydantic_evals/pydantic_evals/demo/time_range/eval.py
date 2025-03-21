@@ -20,8 +20,6 @@ async def judge_time_range_case(inputs: TimeRangeInputs, output: TimeRangeRespon
 
 async def main():
     """TODO: Task: Convert this pydantic_evals.demo package into docs."""
-
-
     logfire.configure(
         token='pylf_v1_local_2PPcXqKVdwh4tSLRKtd9797jb8fc0vVZHbTh8V3thPh7',
         send_to_logfire='if-token-present',

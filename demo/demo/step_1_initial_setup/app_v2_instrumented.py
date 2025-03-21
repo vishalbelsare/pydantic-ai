@@ -14,6 +14,7 @@ logfire.configure(
     environment="prod",
     service_name="app",
     service_version="v2",
+    advanced=logfire.AdvancedOptions(base_url="http://localhost:8000"),
 )
 
 

@@ -31,6 +31,7 @@ async def is_instance(ctx: ScoringContext[object, object, object], type_name: st
         if cls.__name__ == type_name or cls.__qualname__ == type_name:
             return AssessmentResult(value=True)
 
-    return AssessmentResult(
-        value=False, reason=f'output is of type {type(output).__name__} ({type(output).__qualname__})'
-    )
+    reason = f'output is of type {type(output).__name__}'
+    if type(output).__qualname__ != type(output).__name__:
+        reason += f' (qualname: {type(output).__qualname__})'
+    return AssessmentResult(value=False, reason=reason)

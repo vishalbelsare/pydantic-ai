@@ -64,14 +64,14 @@ class _DatasetRowModel(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='f
 class _DatasetModel(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid'):
     """A dataset of test cases, each consisting of input, expected output, and metadata."""
 
-    rows: list[_DatasetRowModel[InputsT, OutputT, MetadataT]]
+    data: list[_DatasetRowModel[InputsT, OutputT, MetadataT]]
     assessments: list[AssessmentSpec] = Field(default_factory=list)
 
     def to_dataset(
         self, registry: dict[str, AssessmentFunction[Any, Any, Any]]
     ) -> Dataset[InputsT, OutputT, MetadataT]:
         rows: list[DatasetRow[InputsT, OutputT, MetadataT]] = []
-        for row_model in self.rows:
+        for row_model in self.data:
             row = DatasetRow[InputsT, OutputT, MetadataT](
                 name=row_model.name,
                 inputs=row_model.inputs,
@@ -152,7 +152,7 @@ class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid', a
 
             async def _handle_case(case: DatasetRow[InputsT, OutputT, MetadataT]) -> EvalReportCase:
                 async with limiter:
-                    return await _run_task_and_assessments(task, case, self.assessments + case.assessments)
+                    return await _run_task_and_assessments(task, case, self.assessments)
 
             async_tasks: list[asyncio.Task[EvalReportCase]] = []
             async with asyncio.TaskGroup() as group:
@@ -227,6 +227,10 @@ class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid', a
     # TODO: Task: Always save a schema file when saving the dataset
     def save(self, path: Path | str = DEFAULT_DATASET_PATH, schema_ref: str | None = None) -> None:
         path = self._get_relative_path(path)
+        if path.exists():
+            first_line = path.read_text().split('\n', 1)[0]
+            if first_line.startswith('# yaml-language-server: $schema='):
+                schema_ref = first_line.split('=', 1)[1]
         content = yaml.dump(to_jsonable_python(self), sort_keys=False)
         if schema_ref is not None:
             content = _ensure_yaml_language_server_line(content, schema_ref)
@@ -266,7 +270,7 @@ class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid', a
                 continue
             dataset_assessments.append(dataset_assessment)
 
-        for row in dataset_model.rows:
+        for row in dataset_model.data:
             assessments: list[Assessment[Any, Any, Any]] = []
             for spec in row.assessments:
                 try:
@@ -305,7 +309,7 @@ class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid', a
                 if first_line.startswith('# yaml-language-server: $schema='):
                     schema_path = (dataset_path.parent / first_line.split('=', 1)[1]).resolve()
             if schema_path is None:
-                schema_path = cls._get_schema_path(dataset_path.parent)
+                schema_path = cls._get_schema_path(dataset_path)
         else:
             schema_path = cls._get_relative_path(schema_path)
 
@@ -397,7 +401,7 @@ class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid', a
         ClsDatasetRow.__name__ = cls.__name__ + 'Row'
 
         class ClsDataset(BaseModel, extra='forbid'):
-            rows: list[ClsDatasetRow]
+            data: list[ClsDatasetRow]
             assessments: list[Union[tuple(assessment_types)]] = []  # pyright: ignore  # noqa UP007
 
         ClsDataset.__name__ = cls.__name__
@@ -590,7 +594,7 @@ async def _run_task(
 async def _run_task_and_assessments(
     task: Callable[[InputsT], Awaitable[OutputT]],
     case: DatasetRow[InputsT, OutputT, MetadataT],
-    extra_assessments: list[Assessment[InputsT, OutputT, MetadataT]],
+    dataset_assessments: list[Assessment[InputsT, OutputT, MetadataT]],
 ) -> EvalReportCase:
     with _logfire.span(
         '{task_name}: {case_name}',
@@ -606,7 +610,7 @@ async def _run_task_and_assessments(
         case_span.set_attribute('metrics', scoring_context.metrics)
         case_span.set_attribute('attributes', scoring_context.attributes)
 
-        assessments = case.assessments + extra_assessments
+        assessments = case.assessments + dataset_assessments
         assessment_details: list[AssessmentDetail] = []
         if assessments:
             async with asyncio.TaskGroup() as tg:

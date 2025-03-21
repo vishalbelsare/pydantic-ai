@@ -4,6 +4,7 @@ from typing import Any
 
 from logfire.experimental.query_client import AsyncLogfireQueryClient
 from pydantic import TypeAdapter
+from pydantic_evals.assessments.common import is_instance, llm_rubric
 from pydantic_evals.dataset import Dataset, DatasetRow
 
 from demo.step_4_evaluate.app_v4_agent_updated import TimeRangeInputs, TimeRangeResponse
@@ -73,8 +74,9 @@ async def main():
         error_rows = get_dataset_rows("error", errors["rows"])
 
     dataset = TimeRangeDataset(data=success_rows + error_rows, assessments=[])
-    # dataset.generate_dataset_files()
-    dataset.save(Path(__file__).parent / "retrieved_test_cases.yaml")
+    dataset_path = Path(__file__).parent / "retrieved_test_cases.yaml"
+    dataset.generate_dataset_files(dataset_path, scorers=(llm_rubric, is_instance))
+    dataset.save(dataset_path)
 
 
 asyncio.run(main())

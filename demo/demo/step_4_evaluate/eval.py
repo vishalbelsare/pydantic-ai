@@ -2,6 +2,7 @@ from pathlib import Path
 from typing import Any
 
 import logfire
+from pydantic_evals.assessments.common import is_instance, llm_rubric
 from pydantic_evals.assessments.context import ScoringContext
 from pydantic_evals.assessments.llm_as_a_judge import GradingOutput, judge_input_output
 from pydantic_evals.dataset import Dataset
@@ -37,7 +38,8 @@ async def judge_time_range_case(
 
 async def main():
     dataset = Dataset[TimeRangeInputs, TimeRangeResponse, dict[str, Any]].from_yaml(
-        Path(__file__).parent / "retrieved_test_cases.yaml"
+        Path(__file__).parent / "retrieved_test_cases.yaml",
+        scorers=[llm_rubric, is_instance],
     )
 
     async def handler(ctx: ScoringContext[TimeRangeInputs, TimeRangeResponse]):

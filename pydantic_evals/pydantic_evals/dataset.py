@@ -13,11 +13,13 @@ from typing import Any, Callable, Generic, Literal, NotRequired, Self, Union
 
 from pydantic._internal import _typing_extra
 
+from pydantic_graph import _utils
+
 from ._utils import get_unwrapped_function_name
-from .assessments.context import ScoringContext
-from .assessments.spec import AssessmentDetail
+from .evaluators.context import EvaluatorContext
+from .evaluators.spec import SourcedEvaluatorOutput
 from .otel.context_in_memory_span_exporter import context_subtree
-from .reporting.reports import EvalReport, EvalReportCase, EvalReportCaseAggregate
+from .reporting.reports import EvaluationReport, ReportCase, ReportCaseAggregate
 
 if sys.version_info < (3, 11):
     from exceptiongroup import ExceptionGroup
@@ -30,7 +32,7 @@ from pydantic import BaseModel, Field, ValidationError
 from pydantic_core import to_json, to_jsonable_python
 from typing_extensions import TypedDict, TypeVar
 
-from .assessments.spec import Assessment, AssessmentFunction, AssessmentSpec, BoundAssessmentFunction
+from .evaluators.spec import BoundEvaluatorFunction, Evaluator, EvaluatorFunction, EvaluatorSpec
 
 # while waiting for https://github.com/pydantic/logfire/issues/745
 try:
@@ -45,125 +47,113 @@ else:
 _logfire = logfire.Logfire(otel_scope='pydantic-evals')
 
 InputsT = TypeVar('InputsT', default=dict[str, Any])
-OutputT = TypeVar('OutputT', default=dict[str, Any])
-MetadataT = TypeVar('MetadataT', default=dict[str, Any])
+OutputT = TypeVar('OutputT', default=dict[str, Any] | None)
+MetadataT = TypeVar('MetadataT', default=dict[str, Any] | None)
 
 DEFAULT_DATASET_PATH = './test_cases.yaml'
 
 
-class _DatasetRowModel(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid'):
+class _CaseModel(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid'):
     """A single row of a "dataset", consisting of input, expected output, and metadata."""
 
     name: str
     inputs: InputsT
     metadata: MetadataT
     expected_output: OutputT | None = None
-    assessments: list[AssessmentSpec] = Field(default_factory=list)
+    evaluators: list[EvaluatorSpec] = Field(default_factory=list)
 
 
 class _DatasetModel(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid'):
     """A dataset of test cases, each consisting of input, expected output, and metadata."""
 
-    data: list[_DatasetRowModel[InputsT, OutputT, MetadataT]]
-    assessments: list[AssessmentSpec] = Field(default_factory=list)
-
-    def to_dataset(
-        self, registry: dict[str, AssessmentFunction[Any, Any, Any]]
-    ) -> Dataset[InputsT, OutputT, MetadataT]:
-        rows: list[DatasetRow[InputsT, OutputT, MetadataT]] = []
-        for row_model in self.data:
-            row = DatasetRow[InputsT, OutputT, MetadataT](
-                name=row_model.name,
-                inputs=row_model.inputs,
-                metadata=row_model.metadata,
-                expected_output=row_model.expected_output,
-            )
-            row.assessments = [
-                Assessment[InputsT, OutputT, MetadataT].from_registry(registry, row_model.name, spec)
-                for spec in row_model.assessments
-            ]
-            rows.append(row)
-        dataset = Dataset[InputsT, OutputT, MetadataT](data=rows)
-        dataset.assessments = [
-            Assessment[InputsT, OutputT, MetadataT].from_registry(registry, None, spec) for spec in self.assessments
-        ]
-        return dataset
+    cases: list[_CaseModel[InputsT, OutputT, MetadataT]]
+    evaluators: list[EvaluatorSpec] = Field(default_factory=list)
 
 
 @dataclass(init=False)
-class DatasetRow(Generic[InputsT, OutputT, MetadataT]):
+class Case(Generic[InputsT, OutputT, MetadataT]):
     """A single row of a "dataset", consisting of input, expected output, and metadata."""
 
     name: str
     inputs: InputsT
     metadata: MetadataT
     expected_output: OutputT | None
-    assessments: list[Assessment[InputsT, OutputT, MetadataT]]
+    evaluators: list[Evaluator[InputsT, OutputT, MetadataT]]
+
+    _UNSET_NAME = '<unset>'
 
     def __init__(
         self,
-        name: str,
+        *,
+        name: str | None = None,
         inputs: InputsT,
-        metadata: MetadataT,
+        metadata: MetadataT = None,
         expected_output: OutputT | None = None,
-        assessments: Sequence[
-            BoundAssessmentFunction[InputsT, OutputT, MetadataT] | Assessment[InputsT, OutputT, MetadataT]
+        evaluators: Sequence[
+            BoundEvaluatorFunction[InputsT, OutputT, MetadataT] | Evaluator[InputsT, OutputT, MetadataT]
         ] = (),
     ):
-        self.name = name
+        self.name = name or self._UNSET_NAME  # TODO: Need to not require a case name..?
         self.inputs = inputs
         self.metadata = metadata
         self.expected_output = expected_output
-        self.assessments = [
-            a if isinstance(a, Assessment) else Assessment[InputsT, OutputT, MetadataT].from_function(a)
-            for a in assessments
+        self.evaluators = [
+            e if isinstance(e, Evaluator) else Evaluator[InputsT, OutputT, MetadataT].from_function(e)
+            for e in evaluators
         ]
 
 
 class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid', arbitrary_types_allowed=True):
     """A dataset of test cases, each consisting of input, expected output, and metadata."""
 
-    data: list[DatasetRow[InputsT, OutputT, MetadataT]]
-    assessments: list[Assessment[InputsT, OutputT, MetadataT]]
+    cases: list[Case[InputsT, OutputT, MetadataT]]
+    evaluators: list[Evaluator[InputsT, OutputT, MetadataT]]
 
     def __init__(
         self,
         *,
-        data: Sequence[DatasetRow[InputsT, OutputT, MetadataT]] = (),
-        assessments: Sequence[
-            BoundAssessmentFunction[InputsT, OutputT, MetadataT] | Assessment[InputsT, OutputT, MetadataT]
+        cases: Sequence[Case[InputsT, OutputT, MetadataT]] = (),
+        evaluators: Sequence[
+            BoundEvaluatorFunction[InputsT, OutputT, MetadataT] | Evaluator[InputsT, OutputT, MetadataT]
         ] = (),
     ):
-        super().__init__(data=data, assessments=assessments)
-        self.data = list(data)
-        self.assessments = [
-            a if isinstance(a, Assessment) else Assessment[InputsT, OutputT, MetadataT].from_function(a)
-            for a in assessments
+        super().__init__(cases=cases, evaluators=evaluators)
+        self.cases = list(cases)
+        self.evaluators = [
+            a if isinstance(a, Evaluator) else Evaluator[InputsT, OutputT, MetadataT].from_function(a)
+            for a in evaluators
         ]
+
+    def evaluate_sync(
+        self, task: Callable[[InputsT], Awaitable[OutputT]], name: str | None = None, max_concurrency: int | None = None
+    ) -> EvaluationReport:
+        return _utils.get_event_loop().run_until_complete(
+            self.evaluate(task, name=name, max_concurrency=max_concurrency)
+        )
 
     async def evaluate(
         self, task: Callable[[InputsT], Awaitable[OutputT]], name: str | None = None, max_concurrency: int | None = None
-    ) -> EvalReport:
+    ) -> EvaluationReport:
         """Evaluates the test cases in the dataset using the given task."""
         name = name or get_unwrapped_function_name(task)
 
         limiter = asyncio.Semaphore(max_concurrency) if max_concurrency is not None else nullcontext()
         with _logfire.span('evaluate {name}', name=name) as eval_span:
 
-            async def _handle_case(case: DatasetRow[InputsT, OutputT, MetadataT]) -> EvalReportCase:
+            async def _handle_case(case: Case[InputsT, OutputT, MetadataT]) -> ReportCase:
                 async with limiter:
-                    return await _run_task_and_assessments(task, case, self.assessments)
+                    return await _run_task_and_evaluators(task, case, self.evaluators)
 
-            async_tasks: list[asyncio.Task[EvalReportCase]] = []
+            async_tasks: list[asyncio.Task[ReportCase]] = []
             async with asyncio.TaskGroup() as group:
-                for case in self.data:
+                for case in self.cases:
                     async_tasks.append(group.create_task(_handle_case(case), name=case.name))
 
-            report = EvalReport(name=name, cases=[x.result() for x in async_tasks])
+            report = EvaluationReport(name=name, cases=[x.result() for x in async_tasks])
             # TODO(DavidM): This attribute will be too big in general; remove it once we can use child spans in details panel:
             eval_span.set_attribute('cases', report.cases)
             # TODO(DavidM): Remove this 'averages' attribute once we compute it in the details panel
-            eval_span.set_attribute('averages', EvalReportCaseAggregate.average(report.cases))
+            eval_span.set_attribute('averages', ReportCaseAggregate.average(report.cases))
         return report
 
     def add_case(
@@ -172,40 +162,40 @@ class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid', a
         inputs: InputsT,
         metadata: MetadataT,
         expected_output: OutputT | None = None,
-        assessments: Sequence[
-            BoundAssessmentFunction[InputsT, OutputT, MetadataT] | Assessment[InputsT, OutputT, MetadataT]
+        evaluators: Sequence[
+            BoundEvaluatorFunction[InputsT, OutputT, MetadataT] | Evaluator[InputsT, OutputT, MetadataT]
         ] = (),
     ) -> None:
         """Adds a case to the evaluation."""
-        row = DatasetRow[InputsT, OutputT, MetadataT](
+        case = Case[InputsT, OutputT, MetadataT](
             name=name,
             inputs=inputs,
             metadata=metadata,
             expected_output=expected_output,
-            assessments=assessments,
+            evaluators=evaluators,
         )
-        self.data.append(row)
+        self.cases.append(case)
 
-    def add_assessment(
+    def add_evaluator(
         self,
-        assessment: BoundAssessmentFunction[InputsT, OutputT, MetadataT] | Assessment[InputsT, OutputT, MetadataT],
+        evaluator: BoundEvaluatorFunction[InputsT, OutputT, MetadataT] | Evaluator[InputsT, OutputT, MetadataT],
         case_name: str | None = None,
     ) -> None:
-        assessment = (
-            assessment
-            if isinstance(assessment, Assessment)
-            else Assessment[InputsT, OutputT, MetadataT].from_function(assessment)
+        evaluator = (
+            evaluator
+            if isinstance(evaluator, Evaluator)
+            else Evaluator[InputsT, OutputT, MetadataT].from_function(evaluator)
         )
         if case_name is None:
-            # Add the assessment to the dataset itself
-            self.assessments.append(assessment)
+            # Add the evaluator to the dataset itself
+            self.evaluators.append(evaluator)
             return
 
-        # Add the assessment to rows with the given name (generally there should only be one), but error if none found
+        # Add the evaluator to rows with the given name (generally there should only be one), but error if none found
         added = False
-        for row in self.data:
-            if row.name == case_name:
-                row.assessments.append(assessment)
+        for case in self.cases:
+            if case.name == case_name:
+                case.evaluators.append(evaluator)
                 added = True
         if not added:
             raise ValueError(f'Case {case_name!r} not found in the dataset')
@@ -240,7 +230,7 @@ class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid', a
     def from_yaml(
         cls,
         path: Path | str = DEFAULT_DATASET_PATH,
-        scorers: Sequence[AssessmentFunction[InputsT, OutputT, MetadataT]] = (),
+        custom_evaluators: Sequence[EvaluatorFunction[InputsT, OutputT, MetadataT]] = (),
     ) -> Self:
         path = cls._get_relative_path(path)
         if not path.exists():
@@ -257,40 +247,40 @@ class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid', a
                 f'{cls.__name__} dataset file {path} contains data that does not match the schema:\n{e}.'
             ) from e
 
-        registry = {get_unwrapped_function_name(f): f for f in scorers}
+        registry = {get_unwrapped_function_name(f): f for f in custom_evaluators}
 
-        data: list[DatasetRow[InputsT, OutputT, MetadataT]] = []
+        cases: list[Case[InputsT, OutputT, MetadataT]] = []
         errors: list[ValueError] = []
-        dataset_assessments: list[Assessment[Any, Any, Any]] = []
-        for assessment in dataset_model.assessments:
+        dataset_evaluators: list[Evaluator[Any, Any, Any]] = []
+        for evaluator in dataset_model.evaluators:
             try:
-                dataset_assessment = Assessment[InputsT, OutputT, MetadataT].from_registry(registry, None, assessment)
+                dataset_evaluator = Evaluator[InputsT, OutputT, MetadataT].from_registry(registry, None, evaluator)
             except ValueError as e:
                 errors.append(e)
                 continue
-            dataset_assessments.append(dataset_assessment)
+            dataset_evaluators.append(dataset_evaluator)
 
-        for row in dataset_model.data:
-            assessments: list[Assessment[Any, Any, Any]] = []
-            for spec in row.assessments:
+        for row in dataset_model.cases:
+            evaluators: list[Evaluator[Any, Any, Any]] = []
+            for spec in row.evaluators:
                 try:
-                    assessment = Assessment[InputsT, OutputT, MetadataT].from_registry(registry, row.name, spec)
+                    evaluator = Evaluator[InputsT, OutputT, MetadataT].from_registry(registry, row.name, spec)
                 except ValueError as e:
                     errors.append(e)
                     continue
-                assessments.append(assessment)
-            row = DatasetRow[InputsT, OutputT, MetadataT](
+                evaluators.append(evaluator)
+            row = Case[InputsT, OutputT, MetadataT](
                 name=row.name,
                 inputs=row.inputs,
                 metadata=row.metadata,
                 expected_output=row.expected_output,
             )
-            row.assessments = assessments
-            data.append(row)
+            row.evaluators = evaluators
+            cases.append(row)
         if errors:
-            raise ExceptionGroup(f'{len(errors)} error(s) loading assessments from registry', errors[:3])
-        result = cls(data=data)
-        result.assessments = dataset_assessments
+            raise ExceptionGroup(f'{len(errors)} error(s) loading evaluators from registry', errors[:3])
+        result = cls(cases=cases)
+        result.evaluators = dataset_evaluators
         return result
 
     @classmethod
@@ -298,7 +288,7 @@ class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid', a
         cls,
         dataset_path: Path | str = DEFAULT_DATASET_PATH,
         schema_path: Path | str | None = None,
-        scorers: Sequence[AssessmentFunction[InputsT, OutputT, MetadataT]] = (),
+        custom_evaluators: Sequence[EvaluatorFunction[InputsT, OutputT, MetadataT]] = (),
     ) -> str:
         dataset_path = cls._get_relative_path(dataset_path)
 
@@ -313,7 +303,7 @@ class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid', a
         else:
             schema_path = cls._get_relative_path(schema_path)
 
-        schema_content = to_json(cls.model_json_schema_with_assessments(scorers), indent=2).decode() + '\n'
+        schema_content = to_json(cls.model_json_schema_with_evaluators(custom_evaluators), indent=2).decode() + '\n'
         if not schema_path.exists() or schema_path.read_text() != schema_content:
             schema_path.write_text(schema_content)
 
@@ -321,7 +311,7 @@ class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid', a
         yaml_language_server_line = f'# yaml-language-server: $schema={schema_ref}'
         if dataset_path.exists():
             try:
-                cls.from_yaml(dataset_path, scorers)
+                cls.from_yaml(dataset_path, custom_evaluators)
             except ValueError as e:
                 if isinstance(e.__cause__, ValidationError):
                     raise ValueError(
@@ -335,18 +325,18 @@ class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid', a
             if cases_text_with_schema != dataset_text:
                 dataset_path.write_text(cases_text_with_schema)
         else:
-            content = yaml.dump(to_jsonable_python(cls(data=[])), sort_keys=False)
+            content = yaml.dump(to_jsonable_python(cls(cases=[])), sort_keys=False)
             dataset_path.write_text(f'{yaml_language_server_line}\n{content}')
         return schema_ref
 
     @classmethod
-    def model_json_schema_with_assessments(
+    def model_json_schema_with_evaluators(
         cls,
-        scorers: Sequence[AssessmentFunction[InputsT, OutputT, MetadataT]] = (),
+        scorers: Sequence[EvaluatorFunction[InputsT, OutputT, MetadataT]] = (),
     ) -> dict[str, Any]:
         registry = {get_unwrapped_function_name(f): f for f in scorers}
 
-        assessment_types: list[Any] = []
+        evaluator_types: list[Any] = []
         for name, function in registry.items():
             signature = inspect.signature(function)
 
@@ -365,27 +355,27 @@ class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid', a
 
             if len(type_hints) == 0 or not required_type_hints:
                 # Shortest option: just the call name
-                assessment_types.append(Literal[name])
+                evaluator_types.append(Literal[name])
             if len(type_hints) == 1:
                 # Short option: only have one parameter, so we can drop the nesting
                 [type_hint_type] = type_hints.values()  # pyright: ignore
-                td = TypedDict(f'short_assessment_{name}', {name: type_hint_type})  # pyright: ignore
+                td = TypedDict(f'short_evaluator_{name}', {name: type_hint_type})  # pyright: ignore
                 td.__pydantic_config__ = {'extra': 'forbid'}  # pyright: ignore
-                assessment_types.append(td)
+                evaluator_types.append(td)
             if len(type_hints) > 1:
                 if len(required_type_hints) == 1:
                     # Short option: only have one required parameter, so we can drop the nesting
                     type_hint_type = next(iter(required_type_hints.values()))  # pyright: ignore
-                    td = TypedDict(f'short_assessment_{name}', {name: type_hint_type})  # pyright: ignore
+                    td = TypedDict(f'short_evaluator_{name}', {name: type_hint_type})  # pyright: ignore
                     td.__pydantic_config__ = {'extra': 'forbid'}  # pyright: ignore
-                    assessment_types.append(td)
+                    evaluator_types.append(td)
 
                 # Long form: multiple parameters, or multiple required parameters
-                params_td = TypedDict(f'assessment_params_{name}', type_hints)  # pyright: ignore
+                params_td = TypedDict(f'evaluator_params_{name}', type_hints)  # pyright: ignore
                 params_td.__pydantic_config__ = {'extra': 'forbid'}  # pyright: ignore
-                td = TypedDict(f'assessment_{name}', {name: params_td})  # pyright: ignore
+                td = TypedDict(f'evaluator_{name}', {name: params_td})  # pyright: ignore
                 td.__pydantic_config__ = {'extra': 'forbid'}  # pyright: ignore
-                assessment_types.append(td)
+                evaluator_types.append(td)
             # Note: We might want to also generate the JSON schema for the format `call: '...', args: [...], kwargs: {...}`.
             #   It would be a bit complex to implement but not impossible.
 
@@ -396,13 +386,13 @@ class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid', a
             inputs: in_type
             metadata: meta_type
             expected_output: out_type | None = None
-            assessments: list[Union[tuple(assessment_types)]] = []  # pyright: ignore  # noqa UP007
+            evaluators: list[Union[tuple(evaluator_types)]] = []  # pyright: ignore  # noqa UP007
 
         ClsDatasetRow.__name__ = cls.__name__ + 'Row'
 
         class ClsDataset(BaseModel, extra='forbid'):
-            data: list[ClsDatasetRow]
-            assessments: list[Union[tuple(assessment_types)]] = []  # pyright: ignore  # noqa UP007
+            cases: list[ClsDatasetRow]
+            evaluators: list[Union[tuple(evaluator_types)]] = []  # pyright: ignore  # noqa UP007
 
         ClsDataset.__name__ = cls.__name__
 
@@ -479,6 +469,7 @@ def _ensure_yaml_language_server_line(content: str, schema_ref: str) -> str:
         return f'{yaml_language_server_line}\n{content}'
 
 
+# TODO: Use or lose this function
 # async def _generate_examples(
 #     dataset_type: type[Dataset[Any, Any, Any]],
 #     path: Path,
@@ -549,8 +540,8 @@ class _TaskRun:
 
 
 async def _run_task(
-    task: Callable[[InputsT], Awaitable[OutputT]], case: DatasetRow[InputsT, OutputT, MetadataT]
-) -> ScoringContext[InputsT, OutputT, MetadataT]:
+    task: Callable[[InputsT], Awaitable[OutputT]], case: Case[InputsT, OutputT, MetadataT]
+) -> EvaluatorContext[InputsT, OutputT, MetadataT]:
     task_run = _TaskRun()
     if _CURRENT_TASK_RUN.get() is not None:
         raise RuntimeError('A task run has already been entered. Task runs should not be nested')
@@ -578,7 +569,7 @@ async def _run_task(
             if k.startswith('gen_ai.usage.'):
                 task_run.increment_metric(k[13:], v)
 
-    return ScoringContext[InputsT, OutputT, MetadataT](
+    return EvaluatorContext[InputsT, OutputT, MetadataT](
         name=case.name,
         inputs=case.inputs,
         metadata=case.metadata,
@@ -591,11 +582,11 @@ async def _run_task(
     )
 
 
-async def _run_task_and_assessments(
+async def _run_task_and_evaluators(
     task: Callable[[InputsT], Awaitable[OutputT]],
-    case: DatasetRow[InputsT, OutputT, MetadataT],
-    dataset_assessments: list[Assessment[InputsT, OutputT, MetadataT]],
-) -> EvalReportCase:
+    case: Case[InputsT, OutputT, MetadataT],
+    dataset_evaluators: list[Evaluator[InputsT, OutputT, MetadataT]],
+) -> ReportCase:
     with _logfire.span(
         '{task_name}: {case_name}',
         task_name=get_unwrapped_function_name(task),
@@ -610,16 +601,20 @@ async def _run_task_and_assessments(
         case_span.set_attribute('metrics', scoring_context.metrics)
         case_span.set_attribute('attributes', scoring_context.attributes)
 
-        assessments = case.assessments + dataset_assessments
-        assessment_details: list[AssessmentDetail] = []
-        if assessments:
+        evaluators = case.evaluators + dataset_evaluators
+        evaluator_outputs: list[SourcedEvaluatorOutput] = []
+        if evaluators:
             async with asyncio.TaskGroup() as tg:
-                tasks: list[asyncio.Task[list[AssessmentDetail]]] = []
-                for assessment in assessments:
-                    tasks.append(tg.create_task(assessment.execute(scoring_context)))
+                tasks: list[asyncio.Task[list[SourcedEvaluatorOutput]]] = []
+                for evaluator in evaluators:
+                    tasks.append(tg.create_task(evaluator.execute(scoring_context)))
             for t in tasks:
-                assessment_details.extend(t.result())
-        case_span.set_attribute('assessments', assessment_details)
+                evaluator_outputs.extend(t.result())
+
+        assertions, scores, labels = _group_evaluator_outputs_by_type(evaluator_outputs)
+        case_span.set_attribute('assertions', assertions)
+        case_span.set_attribute('scores', scores)
+        case_span.set_attribute('labels', labels)
 
         context = case_span.context
         assert context is not None
@@ -630,7 +625,8 @@ async def _run_task_and_assessments(
     report_inputs: dict[str, Any] = (
         jsonable_inputs if isinstance(jsonable_inputs, dict) else {'inputs': jsonable_inputs}
     )
-    return EvalReportCase(
+
+    return ReportCase(
         name=case.name,
         inputs=report_inputs,
         metadata=case.metadata,
@@ -638,12 +634,42 @@ async def _run_task_and_assessments(
         output=scoring_context.output,
         metrics=scoring_context.metrics,
         attributes=scoring_context.attributes,
-        assessments=assessment_details,
+        evaluator_outputs=evaluator_outputs,
         task_duration=scoring_context.duration,
         total_duration=_get_span_duration(case_span),
         trace_id=trace_id,
         span_id=span_id,
     )
+
+
+def _group_evaluator_outputs_by_type(
+    evaluators: Sequence[SourcedEvaluatorOutput],
+) -> tuple[
+    dict[str, SourcedEvaluatorOutput[bool]],
+    dict[str, SourcedEvaluatorOutput[int | float]],
+    dict[str, SourcedEvaluatorOutput[str]],
+]:
+    """Groups evaluators by value type."""
+    assertions: dict[str, SourcedEvaluatorOutput[bool]] = {}
+    scores: dict[str, SourcedEvaluatorOutput[int | float]] = {}
+    labels: dict[str, SourcedEvaluatorOutput[str]] = {}
+    seen_names = set[str]()
+    for a in evaluators:
+        name = a.name
+        # Dedupe repeated names by adding a numeric suffix
+        if name in seen_names:
+            suffix = 2
+            while f'{name}_{suffix}' in seen_names:
+                suffix += 1
+            name = f'{name}_{suffix}'
+        seen_names.add(name)
+        if assertion := a.downcast(bool):
+            assertions[name] = assertion
+        elif score := a.downcast(int, float):
+            scores[name] = score
+        elif label := a.downcast(str):
+            labels[name] = label
+    return assertions, scores, labels
 
 
 _CURRENT_TASK_RUN = ContextVar[_TaskRun | None]('_CURRENT_TASK_RUN', default=None)

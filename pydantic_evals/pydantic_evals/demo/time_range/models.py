@@ -5,8 +5,8 @@ from typing import Any
 from pydantic import AwareDatetime, BaseModel
 from typing_extensions import TypedDict
 
-from pydantic_evals.assessments.common import is_instance, llm_rubric
 from pydantic_evals.dataset import Dataset
+from pydantic_evals.evaluators.common import is_instance, llm_judge
 
 
 class TimeRangeBuilderSuccess(BaseModel, use_attribute_docstrings=True):
@@ -66,4 +66,4 @@ class TimeRangeDataset(Dataset[TimeRangeInputs, TimeRangeResponse, dict[str, Any
 
 
 if __name__ == '__main__':
-    TimeRangeDataset.generate_dataset_files(scorers=[llm_rubric, is_instance])
+    TimeRangeDataset.generate_dataset_files(custom_evaluators=[llm_judge, is_instance])

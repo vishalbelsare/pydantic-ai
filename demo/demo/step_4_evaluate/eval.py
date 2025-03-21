@@ -2,10 +2,10 @@ from pathlib import Path
 from typing import Any
 
 import logfire
-from pydantic_evals.assessments.common import is_instance, llm_rubric
-from pydantic_evals.assessments.context import ScoringContext
-from pydantic_evals.assessments.llm_as_a_judge import GradingOutput, judge_input_output
 from pydantic_evals.dataset import Dataset
+from pydantic_evals.evaluators.common import is_instance, llm_judge
+from pydantic_evals.evaluators.context import EvaluatorContext
+from pydantic_evals.evaluators.llm_as_a_judge import GradingOutput, judge_input_output
 
 from demo.step_4_evaluate.app_v4_agent_updated import (
     TimeRangeInputs,
@@ -39,17 +39,17 @@ async def judge_time_range_case(
 async def main():
     dataset = Dataset[TimeRangeInputs, TimeRangeResponse, dict[str, Any]].from_yaml(
         Path(__file__).parent / "retrieved_test_cases.yaml",
-        scorers=[llm_rubric, is_instance],
+        custom_evaluators=[llm_judge, is_instance],
     )
 
-    async def handler(ctx: ScoringContext[TimeRangeInputs, TimeRangeResponse]):
+    async def my_evaluator(ctx: EvaluatorContext[TimeRangeInputs, TimeRangeResponse]):
         result = await judge_time_range_case(inputs=ctx.inputs, output=ctx.output)
         return {
             "is_reasonable": "yes" if result.pass_ else "no",
             "accuracy": result.score,
         }
 
-    dataset.add_assessment(handler)
+    dataset.add_evaluator(my_evaluator)
     report = await dataset.evaluate(run_infer_time_range, max_concurrency=10)
 
     report.print(include_input=True, include_output=True)

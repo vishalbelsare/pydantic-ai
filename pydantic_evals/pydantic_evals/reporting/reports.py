@@ -13,7 +13,7 @@ from typing_extensions import TypedDict
 
 from pydantic_evals._utils import UNSET, Unset
 
-from ..assessments.spec import AssessmentDetail
+from ..evaluators.spec import SourcedEvaluatorOutput
 from .render_numbers import (
     default_render_duration,
     default_render_duration_diff,
@@ -22,7 +22,7 @@ from .render_numbers import (
     default_render_percentage,
 )
 
-__all__ = ('EvalReport', 'EvalReportCase', 'EvalRenderer', 'RenderValueConfig', 'RenderNumberConfig')
+__all__ = ('EvaluationReport', 'ReportCase', 'EvaluationRenderer', 'RenderValueConfig', 'RenderNumberConfig')
 
 MISSING_VALUE_STR = '[i]<missing>[/i]'
 EMPTY_CELL_STR = '-'
@@ -281,7 +281,7 @@ _DEFAULT_DURATION_CONFIG = RenderNumberConfig(
 )
 
 
-class EvalReportCaseAggregate(BaseModel):
+class ReportCaseAggregate(BaseModel):
     name: str
 
     scores: dict[str, float | int]
@@ -292,7 +292,7 @@ class EvalReportCaseAggregate(BaseModel):
     total_duration: float
 
     @staticmethod
-    def average(cases: list[EvalReportCase]) -> EvalReportCaseAggregate:
+    def average(cases: list[ReportCase]) -> ReportCaseAggregate:
         """Produce a synthetic "summary" case by averaging quantitative attributes."""
         num_cases = len(cases)
         if num_cases == 0:
@@ -337,7 +337,7 @@ class EvalReportCaseAggregate(BaseModel):
             n_passing = sum(1 for case in cases for assertion in case.assertions.values() if assertion.value)
             average_assertions = n_passing / n_assertions
 
-        return EvalReportCaseAggregate(
+        return ReportCaseAggregate(
             name='Averages',
             scores=average_scores,
             labels=average_labels,
@@ -348,7 +348,7 @@ class EvalReportCaseAggregate(BaseModel):
         )
 
 
-class EvalReportCase(BaseModel):
+class ReportCase(BaseModel):
     """A single case in an evaluation report."""
 
     name: str
@@ -360,38 +360,40 @@ class EvalReportCase(BaseModel):
     metrics: dict[str, float | int]
     attributes: dict[str, Any]
 
-    assessments: list[AssessmentDetail]
+    evaluator_outputs: list[SourcedEvaluatorOutput]
     task_duration: float
-    total_duration: float  # includes assessment time
+    total_duration: float  # includes evaluator execution time
 
     # TODO(DavidM): Drop these once we can reference child spans in details panel:
     trace_id: str
     span_id: str
 
     @property
-    def assertions(self) -> dict[str, AssessmentDetail[bool]]:
-        return self._assessments_by_type[0]
+    def assertions(self) -> dict[str, SourcedEvaluatorOutput[bool]]:
+        return self._evaluator_outputs_by_type[0]
 
     @property
-    def scores(self) -> dict[str, AssessmentDetail[int | float]]:
-        return self._assessments_by_type[1]
+    def scores(self) -> dict[str, SourcedEvaluatorOutput[int | float]]:
+        return self._evaluator_outputs_by_type[1]
 
     @property
-    def labels(self) -> dict[str, AssessmentDetail[str]]:
-        return self._assessments_by_type[2]
+    def labels(self) -> dict[str, SourcedEvaluatorOutput[str]]:
+        return self._evaluator_outputs_by_type[2]
 
     @cached_property
-    def _assessments_by_type(
+    def _evaluator_outputs_by_type(
         self,
     ) -> tuple[
-        dict[str, AssessmentDetail[bool]], dict[str, AssessmentDetail[int | float]], dict[str, AssessmentDetail[str]]
+        dict[str, SourcedEvaluatorOutput[bool]],
+        dict[str, SourcedEvaluatorOutput[int | float]],
+        dict[str, SourcedEvaluatorOutput[str]],
     ]:
-        assertions: dict[str, AssessmentDetail[bool]] = {}
-        scores: dict[str, AssessmentDetail[int | float]] = {}
-        labels: dict[str, AssessmentDetail[str]] = {}
+        assertions: dict[str, SourcedEvaluatorOutput[bool]] = {}
+        scores: dict[str, SourcedEvaluatorOutput[int | float]] = {}
+        labels: dict[str, SourcedEvaluatorOutput[str]] = {}
 
         seen_names = set[str]()
-        for a in self.assessments:
+        for a in self.evaluator_outputs:
             name = a.name
             # Dedupe repeated names by adding a numeric suffix
             if name in seen_names:
@@ -401,25 +403,25 @@ class EvalReportCase(BaseModel):
                 name = f'{name}_{suffix}'
             seen_names.add(name)
             if isinstance(a.value, bool):
-                assertions[name] = cast(AssessmentDetail[bool], a)
+                assertions[name] = cast(SourcedEvaluatorOutput[bool], a)
             elif isinstance(a.value, (int, float)):
-                scores[name] = cast(AssessmentDetail[int | float], a)
+                scores[name] = cast(SourcedEvaluatorOutput[int | float], a)
             elif isinstance(a.value, str):
-                labels[name] = cast(AssessmentDetail[str], a)
+                labels[name] = cast(SourcedEvaluatorOutput[str], a)
 
         return assertions, scores, labels
 
 
-class EvalReport(BaseModel):
+class EvaluationReport(BaseModel):
     """A report of the results of evaluating a model on a set of cases."""
 
     name: str
-    cases: list[EvalReportCase]
+    cases: list[ReportCase]
 
     def print(
         self,
         width: int | None = None,
-        baseline: EvalReport | None = None,
+        baseline: EvaluationReport | None = None,
         include_input: bool = False,
         include_output: bool = False,
         include_total_duration: bool = False,
@@ -454,7 +456,7 @@ class EvalReport(BaseModel):
 
     def console_table(
         self,
-        baseline: EvalReport | None = None,
+        baseline: EvaluationReport | None = None,
         include_input: bool = False,
         include_output: bool = False,
         include_total_duration: bool = False,
@@ -471,7 +473,7 @@ class EvalReport(BaseModel):
 
         Optionally include input and output details.
         """
-        renderer = EvalRenderer(
+        renderer = EvaluationRenderer(
             include_input=include_input,
             include_output=include_output,
             include_total_duration=include_total_duration,
@@ -494,7 +496,7 @@ T = TypeVar('T')
 
 
 @dataclass
-class EvalCaseRenderer:
+class ReportCaseRenderer:
     include_input: bool
     include_output: bool
     include_scores: bool
@@ -529,7 +531,7 @@ class EvalCaseRenderer:
         table.add_column('Durations' if self.include_total_duration else 'Duration', justify='right')
         return table
 
-    def build_row(self, case: EvalReportCase) -> list[str]:
+    def build_row(self, case: ReportCase) -> list[str]:
         """Build a table row for a single case."""
         row = [case.name]
 
@@ -554,7 +556,7 @@ class EvalCaseRenderer:
         row.append(self._render_durations(case))
         return row
 
-    def build_aggregate_row(self, aggregate: EvalReportCaseAggregate) -> list[str]:
+    def build_aggregate_row(self, aggregate: ReportCaseAggregate) -> list[str]:
         """Build a table row for an aggregated case."""
         row = [f'[b i]{aggregate.name}[/]']
 
@@ -581,8 +583,8 @@ class EvalCaseRenderer:
 
     def build_diff_row(
         self,
-        new_case: EvalReportCase,
-        baseline: EvalReportCase,
+        new_case: ReportCase,
+        baseline: ReportCase,
     ) -> list[str]:
         """Build a table row for a given case ID."""
         assert baseline.name == new_case.name, 'This should only be called for matching case IDs'
@@ -624,8 +626,8 @@ class EvalCaseRenderer:
 
     def build_diff_aggregate_row(
         self,
-        new: EvalReportCaseAggregate,
-        baseline: EvalReportCaseAggregate,
+        new: ReportCaseAggregate,
+        baseline: ReportCaseAggregate,
     ) -> list[str]:
         """Build a table row for a given case ID."""
         assert baseline.name == new.name, 'This should only be called for aggregates with matching names'
@@ -657,7 +659,7 @@ class EvalCaseRenderer:
 
         return row
 
-    def _render_durations(self, case: EvalReportCase | EvalReportCaseAggregate) -> str:
+    def _render_durations(self, case: ReportCase | ReportCaseAggregate) -> str:
         """Build the diff string for a duration value."""
         case_durations: dict[str, float] = {'task': case.task_duration}
         if self.include_total_duration:
@@ -670,8 +672,8 @@ class EvalCaseRenderer:
 
     def _render_durations_diff(
         self,
-        base_case: EvalReportCase | EvalReportCaseAggregate,
-        new_case: EvalReportCase | EvalReportCaseAggregate,
+        base_case: ReportCase | ReportCaseAggregate,
+        new_case: ReportCase | ReportCaseAggregate,
     ) -> str:
         """Build the diff string for a duration value."""
         base_case_durations: dict[str, float] = {'task': base_case.task_duration}
@@ -720,7 +722,7 @@ class EvalCaseRenderer:
 
     @staticmethod
     def _render_assertions(
-        assertions: list[AssessmentDetail[bool]],
+        assertions: list[SourcedEvaluatorOutput[bool]],
     ) -> str:
         if not assertions:
             return EMPTY_CELL_STR
@@ -738,7 +740,7 @@ class EvalCaseRenderer:
 
     @staticmethod
     def _render_assertions_diff(
-        assertions: list[AssessmentDetail[bool]], new_assertions: list[AssessmentDetail[bool]]
+        assertions: list[SourcedEvaluatorOutput[bool]], new_assertions: list[SourcedEvaluatorOutput[bool]]
     ) -> str:
         if not assertions and not new_assertions:
             return EMPTY_CELL_STR
@@ -762,7 +764,7 @@ class EvalCaseRenderer:
 
 
 @dataclass
-class EvalRenderer:
+class EvaluationRenderer:
     """A class for rendering an EvalReport or the diff between two EvalReports."""
 
     # Columns to include
@@ -781,31 +783,33 @@ class EvalRenderer:
     metric_configs: dict[str, RenderNumberConfig]
     duration_config: RenderNumberConfig
 
-    def include_scores(self, report: EvalReport, baseline: EvalReport | None = None):
+    def include_scores(self, report: EvaluationReport, baseline: EvaluationReport | None = None):
         return any(case.scores for case in self._all_cases(report, baseline))
 
-    def include_labels(self, report: EvalReport, baseline: EvalReport | None = None):
+    def include_labels(self, report: EvaluationReport, baseline: EvaluationReport | None = None):
         return any(case.labels for case in self._all_cases(report, baseline))
 
-    def include_metrics(self, report: EvalReport, baseline: EvalReport | None = None):
+    def include_metrics(self, report: EvaluationReport, baseline: EvaluationReport | None = None):
         return any(case.metrics for case in self._all_cases(report, baseline))
 
-    def include_assertions(self, report: EvalReport, baseline: EvalReport | None = None):
+    def include_assertions(self, report: EvaluationReport, baseline: EvaluationReport | None = None):
         return any(case.assertions for case in self._all_cases(report, baseline))
 
-    def _all_cases(self, report: EvalReport, baseline: EvalReport | None) -> list[EvalReportCase]:
+    def _all_cases(self, report: EvaluationReport, baseline: EvaluationReport | None) -> list[ReportCase]:
         if not baseline:
             return report.cases
         else:
             return report.cases + self._baseline_cases_to_include(report, baseline)
 
-    def _baseline_cases_to_include(self, report: EvalReport, baseline: EvalReport) -> list[EvalReportCase]:
+    def _baseline_cases_to_include(self, report: EvaluationReport, baseline: EvaluationReport) -> list[ReportCase]:
         if self.include_removed_cases:
             return baseline.cases
         report_case_names = {case.name for case in report.cases}
         return [case for case in baseline.cases if case.name in report_case_names]
 
-    def _get_case_renderer(self, report: EvalReport, baseline: EvalReport | None = None) -> EvalCaseRenderer:
+    def _get_case_renderer(
+        self, report: EvaluationReport, baseline: EvaluationReport | None = None
+    ) -> ReportCaseRenderer:
         input_renderer = _ValueRenderer.from_config(self.input_config)
         output_renderer = _ValueRenderer.from_config(self.output_config)
         score_renderers = self._infer_score_renderers(report, baseline)
@@ -815,7 +819,7 @@ class EvalRenderer:
             self.duration_config, 'duration', [x.task_duration for x in self._all_cases(report, baseline)]
         )
 
-        return EvalCaseRenderer(
+        return ReportCaseRenderer(
             include_input=self.include_input,
             include_output=self.include_output,
             include_scores=self.include_scores(report, baseline),
@@ -831,27 +835,27 @@ class EvalRenderer:
             duration_renderer=duration_renderer,
         )
 
-    def build_table(self, report: EvalReport) -> Table:
+    def build_table(self, report: EvaluationReport) -> Table:
         case_renderer = self._get_case_renderer(report)
         table = case_renderer.build_base_table(f'Evaluation Summary: {report.name}')
         for case in report.cases:
             table.add_row(*case_renderer.build_row(case))
 
         if self.include_averages:
-            average = EvalReportCaseAggregate.average(report.cases)
+            average = ReportCaseAggregate.average(report.cases)
             table.add_row(*case_renderer.build_aggregate_row(average))
         return table
 
-    def build_diff_table(self, report: EvalReport, baseline: EvalReport) -> Table:
+    def build_diff_table(self, report: EvaluationReport, baseline: EvaluationReport) -> Table:
         report_cases = report.cases
         baseline_cases = self._baseline_cases_to_include(report, baseline)
 
         report_cases_by_id = {case.name: case for case in report_cases}
         baseline_cases_by_id = {case.name: case for case in baseline_cases}
 
-        diff_cases: list[tuple[EvalReportCase, EvalReportCase]] = []
-        removed_cases: list[EvalReportCase] = []
-        added_cases: list[EvalReportCase] = []
+        diff_cases: list[tuple[ReportCase, ReportCase]] = []
+        removed_cases: list[ReportCase] = []
+        added_cases: list[ReportCase] = []
 
         for case_id in sorted(set(baseline_cases_by_id.keys()) | set(report_cases_by_id.keys())):
             maybe_baseline_case = baseline_cases_by_id.get(case_id)
@@ -880,19 +884,21 @@ class EvalRenderer:
             table.add_row(*row)
 
         if self.include_averages:
-            report_average = EvalReportCaseAggregate.average(report_cases)
-            baseline_average = EvalReportCaseAggregate.average(baseline_cases)
+            report_average = ReportCaseAggregate.average(report_cases)
+            baseline_average = ReportCaseAggregate.average(baseline_cases)
             table.add_row(*case_renderer.build_diff_aggregate_row(report_average, baseline_average))
 
         return table
 
-    def _infer_score_renderers(self, report: EvalReport, baseline: EvalReport | None) -> dict[str, _NumberRenderer]:
+    def _infer_score_renderers(
+        self, report: EvaluationReport, baseline: EvaluationReport | None
+    ) -> dict[str, _NumberRenderer]:
         all_cases = self._all_cases(report, baseline)
 
         values_by_name: dict[str, list[float | int]] = {}
         for case in all_cases:
-            for k, assessment in case.scores.items():
-                values_by_name.setdefault(k, []).append(assessment.value)
+            for k, score in case.scores.items():
+                values_by_name.setdefault(k, []).append(score.value)
 
         all_renderers: dict[str, _NumberRenderer] = {}
         for name, values in values_by_name.items():
@@ -901,7 +907,9 @@ class EvalRenderer:
             all_renderers[name] = _NumberRenderer.infer_from_config(merged_config, 'score', values)
         return all_renderers
 
-    def _infer_label_renderers(self, report: EvalReport, baseline: EvalReport | None) -> dict[str, _ValueRenderer]:
+    def _infer_label_renderers(
+        self, report: EvaluationReport, baseline: EvaluationReport | None
+    ) -> dict[str, _ValueRenderer]:
         all_cases = self._all_cases(report, baseline)
         all_names: set[str] = set()
         for case in all_cases:
@@ -915,7 +923,9 @@ class EvalRenderer:
             all_renderers[name] = _ValueRenderer.from_config(merged_config)
         return all_renderers
 
-    def _infer_metric_renderers(self, report: EvalReport, baseline: EvalReport | None) -> dict[str, _NumberRenderer]:
+    def _infer_metric_renderers(
+        self, report: EvaluationReport, baseline: EvaluationReport | None
+    ) -> dict[str, _NumberRenderer]:
         all_cases = self._all_cases(report, baseline)
 
         values_by_name: dict[str, list[float | int]] = {}
@@ -930,7 +940,7 @@ class EvalRenderer:
             all_renderers[name] = _NumberRenderer.infer_from_config(merged_config, 'metric', values)
         return all_renderers
 
-    def _infer_duration_renderer(self, report: EvalReport, baseline: EvalReport | None) -> _NumberRenderer:
+    def _infer_duration_renderer(self, report: EvaluationReport, baseline: EvaluationReport | None) -> _NumberRenderer:
         all_cases = self._all_cases(report, baseline)
         all_durations = [x.task_duration for x in all_cases]
         if self.include_total_duration:

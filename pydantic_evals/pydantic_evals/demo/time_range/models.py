@@ -6,7 +6,7 @@ from pydantic import AwareDatetime, BaseModel
 from typing_extensions import TypedDict
 
 from pydantic_evals.assessments.common import is_instance, llm_rubric
-from pydantic_evals.datasets import Dataset
+from pydantic_evals.dataset import Dataset
 
 
 class TimeRangeBuilderSuccess(BaseModel, use_attribute_docstrings=True):

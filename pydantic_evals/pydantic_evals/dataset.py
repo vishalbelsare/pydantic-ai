@@ -1,28 +1,48 @@
 from __future__ import annotations as _annotations
 
+import asyncio
 import functools
 import inspect
 import sys
-from collections.abc import Sequence
-from dataclasses import dataclass
+from collections.abc import Awaitable, Sequence
+from contextlib import nullcontext
+from contextvars import ContextVar
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Generic, Literal, NotRequired, Self, Union
+from typing import Any, Callable, Generic, Literal, NotRequired, Self, Union
 
 from pydantic._internal import _typing_extra
 
 from ._utils import get_unwrapped_function_name
+from .assessments.context import ScoringContext
+from .assessments.spec import AssessmentDetail
+from .otel.context_in_memory_span_exporter import context_subtree
+from .reporting.reports import EvalReport, EvalReportCase, EvalReportCaseAggregate
 
 if sys.version_info < (3, 11):
     from exceptiongroup import ExceptionGroup
 else:
     ExceptionGroup = ExceptionGroup
 
+import logfire
 import yaml
 from pydantic import BaseModel, Field, ValidationError
 from pydantic_core import to_json, to_jsonable_python
 from typing_extensions import TypedDict, TypeVar
 
 from .assessments.spec import Assessment, AssessmentFunction, AssessmentSpec, BoundAssessmentFunction
+
+# while waiting for https://github.com/pydantic/logfire/issues/745
+try:
+    import logfire._internal.stack_info
+except ImportError:
+    pass
+else:
+    from pathlib import Path
+
+    logfire._internal.stack_info.NON_USER_CODE_PREFIXES += (str(Path(__file__).parent.absolute()),)
+
+_logfire = logfire.Logfire(otel_scope='pydantic-evals')
 
 InputsT = TypeVar('InputsT', default=dict[str, Any])
 OutputT = TypeVar('OutputT', default=dict[str, Any])
@@ -104,27 +124,96 @@ class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid', a
     """A dataset of test cases, each consisting of input, expected output, and metadata."""
 
     data: list[DatasetRow[InputsT, OutputT, MetadataT]]
-    assessments: Sequence[Assessment[InputsT, OutputT, MetadataT]] = ()
+    assessments: list[Assessment[InputsT, OutputT, MetadataT]]
 
     def __init__(
         self,
         *,
         data: Sequence[DatasetRow[InputsT, OutputT, MetadataT]] = (),
-        assessments: Sequence[BoundAssessmentFunction[InputsT, OutputT, MetadataT]] = (),
+        assessments: Sequence[
+            BoundAssessmentFunction[InputsT, OutputT, MetadataT] | Assessment[InputsT, OutputT, MetadataT]
+        ] = (),
     ):
         super().__init__(data=data, assessments=assessments)
         self.data = list(data)
-        self.assessments = [Assessment[InputsT, OutputT, MetadataT].from_function(a) for a in assessments]
+        self.assessments = [
+            a if isinstance(a, Assessment) else Assessment[InputsT, OutputT, MetadataT].from_function(a)
+            for a in assessments
+        ]
+
+    async def evaluate(
+        self, task: Callable[[InputsT], Awaitable[OutputT]], name: str | None = None, max_concurrency: int | None = None
+    ) -> EvalReport:
+        """Evaluates the test cases in the dataset using the given task."""
+        name = name or get_unwrapped_function_name(task)
+
+        limiter = asyncio.Semaphore(max_concurrency) if max_concurrency is not None else nullcontext()
+        with _logfire.span('evaluate {name}', name=name) as eval_span:
+
+            async def _handle_case(case: DatasetRow[InputsT, OutputT, MetadataT]) -> EvalReportCase:
+                async with limiter:
+                    return await _run_task_and_assessments(task, case, self.assessments + case.assessments)
+
+            async_tasks: list[asyncio.Task[EvalReportCase]] = []
+            async with asyncio.TaskGroup() as group:
+                for case in self.data:
+                    async_tasks.append(group.create_task(_handle_case(case), name=case.name))
+
+            report = EvalReport(name=name, cases=[x.result() for x in async_tasks])
+            # TODO(DavidM): This attribute will be too big in general; remove it once we can use child spans in details panel:
+            eval_span.set_attribute('cases', report.cases)
+            # TODO(DavidM): Remove this 'averages' attribute once we compute it in the details panel
+            eval_span.set_attribute('averages', EvalReportCaseAggregate.average(report.cases))
+        return report
+
+    def add_case(
+        self,
+        name: str,
+        inputs: InputsT,
+        metadata: MetadataT,
+        expected_output: OutputT | None = None,
+        assessments: Sequence[
+            BoundAssessmentFunction[InputsT, OutputT, MetadataT] | Assessment[InputsT, OutputT, MetadataT]
+        ] = (),
+    ) -> None:
+        """Adds a case to the evaluation."""
+        row = DatasetRow[InputsT, OutputT, MetadataT](
+            name=name,
+            inputs=inputs,
+            metadata=metadata,
+            expected_output=expected_output,
+            assessments=assessments,
+        )
+        self.data.append(row)
+
+    def add_assessment(
+        self,
+        assessment: BoundAssessmentFunction[InputsT, OutputT, MetadataT] | Assessment[InputsT, OutputT, MetadataT],
+        case_name: str | None = None,
+    ) -> None:
+        assessment = (
+            assessment
+            if isinstance(assessment, Assessment)
+            else Assessment[InputsT, OutputT, MetadataT].from_function(assessment)
+        )
+        if case_name is None:
+            # Add the assessment to the dataset itself
+            self.assessments.append(assessment)
+            return
+
+        # Add the assessment to rows with the given name (generally there should only be one), but error if none found
+        added = False
+        for row in self.data:
+            if row.name == case_name:
+                row.assessments.append(assessment)
+                added = True
+        if not added:
+            raise ValueError(f'Case {case_name!r} not found in the dataset')
 
     @classmethod
     @functools.cache
     def _serialization_type(cls) -> type[_DatasetModel[InputsT, OutputT, MetadataT]]:
         return _DatasetModel[cls._params()]  # type: ignore
-
-    # @classmethod
-    # @functools.cache
-    # def _row_type(cls) -> type[DatasetRow[InputsT, OutputT, MetadataT]]:
-    #     return DatasetRow[cls._params()]  # type : ignore
 
     @classmethod
     @functools.cache
@@ -434,3 +523,145 @@ def _get_relative_path_reference(target: Path, source: Path, _prefix: str = '') 
         return Path(f'{_prefix}{Path(target).relative_to(source)}')
     except ValueError:
         return _get_relative_path_reference(target, source.parent, _prefix=f'{_prefix}../')
+
+
+@dataclass
+class _TaskRun:
+    attributes: dict[str, Any] = field(init=False, default_factory=dict)
+    metrics: dict[str, int | float] = field(init=False, default_factory=dict)
+
+    def record_metric(self, name: str, value: int | float) -> None:
+        self.metrics[name] = value
+
+    def increment_metric(self, name: str, amount: int | float) -> None:
+        current_value = self.metrics.get(name, 0)
+        incremented_value = current_value + amount
+        if current_value == 0 and incremented_value == 0:
+            return  # Avoid recording a metric that is always zero
+        self.record_metric(name, incremented_value)
+
+    def record_attribute(self, name: str, value: Any) -> None:
+        self.attributes[name] = value
+
+
+async def _run_task(
+    task: Callable[[InputsT], Awaitable[OutputT]], case: DatasetRow[InputsT, OutputT, MetadataT]
+) -> ScoringContext[InputsT, OutputT, MetadataT]:
+    task_run = _TaskRun()
+    if _CURRENT_TASK_RUN.get() is not None:
+        raise RuntimeError('A task run has already been entered. Task runs should not be nested')
+    token = _CURRENT_TASK_RUN.set(task_run)
+    try:
+        with _logfire.span('execute {task}', task=get_unwrapped_function_name(task)) as task_span:
+            with context_subtree() as span_tree:
+                task_output = await task(case.inputs)
+    finally:
+        _CURRENT_TASK_RUN.reset(token)
+
+    # TODO: Question: Should we make this metric-attributes functionality more user-configurable in some way before merging?
+    #   Note: the use of otel for collecting these metrics is the main reason why I think we should require at least otel as a dependency, if not logfire;
+    #   otherwise, we don't have a great way to get usage data from arbitrary frameworks.
+    #   Ideally we wouldn't need to hard-code the specific logic here, but I'm not sure a great way to expose it to
+    #   users. Maybe via an argument of type Callable[[SpanTree], dict[str, int | float]] or similar?
+    for node in span_tree.flattened():
+        if node.attributes.get('gen_ai.operation.name') == 'chat':
+            task_run.increment_metric('requests', 1)
+        for k, v in node.attributes.items():
+            if not isinstance(v, (int, float)):
+                continue
+            if k.startswith('gen_ai.usage.details.'):
+                task_run.increment_metric(k[21:], v)
+            if k.startswith('gen_ai.usage.'):
+                task_run.increment_metric(k[13:], v)
+
+    return ScoringContext[InputsT, OutputT, MetadataT](
+        name=case.name,
+        inputs=case.inputs,
+        metadata=case.metadata,
+        expected_output=case.expected_output,
+        output=task_output,
+        duration=_get_span_duration(task_span),
+        span_tree=span_tree,
+        attributes=task_run.attributes,
+        metrics=task_run.metrics,
+    )
+
+
+async def _run_task_and_assessments(
+    task: Callable[[InputsT], Awaitable[OutputT]],
+    case: DatasetRow[InputsT, OutputT, MetadataT],
+    extra_assessments: list[Assessment[InputsT, OutputT, MetadataT]],
+) -> EvalReportCase:
+    with _logfire.span(
+        '{task_name}: {case_name}',
+        task_name=get_unwrapped_function_name(task),
+        case_name=case.name,
+        inputs=case.inputs,
+        metadata=case.metadata,
+    ) as case_span:
+        scoring_context = await _run_task(task, case)
+
+        case_span.set_attribute('output', scoring_context.output)
+        case_span.set_attribute('task_duration', scoring_context.duration)
+        case_span.set_attribute('metrics', scoring_context.metrics)
+        case_span.set_attribute('attributes', scoring_context.attributes)
+
+        assessments = case.assessments + extra_assessments
+        assessment_details: list[AssessmentDetail] = []
+        if assessments:
+            async with asyncio.TaskGroup() as tg:
+                tasks: list[asyncio.Task[list[AssessmentDetail]]] = []
+                for assessment in assessments:
+                    tasks.append(tg.create_task(assessment.execute(scoring_context)))
+            for t in tasks:
+                assessment_details.extend(t.result())
+        case_span.set_attribute('assessments', assessment_details)
+
+        context = case_span.context
+        assert context is not None
+        trace_id = f'{context.trace_id:032x}'
+        span_id = f'{context.span_id:016x}'
+
+    jsonable_inputs = to_jsonable_python(case.inputs)
+    report_inputs: dict[str, Any] = (
+        jsonable_inputs if isinstance(jsonable_inputs, dict) else {'inputs': jsonable_inputs}
+    )
+    return EvalReportCase(
+        name=case.name,
+        inputs=report_inputs,
+        metadata=case.metadata,
+        expected_output=case.expected_output,
+        output=scoring_context.output,
+        metrics=scoring_context.metrics,
+        attributes=scoring_context.attributes,
+        assessments=assessment_details,
+        task_duration=scoring_context.duration,
+        total_duration=_get_span_duration(case_span),
+        trace_id=trace_id,
+        span_id=span_id,
+    )
+
+
+_CURRENT_TASK_RUN = ContextVar[_TaskRun | None]('_CURRENT_TASK_RUN', default=None)
+
+
+def set_eval_attribute(name: str, value: Any) -> None:
+    """Set the named attribute for the current eval task run. Do nothing if not in an eval task run."""
+    current_case = _CURRENT_TASK_RUN.get()
+    if current_case is not None:
+        current_case.record_attribute(name, value)
+
+
+def increment_eval_metric(name: str, amount: int | float) -> None:
+    """Increment the named metric for the current eval task run. Do nothing if not in an eval task run."""
+    current_case = _CURRENT_TASK_RUN.get()
+    if current_case is not None:
+        current_case.increment_metric(name, amount)
+
+
+def _get_span_duration(span: logfire.LogfireSpan) -> float:
+    end_time = span.end_time
+    start_time = span.start_time
+    assert isinstance(start_time, int), 'span is not started'
+    assert isinstance(end_time, int), 'span is not finished'
+    return (end_time - start_time) / 1_000_000_000

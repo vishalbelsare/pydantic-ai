@@ -61,18 +61,22 @@ class AssessmentSpec(BaseModel):
 
     @model_serializer(mode='wrap')
     def serialize(self, handler: SerializerFunctionWrapHandler) -> Any:
-        # In this case, use the standard "long-form" serialization
-        if len(self.args) > 1:
-            return handler(self)
-
-        # Note: The rest of this logic needs to be kept in sync with the definition of _SerializedAssessmentSpec
-        # In this case, use the shortest compatible form of serialization:
-        if not self.args and not self.kwargs:
-            return self.call
-        elif len(self.args) == 1:
-            return {self.call: self.args[0]}
-        else:
-            return {self.call: self.kwargs}
+        return handler(self)
+        
+        # # TODO: Use context to determine if dumping to yaml or not; if not, always use the long form
+        # # In this case, use the standard "long-form" serialization
+        # if len(self.args) > 1:
+        #     return handler(self)
+        # 
+        # # TODO: Go back to using this code for yaml:
+        # # Note: The rest of this logic needs to be kept in sync with the definition of _SerializedAssessmentSpec
+        # # In this case, use the shortest compatible form of serialization:
+        # if not self.args and not self.kwargs:
+        #     return self.call
+        # elif len(self.args) == 1:
+        #     return {self.call: self.args[0]}
+        # else:
+        #     return {self.call: self.kwargs}
 
 
 class _SerializedAssessmentSpec(RootModel[str | dict[str, Any]]):

@@ -47,7 +47,7 @@ connection and authentication to the underlying service.
 To use OpenAI models, you need to either install [`pydantic-ai`](install.md), or install [`pydantic-ai-slim`](install.md#slim-install) with the `openai` optional group:
 
 ```bash
-pip/uv-add 'pydantic-ai-slim[openai]'
+pip/uv-add "pydantic-ai-slim[openai]"
 ```
 
 ### Configuration
@@ -135,7 +135,7 @@ agent = Agent(model)
 To use [`AnthropicModel`][pydantic_ai.models.anthropic.AnthropicModel] models, you need to either install [`pydantic-ai`](install.md), or install [`pydantic-ai-slim`](install.md#slim-install) with the `anthropic` optional group:
 
 ```bash
-pip/uv-add 'pydantic-ai-slim[anthropic]'
+pip/uv-add "pydantic-ai-slim[anthropic]"
 ```
 
 ### Configuration
@@ -172,15 +172,38 @@ agent = Agent(model)
 ...
 ```
 
-### `api_key` argument
+### `provider` argument
 
-If you don't want to or can't set the environment variable, you can pass it at runtime via the [`api_key` argument][pydantic_ai.models.anthropic.AnthropicModel.__init__]:
+You can provide a custom [`Provider`][pydantic_ai.providers.Provider] via the [`provider` argument][pydantic_ai.models.anthropic.AnthropicModel.__init__]:
 
-```py title="anthropic_model_api_key.py"
+```py title="anthropic_model_provider.py"
 from pydantic_ai import Agent
 from pydantic_ai.models.anthropic import AnthropicModel
+from pydantic_ai.providers.anthropic import AnthropicProvider
 
-model = AnthropicModel('claude-3-5-sonnet-latest', api_key='your-api-key')
+model = AnthropicModel(
+    'claude-3-5-sonnet-latest', provider=AnthropicProvider(api_key='your-api-key')
+)
+agent = Agent(model)
+...
+```
+
+### Custom HTTP Client
+
+You can customize the `AnthropicProvider` with a custom `httpx.AsyncClient`:
+
+```py title="anthropic_model_custom_provider.py"
+from httpx import AsyncClient
+
+from pydantic_ai import Agent
+from pydantic_ai.models.anthropic import AnthropicModel
+from pydantic_ai.providers.anthropic import AnthropicProvider
+
+custom_http_client = AsyncClient(timeout=30)
+model = AnthropicModel(
+    'claude-3-5-sonnet-latest',
+    provider=AnthropicProvider(api_key='your-api-key', http_client=custom_http_client),
+)
 agent = Agent(model)
 ...
 ```
@@ -275,7 +298,7 @@ To use the `google-vertex` provider with [`GeminiModel`][pydantic_ai.models.gemi
 [`pydantic-ai`](install.md), or install [`pydantic-ai-slim`](install.md#slim-install) with the `vertexai` optional group:
 
 ```bash
-pip/uv-add 'pydantic-ai-slim[vertexai]'
+pip/uv-add "pydantic-ai-slim[vertexai]"
 ```
 
 ### Configuration
@@ -397,7 +420,7 @@ agent = Agent(model)
 To use [`GroqModel`][pydantic_ai.models.groq.GroqModel], you need to either install [`pydantic-ai`](install.md), or install [`pydantic-ai-slim`](install.md#slim-install) with the `groq` optional group:
 
 ```bash
-pip/uv-add 'pydantic-ai-slim[groq]'
+pip/uv-add "pydantic-ai-slim[groq]"
 ```
 
 ### Configuration
@@ -477,14 +500,14 @@ agent = Agent(model)
 To use [`MistralModel`][pydantic_ai.models.mistral.MistralModel], you need to either install [`pydantic-ai`](install.md), or install [`pydantic-ai-slim`](install.md#slim-install) with the `mistral` optional group:
 
 ```bash
-pip/uv-add 'pydantic-ai-slim[mistral]'
+pip/uv-add "pydantic-ai-slim[mistral]"
 ```
 
 ### Configuration
 
 To use [Mistral](https://mistral.ai) through their API, go to [console.mistral.ai/api-keys/](https://console.mistral.ai/api-keys/) and follow your nose until you find the place to generate an API key.
 
-[`MistralModelName`][pydantic_ai.models.mistral.MistralModelName] contains a list of the most popular Mistral models.
+[`LatestMistralModelNames`][pydantic_ai.models.mistral.LatestMistralModelNames] contains a list of the most popular Mistral models.
 
 ### Environment variable
 
@@ -514,15 +537,37 @@ agent = Agent(model)
 ...
 ```
 
-### `api_key` argument
+### `provider` argument
 
-If you don't want to or can't set the environment variable, you can pass it at runtime via the [`api_key` argument][pydantic_ai.models.mistral.MistralModel.__init__]:
+You can provide a custom [`Provider`][pydantic_ai.providers.Provider] via the
+[`provider` argument][pydantic_ai.models.mistral.MistralModel.__init__]:
 
-```python {title="mistral_model_api_key.py"}
+```python {title="groq_model_provider.py"}
 from pydantic_ai import Agent
 from pydantic_ai.models.mistral import MistralModel
+from pydantic_ai.providers.mistral import MistralProvider
 
-model = MistralModel('mistral-small-latest', api_key='your-api-key')
+model = MistralModel(
+    'mistral-large-latest', provider=MistralProvider(api_key='your-api-key')
+)
+agent = Agent(model)
+...
+```
+
+You can also customize the provider with a custom `httpx.AsyncHTTPClient`:
+
+```python {title="groq_model_custom_provider.py"}
+from httpx import AsyncClient
+
+from pydantic_ai import Agent
+from pydantic_ai.models.mistral import MistralModel
+from pydantic_ai.providers.mistral import MistralProvider
+
+custom_http_client = AsyncClient(timeout=30)
+model = MistralModel(
+    'mistral-large-latest',
+    provider=MistralProvider(api_key='your-api-key', http_client=custom_http_client),
+)
 agent = Agent(model)
 ...
 ```
@@ -534,7 +579,7 @@ agent = Agent(model)
 To use [`CohereModel`][pydantic_ai.models.cohere.CohereModel], you need to either install [`pydantic-ai`](install.md), or install [`pydantic-ai-slim`](install.md#slim-install) with the `cohere` optional group:
 
 ```bash
-pip/uv-add 'pydantic-ai-slim[cohere]'
+pip/uv-add "pydantic-ai-slim[cohere]"
 ```
 
 ### Configuration
@@ -591,7 +636,7 @@ agent = Agent(model)
 To use [`BedrockConverseModel`][pydantic_ai.models.bedrock.BedrockConverseModel], you need to either install [`pydantic-ai`](install.md), or install [`pydantic-ai-slim`](install.md#slim-install) with the `bedrock` optional group:
 
 ```bash
-pip/uv-add 'pydantic-ai-slim[bedrock]'
+pip/uv-add "pydantic-ai-slim[bedrock]"
 ```
 
 ### Configuration

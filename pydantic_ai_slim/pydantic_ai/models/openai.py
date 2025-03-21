@@ -57,7 +57,7 @@ try:
 except ImportError as _import_error:
     raise ImportError(
         'Please install `openai` to use the OpenAI model, '
-        "you can use the `openai` optional group — `pip install 'pydantic-ai-slim[openai]'`"
+        'you can use the `openai` optional group — `pip install "pydantic-ai-slim[openai]"`'
     ) from _import_error
 
 OpenAIModelName = Union[str, ChatModel]
@@ -162,9 +162,8 @@ class OpenAIModel(Model):
 
         if provider is not None:
             if isinstance(provider, str):
-                self.client = infer_provider(provider).client
-            else:
-                self.client = provider.client
+                provider = infer_provider(provider)
+            self.client = provider.client
         else:  # pragma: no cover
             # This is a workaround for the OpenAI client requiring an API key, whilst locally served,
             # openai compatible models do not always need an API key, but a placeholder (non-empty) key is required.

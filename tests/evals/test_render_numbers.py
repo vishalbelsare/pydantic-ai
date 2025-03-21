@@ -1,7 +1,7 @@
 import pytest
 from inline_snapshot import snapshot
 
-from pydantic_evals.render_numbers import (
+from pydantic_evals.reporting.render_numbers import (
     default_render_duration,
     default_render_duration_diff,
     default_render_number,
@@ -15,15 +15,16 @@ from pydantic_evals.render_numbers import (
         (0, snapshot('0')),
         (17348, snapshot('17348')),
         (-17348, snapshot('-17348')),
-        (17347.0, snapshot('17347.0')),
-        (-17347.0, snapshot('-17347.0')),
+        (17347.0, snapshot('17,347.0')),
+        (-17347.0, snapshot('-17,347.0')),
         (0.1234, snapshot('0.123')),
         (-0.1234, snapshot('-0.123')),
         (0.1, snapshot('0.100')),
         (-0.1, snapshot('-0.100')),
         (2.0, snapshot('2.00')),
         (12.0, snapshot('12.0')),
-        (2398723.123, snapshot('2398723.1')),
+        (2398723.123, snapshot('2,398,723.1')),
+        (0.00000000000001, snapshot('0.0000000000000100')),
     ],
 )
 def test_default_render_number(value: float | int, expected: str):
@@ -43,8 +44,8 @@ def test_default_render_number(value: float | int, expected: str):
         (1.00024, 1.00023, snapshot('-1e-05')),
         (2.0, 25.0, snapshot('+23.0 / 12.5x')),
         (2.0, -25.0, snapshot('-27.0 / -12.5x')),
-        (0.02, 25.0, snapshot('+25.0 / 1250x')),
-        (0.02, -25.0, snapshot('-25.0 / -1250x')),
+        (0.02, 25.0, snapshot('+25.0 / 1,250x')),
+        (0.02, -25.0, snapshot('-25.0 / -1,250x')),
         (0.001, 25.0, snapshot('+25.0')),
     ],
 )
@@ -70,9 +71,9 @@ def test_default_render_number_diff(old: int | float, new: int | float, expected
         (1.234567, snapshot('1.2s')),
         (12.34567, snapshot('12.3s')),
         (123.4567, snapshot('123.5s')),
-        (1234.567, snapshot('1234.6s')),
-        (12345.67, snapshot('12345.7s')),
-        (123456.7, snapshot('123456.7s')),
+        (1234.567, snapshot('1,234.6s')),
+        (12345.67, snapshot('12,345.7s')),
+        (123456.7, snapshot('123,456.7s')),
     ],
 )
 def test_default_render_duration(value: float, expected: str):
@@ -88,12 +89,12 @@ def test_default_render_duration(value: float, expected: str):
         (4, 3, snapshot('-1.0s / -25.0%')),
         (1.0, 1.7, snapshot('+700.0ms / +70.0%')),
         (2.5, 1.0, snapshot('-1.5s / -60.0%')),
-        (10.023, 10.024, snapshot('+1000µs')),
+        (10.023, 10.024, snapshot('+1,000µs')),
         (1.00024, 1.00023, snapshot('-10µs')),
         (2.0, 25.0, snapshot('+23.0s / 12.5x')),
         (2.0, -25.0, snapshot('-27.0s / -12.5x')),
-        (0.02, 25.0, snapshot('+25.0s / 1250x')),
-        (0.02, -25.0, snapshot('-25.0s / -1250x')),
+        (0.02, 25.0, snapshot('+25.0s / 1,250x')),
+        (0.02, -25.0, snapshot('-25.0s / -1,250x')),
         (0.001, 25.0, snapshot('+25.0s')),
     ],
 )

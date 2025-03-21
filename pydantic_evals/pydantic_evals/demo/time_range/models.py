@@ -5,7 +5,8 @@ from typing import Any
 from pydantic import AwareDatetime, BaseModel
 from typing_extensions import TypedDict
 
-from pydantic_evals.datasets import Dataset
+from pydantic_evals.assessments.common import is_instance, llm_rubric
+from pydantic_evals.dataset import Dataset
 
 
 class TimeRangeBuilderSuccess(BaseModel, use_attribute_docstrings=True):
@@ -57,7 +58,7 @@ class TimeRangeInputs(TypedDict):
     now: AwareDatetime
 
 
-# TODO: Drop the MetadataT type parameter and use the default below once pydantic 2.11 is in use
+# TODO(DavidM): Drop the MetadataT type parameter and use the default below once pydantic 2.11 is in use
 class TimeRangeDataset(Dataset[TimeRangeInputs, TimeRangeResponse, dict[str, Any]]):
     """A dataset of examples for the time range inference agent."""
 
@@ -65,4 +66,4 @@ class TimeRangeDataset(Dataset[TimeRangeInputs, TimeRangeResponse, dict[str, Any
 
 
 if __name__ == '__main__':
-    TimeRangeDataset.generate_dataset_examples()
+    TimeRangeDataset.generate_dataset_files(scorers=[llm_rubric, is_instance])

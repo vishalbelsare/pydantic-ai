@@ -31,7 +31,7 @@ try:
 except ImportError as _import_error:
     raise ImportError(
         'Please install `rich`, `prompt-toolkit` and `argcomplete` to use the PydanticAI CLI, '
-        "you can use the `cli` optional group — `pip install 'pydantic-ai-slim[cli]'`"
+        'you can use the `cli` optional group — `pip install "pydantic-ai-slim[cli]"`'
     ) from _import_error
 
 from pydantic_ai.agent import Agent
@@ -70,7 +70,7 @@ Special prompt:
         nargs='?',
         help='Model to use, it should be "<provider>:<model>" e.g. "openai:gpt-4o". If omitted it will default to "openai:gpt-4o"',
         default='openai:gpt-4o',
-    ).completer = argcomplete.ChoicesCompleter(list(get_literal_values(KnownModelName)))  # type: ignore[reportPrivateUsage]
+    ).completer = argcomplete.ChoicesCompleter(list(get_literal_values(KnownModelName.__value__)))  # type: ignore[reportPrivateUsage]
     parser.add_argument('--no-stream', action='store_true', help='Whether to stream responses from OpenAI')
     parser.add_argument('--version', action='store_true', help='Show version and exit')
 

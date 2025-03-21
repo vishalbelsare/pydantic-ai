@@ -3,7 +3,8 @@ from __future__ import annotations as _annotations
 from collections import defaultdict
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, Callable, Literal, Protocol, TypeVar
+from functools import cached_property
+from typing import Any, Callable, Literal, Protocol, TypeVar, cast
 
 from pydantic import BaseModel
 from rich.console import Console
@@ -12,7 +13,7 @@ from typing_extensions import TypedDict
 
 from pydantic_evals._utils import UNSET, Unset
 
-from .assertions import AssertionResult
+from ..assessments.spec import AssessmentDetail
 from .render_numbers import (
     default_render_duration,
     default_render_duration_diff,
@@ -284,7 +285,7 @@ class EvalReportCaseAggregate(BaseModel):
     name: str
 
     scores: dict[str, float | int]
-    labels: dict[str, dict[bool | str, float]]
+    labels: dict[str, dict[str, float]]
     metrics: dict[str, float | int]
     assertions: float | None
     task_duration: float
@@ -297,23 +298,22 @@ class EvalReportCaseAggregate(BaseModel):
         if num_cases == 0:
             raise ValueError('Cannot summarize an empty list of cases')
 
-        def _averages_by_name(values_by_name: list[dict[str, int | float]]) -> dict[str, float]:
+        def _scores_averages(scores_by_name: list[dict[str, int | float | bool]]) -> dict[str, float]:
             counts_by_name: dict[str, int] = defaultdict(int)
             sums_by_name: dict[str, float] = defaultdict(float)
-            for values in values_by_name:
-                for name, value in values.items():
+            for sbn in scores_by_name:
+                for name, score in sbn.items():
                     counts_by_name[name] += 1
-                    sums_by_name[name] += value
+                    sums_by_name[name] += score
             return {name: sums_by_name[name] / counts_by_name[name] for name in sums_by_name}
 
-        def _label_averages(rows_labels: list[dict[str, bool | str]]) -> dict[str, dict[bool | str, float]]:
+        def _labels_averages(labels_by_name: list[dict[str, str]]) -> dict[str, dict[str, float]]:
             counts_by_name: dict[str, int] = defaultdict(int)
-            sums_by_name: dict[str, dict[bool | str, float]] = defaultdict(lambda: defaultdict(float))
-            for row_labels in rows_labels:
-                for name, value in row_labels.items():
+            sums_by_name: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
+            for lbn in labels_by_name:
+                for name, label in lbn.items():
                     counts_by_name[name] += 1
-                    if value is not False:
-                        sums_by_name[name][value] += 1
+                    sums_by_name[name][label] += 1
             return {
                 name: {value: count / counts_by_name[name] for value, count in sums_by_name[name].items()}
                 for name in sums_by_name
@@ -322,14 +322,19 @@ class EvalReportCaseAggregate(BaseModel):
         average_task_duration = sum(case.task_duration for case in cases) / num_cases
         average_total_duration = sum(case.total_duration for case in cases) / num_cases
 
-        average_scores: dict[str, float] = _averages_by_name([case.scores for case in cases])
-        average_labels: dict[str, dict[bool | str, float]] = _label_averages([case.labels for case in cases])
-        average_metrics: dict[str, float] = _averages_by_name([case.metrics for case in cases])
+        # average_assertions: dict[str, float] = _scores_averages([{k: v.value for k, v in case.scores.items()} for case in cases])
+        average_scores: dict[str, float] = _scores_averages(
+            [{k: v.value for k, v in case.scores.items()} for case in cases]
+        )
+        average_labels: dict[str, dict[str, float]] = _labels_averages(
+            [{k: v.value for k, v in case.labels.items()} for case in cases]
+        )
+        average_metrics: dict[str, float] = _scores_averages([case.metrics for case in cases])
 
         average_assertions: float | None = None
         n_assertions = sum(len(case.assertions) for case in cases)
         if n_assertions > 0:
-            n_passing = sum(1 for case in cases for assertion in case.assertions if assertion.passed)
+            n_passing = sum(1 for case in cases for assertion in case.assertions.values() if assertion.value)
             average_assertions = n_passing / n_assertions
 
         return EvalReportCaseAggregate(
@@ -352,17 +357,57 @@ class EvalReportCase(BaseModel):
     expected_output: Any
     output: Any
 
-    scores: dict[str, float | int]
     metrics: dict[str, float | int]
-    labels: dict[str, bool | str]
     attributes: dict[str, Any]
-    assertions: list[AssertionResult]
-    task_duration: float
-    total_duration: float  # includes scoring time
 
-    # TODO: Maybe drop these once we can reference child spans in details panel:
+    assessments: list[AssessmentDetail]
+    task_duration: float
+    total_duration: float  # includes assessment time
+
+    # TODO(DavidM): Drop these once we can reference child spans in details panel:
     trace_id: str
     span_id: str
+
+    @property
+    def assertions(self) -> dict[str, AssessmentDetail[bool]]:
+        return self._assessments_by_type[0]
+
+    @property
+    def scores(self) -> dict[str, AssessmentDetail[int | float]]:
+        return self._assessments_by_type[1]
+
+    @property
+    def labels(self) -> dict[str, AssessmentDetail[str]]:
+        return self._assessments_by_type[2]
+
+    @cached_property
+    def _assessments_by_type(
+        self,
+    ) -> tuple[
+        dict[str, AssessmentDetail[bool]], dict[str, AssessmentDetail[int | float]], dict[str, AssessmentDetail[str]]
+    ]:
+        assertions: dict[str, AssessmentDetail[bool]] = {}
+        scores: dict[str, AssessmentDetail[int | float]] = {}
+        labels: dict[str, AssessmentDetail[str]] = {}
+
+        seen_names = set[str]()
+        for a in self.assessments:
+            name = a.name
+            # Dedupe repeated names by adding a numeric suffix
+            if name in seen_names:
+                suffix = 2
+                while f'{name}_{suffix}' in seen_names:
+                    suffix += 1
+                name = f'{name}_{suffix}'
+            seen_names.add(name)
+            if isinstance(a.value, bool):
+                assertions[name] = cast(AssessmentDetail[bool], a)
+            elif isinstance(a.value, (int, float)):
+                scores[name] = cast(AssessmentDetail[int | float], a)
+            elif isinstance(a.value, str):
+                labels[name] = cast(AssessmentDetail[str], a)
+
+        return assertions, scores, labels
 
 
 class EvalReport(BaseModel):
@@ -495,16 +540,16 @@ class EvalCaseRenderer:
             row.append(self.output_renderer.render_value(None, case.output) or EMPTY_CELL_STR)
 
         if self.include_scores:
-            row.append(self._render_dict(case.scores, self.score_renderers))
+            row.append(self._render_dict({k: v.value for k, v in case.scores.items()}, self.score_renderers))
 
         if self.include_labels:
-            row.append(self._render_dict(case.labels, self.label_renderers))
+            row.append(self._render_dict({k: v.value for k, v in case.labels.items()}, self.label_renderers))
 
         if self.include_metrics:
             row.append(self._render_dict(case.metrics, self.metric_renderers))
 
         if self.include_assertions:
-            row.append(self._render_assertions(case.assertions))
+            row.append(self._render_assertions(list(case.assertions.values())))
 
         row.append(self._render_durations(case))
         return row
@@ -552,7 +597,11 @@ class EvalCaseRenderer:
             row.append(output_diff)
 
         if self.include_scores:
-            scores_diff = self._render_dicts_diff(baseline.scores, new_case.scores, self.score_renderers)
+            scores_diff = self._render_dicts_diff(
+                {k: v.value for k, v in baseline.scores.items()},
+                {k: v.value for k, v in new_case.scores.items()},
+                self.score_renderers,
+            )
             row.append(scores_diff)
 
         if self.include_labels:
@@ -564,7 +613,9 @@ class EvalCaseRenderer:
             row.append(metrics_diff)
 
         if self.include_assertions:
-            assertions_diff = self._render_assertions_diff(baseline.assertions, new_case.assertions)
+            assertions_diff = self._render_assertions_diff(
+                list(baseline.assertions.values()), list(new_case.assertions.values())
+            )
             row.append(assertions_diff)
 
         row.append(self._render_durations_diff(baseline, new_case))
@@ -669,11 +720,11 @@ class EvalCaseRenderer:
 
     @staticmethod
     def _render_assertions(
-        assertions: list[AssertionResult],
+        assertions: list[AssessmentDetail[bool]],
     ) -> str:
         if not assertions:
             return EMPTY_CELL_STR
-        return ''.join(['[green]✔[/]' if a.passed else '[red]✗[/]' for a in assertions])
+        return ''.join(['[green]✔[/]' if a.value else '[red]✗[/]' for a in assertions])
 
     @staticmethod
     def _render_aggregate_assertions(
@@ -686,12 +737,14 @@ class EvalCaseRenderer:
         )
 
     @staticmethod
-    def _render_assertions_diff(assertions: list[AssertionResult], new_assertions: list[AssertionResult]) -> str:
+    def _render_assertions_diff(
+        assertions: list[AssessmentDetail[bool]], new_assertions: list[AssessmentDetail[bool]]
+    ) -> str:
         if not assertions and not new_assertions:
             return EMPTY_CELL_STR
 
-        old = ''.join(['[green]✔[/]' if a.passed else '[red]✗[/]' for a in assertions])
-        new = ''.join(['[green]✔[/]' if a.passed else '[red]✗[/]' for a in new_assertions])
+        old = ''.join(['[green]✔[/]' if a.value else '[red]✗[/]' for a in assertions])
+        new = ''.join(['[green]✔[/]' if a.value else '[red]✗[/]' for a in new_assertions])
         return old if old == new else f'{old} → {new}'
 
     @staticmethod
@@ -838,8 +891,8 @@ class EvalRenderer:
 
         values_by_name: dict[str, list[float | int]] = {}
         for case in all_cases:
-            for k, v in case.scores.items():
-                values_by_name.setdefault(k, []).append(v)
+            for k, assessment in case.scores.items():
+                values_by_name.setdefault(k, []).append(assessment.value)
 
         all_renderers: dict[str, _NumberRenderer] = {}
         for name, values in values_by_name.items():

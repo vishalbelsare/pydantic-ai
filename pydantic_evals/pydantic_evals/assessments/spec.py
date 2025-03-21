@@ -62,7 +62,7 @@ class AssessmentSpec(BaseModel):
     @model_serializer(mode='wrap')
     def serialize(self, handler: SerializerFunctionWrapHandler) -> Any:
         return handler(self)
-        
+
         # # TODO: Use context to determine if dumping to yaml or not; if not, always use the long form
         # # In this case, use the standard "long-form" serialization
         # if len(self.args) > 1:

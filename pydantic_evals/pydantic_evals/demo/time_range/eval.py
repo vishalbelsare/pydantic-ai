@@ -1,8 +1,8 @@
-from pydantic_evals.assessments.common import is_instance, llm_rubric
-from pydantic_evals.assessments.llm_as_a_judge import GradingOutput, judge_input_output
-from pydantic_evals.dataset import ScoringContext
+from pydantic_evals.dataset import EvaluatorContext
 from pydantic_evals.demo.time_range import TimeRangeResponse, infer_time_range
 from pydantic_evals.demo.time_range.models import TimeRangeDataset, TimeRangeInputs
+from pydantic_evals.evaluators.common import is_instance, llm_judge
+from pydantic_evals.evaluators.llm_as_a_judge import GradingOutput, judge_input_output
 
 
 async def judge_time_range_case(inputs: TimeRangeInputs, output: TimeRangeResponse) -> GradingOutput:
@@ -21,17 +21,17 @@ async def main():
     import logfire
 
     logfire.configure(send_to_logfire='if-token-present', console=logfire.ConsoleOptions(verbose=True))
+    dataset = TimeRangeDataset.from_yaml(custom_evaluators=[is_instance, llm_judge])
 
-    dataset = TimeRangeDataset.from_yaml(scorers=[is_instance, llm_rubric])
-
-    async def assess_case(ctx: ScoringContext[TimeRangeInputs, TimeRangeResponse]):
+    async def my_evaluator(ctx: EvaluatorContext[TimeRangeInputs, TimeRangeResponse]):
         result = await judge_time_range_case(inputs=ctx.inputs, output=ctx.output)
         return {
             'is_reasonable': 'yes' if result.pass_ else 'no',
             'accuracy': result.score,
         }
 
-    dataset.add_assessment(assess_case)
+    dataset.add_evaluator(my_evaluator)
+
     report = await dataset.evaluate(infer_time_range, max_concurrency=10)
     report.print(include_input=True, include_output=True)
 

@@ -9,10 +9,11 @@ TODO(DavidM): Implement a CLI with some pytest-like filtering API to make it eas
 # TODO: Question: How should we decorate functions to make it possible to eval them later?
 #  E.g., could use some kind of `eval_function` decorator, which ensures that calls to the function send eval-review-compatible data to logfire
 #  Basically we need to record the inputs and output. @logfire.instrument might be enough if we make it possible to record the output
-from .dataset import Dataset, increment_eval_metric
+from .dataset import Case, Dataset, increment_eval_metric
 from .reporting.reports import RenderNumberConfig, RenderValueConfig
 
 __all__ = (
+    'Case',
     'Dataset',
     'increment_eval_metric',
     'RenderNumberConfig',

@@ -29,22 +29,22 @@
           "default": null,
           "title": "Expected Output"
         },
-        "assessments": {
+        "evaluators": {
           "default": [],
           "items": {
             "anyOf": [
               {
-                "$ref": "#/$defs/short_assessment_llm_rubric"
+                "$ref": "#/$defs/short_evaluator_llm_judge"
               },
               {
-                "$ref": "#/$defs/assessment_llm_rubric"
+                "$ref": "#/$defs/evaluator_llm_judge"
               },
               {
-                "$ref": "#/$defs/short_assessment_is_instance"
+                "$ref": "#/$defs/short_evaluator_is_instance"
               }
             ]
           },
-          "title": "Assessments",
+          "title": "Evaluators",
           "type": "array"
         }
       },
@@ -314,20 +314,20 @@
       "title": "TimeRangeInputs",
       "type": "object"
     },
-    "assessment_llm_rubric": {
+    "evaluator_llm_judge": {
       "additionalProperties": false,
       "properties": {
-        "llm_rubric": {
-          "$ref": "#/$defs/assessment_params_llm_rubric"
+        "llm_judge": {
+          "$ref": "#/$defs/evaluator_params_llm_judge"
         }
       },
       "required": [
-        "llm_rubric"
+        "llm_judge"
       ],
-      "title": "assessment_llm_rubric",
+      "title": "evaluator_llm_judge",
       "type": "object"
     },
-    "assessment_params_llm_rubric": {
+    "evaluator_params_llm_judge": {
       "additionalProperties": false,
       "properties": {
         "rubric": {
@@ -345,10 +345,10 @@
       "required": [
         "rubric"
       ],
-      "title": "assessment_params_llm_rubric",
+      "title": "evaluator_params_llm_judge",
       "type": "object"
     },
-    "short_assessment_is_instance": {
+    "short_evaluator_is_instance": {
       "additionalProperties": false,
       "properties": {
         "is_instance": {
@@ -359,54 +359,54 @@
       "required": [
         "is_instance"
       ],
-      "title": "short_assessment_is_instance",
+      "title": "short_evaluator_is_instance",
       "type": "object"
     },
-    "short_assessment_llm_rubric": {
+    "short_evaluator_llm_judge": {
       "additionalProperties": false,
       "properties": {
-        "llm_rubric": {
-          "title": "Llm Rubric",
+        "llm_judge": {
+          "title": "Llm Judge",
           "type": "string"
         }
       },
       "required": [
-        "llm_rubric"
+        "llm_judge"
       ],
-      "title": "short_assessment_llm_rubric",
+      "title": "short_evaluator_llm_judge",
       "type": "object"
     }
   },
   "additionalProperties": false,
   "properties": {
-    "rows": {
+    "cases": {
       "items": {
         "$ref": "#/$defs/ClsDatasetRow"
       },
-      "title": "Rows",
+      "title": "Cases",
       "type": "array"
     },
-    "assessments": {
+    "evaluators": {
       "default": [],
       "items": {
         "anyOf": [
           {
-            "$ref": "#/$defs/short_assessment_llm_rubric"
+            "$ref": "#/$defs/short_evaluator_llm_judge"
           },
           {
-            "$ref": "#/$defs/assessment_llm_rubric"
+            "$ref": "#/$defs/evaluator_llm_judge"
           },
           {
-            "$ref": "#/$defs/short_assessment_is_instance"
+            "$ref": "#/$defs/short_evaluator_is_instance"
           }
         ]
       },
-      "title": "Assessments",
+      "title": "Evaluators",
       "type": "array"
     }
   },
   "required": [
-    "rows"
+    "cases"
   ],
   "title": "TimeRangeDataset",
   "type": "object"

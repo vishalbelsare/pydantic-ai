@@ -17,9 +17,9 @@ MetadataT = TypeVar('MetadataT', default=dict[str, Any], covariant=True)
 class EvaluatorContext(Generic[InputsT, OutputT, MetadataT]):
     """Context for scoring an evaluation case."""
 
-    name: str
+    name: str | None
     inputs: InputsT
-    metadata: MetadataT
+    metadata: MetadataT | None
     expected_output: OutputT | None
 
     output: OutputT

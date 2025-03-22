@@ -46,9 +46,9 @@ else:
 
 _logfire = logfire.Logfire(otel_scope='pydantic-evals')
 
-InputsT = TypeVar('InputsT', default=dict[str, Any])  # TODO: Should we default to Any?
-OutputT = TypeVar('OutputT', default=dict[str, Any] | None)  # TODO: Should we default to Any?
-MetadataT = TypeVar('MetadataT', default=dict[str, Any] | None)  # TODO: Should we default to Any?
+InputsT = TypeVar('InputsT', default=Any)
+OutputT = TypeVar('OutputT', default=Any)
+MetadataT = TypeVar('MetadataT', default=Any)
 
 DEFAULT_DATASET_PATH = './test_cases.yaml'
 
@@ -56,9 +56,9 @@ DEFAULT_DATASET_PATH = './test_cases.yaml'
 class _CaseModel(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid'):
     """A single row of a "dataset", consisting of input, expected output, and metadata."""
 
-    name: str
+    name: str | None = None
     inputs: InputsT
-    metadata: MetadataT
+    metadata: MetadataT | None = None
     expected_output: OutputT | None = None
     evaluators: list[EvaluatorSpec] = Field(default_factory=list)
 
@@ -74,25 +74,25 @@ class _DatasetModel(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forb
 class Case(Generic[InputsT, OutputT, MetadataT]):
     """A single row of a "dataset", consisting of input, expected output, and metadata."""
 
-    name: str
+    name: str | None
     inputs: InputsT
-    metadata: MetadataT
+    metadata: MetadataT | None
     expected_output: OutputT | None
     evaluators: list[Evaluator[InputsT, OutputT, MetadataT]]
-
-    UNSET_NAME = '<unset>'
 
     def __init__(
         self,
         *,
-        name: str = UNSET_NAME,
+        name: str | None = None,
         inputs: InputsT,
-        metadata: MetadataT = None,
+        metadata: MetadataT | None = None,
         expected_output: OutputT | None = None,
-        evaluators: Sequence[
-            BoundEvaluatorFunction[InputsT, OutputT, MetadataT] | Evaluator[InputsT, OutputT, MetadataT]
+        evaluators: tuple[
+            BoundEvaluatorFunction[InputsT, OutputT, MetadataT] | Evaluator[InputsT, OutputT, MetadataT], ...
         ] = (),
     ):
+        # Note: `evaluators` must be a tuple instead of Sequence due to misbehavior with pyright's generic parameter
+        # inference if it has type `Sequence`
         self.name = name
         self.inputs = inputs
         self.metadata = metadata
@@ -106,34 +106,30 @@ class Case(Generic[InputsT, OutputT, MetadataT]):
 class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid', arbitrary_types_allowed=True):
     """A dataset of test cases, each consisting of input, expected output, and metadata."""
 
+    # tasks: list[Callable[[InputsT], Awaitable[OutputT]]]
     cases: list[Case[InputsT, OutputT, MetadataT]]
     evaluators: list[Evaluator[InputsT, OutputT, MetadataT]]
 
     def __init__(
         self,
         *,
+        # tasks: Sequence[Callable[[InputsT], Awaitable[OutputT]]] = (),
         cases: Sequence[Case[InputsT, OutputT, MetadataT]] = (),
         evaluators: Sequence[
             BoundEvaluatorFunction[InputsT, OutputT, MetadataT] | Evaluator[InputsT, OutputT, MetadataT]
         ] = (),
     ):
-        for i, case in enumerate(cases):
-            if case.name == Case.UNSET_NAME:
-                case.name = f'Case {i}'
-
-        super().__init__(cases=cases, evaluators=evaluators)
+        super().__init__(
+            # tasks=tasks,
+            cases=cases,
+            evaluators=evaluators,
+        )
+        # self.tasks = list(tasks)
         self.cases = list(cases)
         self.evaluators = [
             a if isinstance(a, Evaluator) else Evaluator[InputsT, OutputT, MetadataT].from_function(a)
             for a in evaluators
         ]
-
-    def evaluate_sync(
-        self, task: Callable[[InputsT], Awaitable[OutputT]], name: str | None = None, max_concurrency: int | None = None
-    ) -> EvaluationReport:
-        return _utils.get_event_loop().run_until_complete(
-            self.evaluate(task, name=name, max_concurrency=max_concurrency)
-        )
 
     async def evaluate(
         self, task: Callable[[InputsT], Awaitable[OutputT]], name: str | None = None, max_concurrency: int | None = None
@@ -144,14 +140,14 @@ class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid', a
         limiter = asyncio.Semaphore(max_concurrency) if max_concurrency is not None else nullcontext()
         with _logfire.span('evaluate {name}', name=name) as eval_span:
 
-            async def _handle_case(case: Case[InputsT, OutputT, MetadataT]) -> ReportCase:
+            async def _handle_case(case: Case[InputsT, OutputT, MetadataT], report_case_name: str) -> ReportCase:
                 async with limiter:
-                    return await _run_task_and_evaluators(task, case, self.evaluators)
+                    return await _run_task_and_evaluators(task, case, report_case_name, self.evaluators)
 
             async_tasks: list[asyncio.Task[ReportCase]] = []
             async with asyncio.TaskGroup() as group:
-                for case in self.cases:
-                    async_tasks.append(group.create_task(_handle_case(case), name=case.name))
+                for i, case in enumerate(self.cases, 1):
+                    async_tasks.append(group.create_task(_handle_case(case, case.name or f'Case {i}')))
 
             report = EvaluationReport(name=name, cases=[x.result() for x in async_tasks])
             # TODO(DavidM): This attribute will be too big in general; remove it once we can use child spans in details panel:
@@ -160,14 +156,26 @@ class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid', a
             eval_span.set_attribute('averages', ReportCaseAggregate.average(report.cases))
         return report
 
+    def evaluate_sync(
+        self, task: Callable[[InputsT], Awaitable[OutputT]], name: str | None = None, max_concurrency: int | None = None
+    ) -> EvaluationReport:
+        """Evaluates the test cases in the dataset using the given task.
+
+        This is just a synchronous wrapper around `evaluate` provided for convenience.
+        """
+        return _utils.get_event_loop().run_until_complete(
+            self.evaluate(task, name=name, max_concurrency=max_concurrency)
+        )
+
     def add_case(
         self,
-        name: str,
+        *,
+        name: str | None = None,
         inputs: InputsT,
-        metadata: MetadataT,
+        metadata: MetadataT | None = None,
         expected_output: OutputT | None = None,
-        evaluators: Sequence[
-            BoundEvaluatorFunction[InputsT, OutputT, MetadataT] | Evaluator[InputsT, OutputT, MetadataT]
+        evaluators: tuple[
+            BoundEvaluatorFunction[InputsT, OutputT, MetadataT] | Evaluator[InputsT, OutputT, MetadataT], ...
         ] = (),
     ) -> None:
         """Adds a case to the evaluation."""
@@ -225,10 +233,13 @@ class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid', a
             first_line = path.read_text().split('\n', 1)[0]
             if first_line.startswith('# yaml-language-server: $schema='):
                 schema_ref = first_line.split('=', 1)[1]
-        content = yaml.dump(to_jsonable_python(self), sort_keys=False)
+        content = yaml.dump(self.dump_shortened(), sort_keys=False)
         if schema_ref is not None:
             content = _ensure_yaml_language_server_line(content, schema_ref)
         path.write_text(content)
+
+    def dump_shortened(self) -> dict[str, Any]:
+        return to_jsonable_python(self.model_dump(context={'use_short_forms': True}, exclude_defaults=True))
 
     @classmethod
     def from_yaml(
@@ -589,6 +600,7 @@ async def _run_task(
 async def _run_task_and_evaluators(
     task: Callable[[InputsT], Awaitable[OutputT]],
     case: Case[InputsT, OutputT, MetadataT],
+    report_case_name: str,
     dataset_evaluators: list[Evaluator[InputsT, OutputT, MetadataT]],
 ) -> ReportCase:
     with _logfire.span(
@@ -631,7 +643,7 @@ async def _run_task_and_evaluators(
     )
 
     return ReportCase(
-        name=case.name,
+        name=report_case_name,
         inputs=report_inputs,
         metadata=case.metadata,
         expected_output=case.expected_output,

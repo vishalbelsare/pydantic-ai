@@ -19,7 +19,7 @@ from pydantic import (
     model_validator,
 )
 from pydantic._internal import _typing_extra
-from pydantic_core.core_schema import SerializerFunctionWrapHandler
+from pydantic_core.core_schema import SerializationInfo, SerializerFunctionWrapHandler
 from typing_extensions import Self, TypedDict, TypeVar
 
 from .._utils import get_unwrapped_function_name
@@ -60,23 +60,25 @@ class EvaluatorSpec(BaseModel):
             return deserialized.to_evaluator_spec()
 
     @model_serializer(mode='wrap')
-    def serialize(self, handler: SerializerFunctionWrapHandler) -> Any:
-        return handler(self)
+    def serialize(self, handler: SerializerFunctionWrapHandler, info: SerializationInfo) -> Any:
+        context = info.context
+        if isinstance(context, dict) and context.get('use_short_forms', False):  # pyright: ignore[reportUnknownMemberType]
+            return handler(self)
 
-        # # TODO: Use context to determine if dumping to yaml or not; if not, always use the long form
-        # # In this case, use the standard "long-form" serialization
-        # if len(self.args) > 1:
-        #     return handler(self)
-        #
-        # # TODO: Go back to using this code for yaml:
-        # # Note: The rest of this logic needs to be kept in sync with the definition of _SerializedEvaluatorSpec
-        # # In this case, use the shortest compatible form of serialization:
-        # if not self.args and not self.kwargs:
-        #     return self.call
-        # elif len(self.args) == 1:
-        #     return {self.call: self.args[0]}
-        # else:
-        #     return {self.call: self.kwargs}
+        # Note: The rest of this logic needs to be kept in sync with the definition of _SerializedEvaluatorSpec
+        # In this case, use the shortest compatible form of serialization:
+        if self.args:
+            if self.kwargs or len(self.args) > 1:
+                return handler(self)
+            elif len(self.args) == 1:
+                return {self.call: self.args[0]}
+        elif self.kwargs:
+            if len(self.kwargs) == 1:
+                return {self.call: next(iter(self.kwargs.values()))}
+            else:
+                return {self.call: self.kwargs}
+        else:
+            return self.call
 
 
 class _SerializedEvaluatorSpec(RootModel[str | dict[str, Any]]):

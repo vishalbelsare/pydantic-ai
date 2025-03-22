@@ -18,10 +18,14 @@ async def judge_time_range_case(inputs: TimeRangeInputs, output: TimeRangeRespon
 
 async def main():
     """TODO: Task: Convert this pydantic_evals.demo package into docs."""
+    from pathlib import Path
+
     import logfire
 
     logfire.configure(send_to_logfire='if-token-present', console=logfire.ConsoleOptions(verbose=True))
-    dataset = TimeRangeDataset.from_yaml(custom_evaluators=[is_instance, llm_judge])
+    dataset = TimeRangeDataset.from_file(
+        Path(__file__).parent / 'test_cases.yaml', custom_evaluators=[is_instance, llm_judge]
+    )
 
     async def my_evaluator(ctx: EvaluatorContext[TimeRangeInputs, TimeRangeResponse]):
         result = await judge_time_range_case(inputs=ctx.inputs, output=ctx.output)

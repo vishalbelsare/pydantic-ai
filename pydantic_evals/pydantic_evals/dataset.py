@@ -29,7 +29,7 @@ else:
 import logfire
 import yaml
 from pydantic import BaseModel, Field, ValidationError
-from pydantic_core import to_json, to_jsonable_python
+from pydantic_core import from_json, to_json, to_jsonable_python
 from typing_extensions import TypedDict, TypeVar
 
 from .evaluators.spec import BoundEvaluatorFunction, Evaluator, EvaluatorFunction, EvaluatorSpec
@@ -51,6 +51,7 @@ OutputT = TypeVar('OutputT', default=Any)
 MetadataT = TypeVar('MetadataT', default=Any)
 
 DEFAULT_DATASET_PATH = './test_cases.yaml'
+DEFAULT_SCHEMA_PATH_TEMPLATE = './{stem}_schema.json'
 
 
 class _CaseModel(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid'):
@@ -103,28 +104,29 @@ class Case(Generic[InputsT, OutputT, MetadataT]):
         ]
 
 
+# TODO: Consider making the following changes to this type:
+#  * Add `task: Callable[[InputsT], Awaitable[OutputT]` as a field
+#  * Add `inputs_type`, `output_type`, etc. as kwargs on `__init__`
+#  * Rename to `Evaluation`
+#  * Allow `task` to be sync _or_ async
 class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid', arbitrary_types_allowed=True):
     """A dataset of test cases, each consisting of input, expected output, and metadata."""
 
-    # tasks: list[Callable[[InputsT], Awaitable[OutputT]]]
     cases: list[Case[InputsT, OutputT, MetadataT]]
-    evaluators: list[Evaluator[InputsT, OutputT, MetadataT]]
+    evaluators: list[Evaluator[InputsT, OutputT, MetadataT]] = []
 
     def __init__(
         self,
         *,
-        # tasks: Sequence[Callable[[InputsT], Awaitable[OutputT]]] = (),
-        cases: Sequence[Case[InputsT, OutputT, MetadataT]] = (),
+        cases: Sequence[Case[InputsT, OutputT, MetadataT]],
         evaluators: Sequence[
             BoundEvaluatorFunction[InputsT, OutputT, MetadataT] | Evaluator[InputsT, OutputT, MetadataT]
         ] = (),
     ):
         super().__init__(
-            # tasks=tasks,
             cases=cases,
             evaluators=evaluators,
         )
-        # self.tasks = list(tasks)
         self.cases = list(cases)
         self.evaluators = [
             a if isinstance(a, Evaluator) else Evaluator[InputsT, OutputT, MetadataT].from_function(a)
@@ -214,11 +216,6 @@ class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid', a
 
     @classmethod
     @functools.cache
-    def _serialization_type(cls) -> type[_DatasetModel[InputsT, OutputT, MetadataT]]:
-        return _DatasetModel[cls._params()]  # type: ignore
-
-    @classmethod
-    @functools.cache
     def _params(cls) -> tuple[type[InputsT], type[OutputT], type[MetadataT]]:
         for c in cls.__mro__:
             metadata = getattr(c, '__pydantic_generic_metadata__')
@@ -226,41 +223,43 @@ class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid', a
                 return args
         raise ValueError(f'Could not determine the generic parameters for {cls}')
 
-    # TODO: Task: Always save a schema file when saving the dataset
-    def save(self, path: Path | str = DEFAULT_DATASET_PATH, schema_ref: str | None = None) -> None:
-        path = self._get_relative_path(path)
-        if path.exists():
-            first_line = path.read_text().split('\n', 1)[0]
-            if first_line.startswith('# yaml-language-server: $schema='):
-                schema_ref = first_line.split('=', 1)[1]
-        content = yaml.dump(self.dump_shortened(), sort_keys=False)
-        if schema_ref is not None:
-            content = _ensure_yaml_language_server_line(content, schema_ref)
-        path.write_text(content)
-
-    def dump_shortened(self) -> dict[str, Any]:
-        return to_jsonable_python(self.model_dump(context={'use_short_forms': True}, exclude_defaults=True))
-
     @classmethod
-    def from_yaml(
+    def from_file(
         cls,
-        path: Path | str = DEFAULT_DATASET_PATH,
+        path: Path | str,
+        fmt: Literal['yaml', 'json'] | None = None,
         custom_evaluators: Sequence[EvaluatorFunction[InputsT, OutputT, MetadataT]] = (),
     ) -> Self:
-        path = cls._get_relative_path(path)
-        if not path.exists():
-            raise FileNotFoundError(f'{cls.__name__} dataset file {path} does not exist')
+        path = Path(path)
+        fmt = cls._infer_fmt(path, fmt)
 
-        dataset_model_type = cls._serialization_type()
-        raw = path.read_text()
-        loaded = yaml.safe_load(raw)
+        raw = Path(path).read_text()
         try:
-            dataset_model: _DatasetModel[InputsT, OutputT, MetadataT] = dataset_model_type.model_validate(loaded)
-            # result.rows = [cls.serialized_row_type().model_validate(row.model_dump()) for row in result.rows]
+            return cls.from_text(raw, fmt=fmt, custom_evaluators=custom_evaluators)
         except ValidationError as e:
-            raise ValueError(
-                f'{cls.__name__} dataset file {path} contains data that does not match the schema:\n{e}.'
-            ) from e
+            raise ValueError(f'{path} contains data that does not match the schema for {cls.__name__}:\n{e}.') from e
+
+    @classmethod
+    def from_text(
+        cls,
+        contents: str,
+        fmt: Literal['yaml', 'json'] = 'yaml',
+        custom_evaluators: Sequence[EvaluatorFunction[InputsT, OutputT, MetadataT]] = (),
+    ):
+        if fmt == 'yaml':
+            loaded = yaml.safe_load(contents)
+        else:
+            loaded = from_json(contents)
+        return cls.from_dict(loaded, custom_evaluators)
+
+    @classmethod
+    def from_dict(
+        cls,
+        data: dict[str, Any],
+        custom_evaluators: Sequence[EvaluatorFunction[InputsT, OutputT, MetadataT]] = (),
+    ):
+        dataset_model_type = cls._serialization_type()
+        dataset_model: _DatasetModel[InputsT, OutputT, MetadataT] = dataset_model_type.model_validate(data)
 
         registry = {get_unwrapped_function_name(f): f for f in custom_evaluators}
 
@@ -298,58 +297,46 @@ class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid', a
         result.evaluators = dataset_evaluators
         return result
 
-    @classmethod
-    def generate_dataset_files(
-        cls,
-        dataset_path: Path | str = DEFAULT_DATASET_PATH,
-        schema_path: Path | str | None = None,
+    def to_file(
+        self,
+        path: Path | str,
+        fmt: Literal['yaml', 'json'] | None = None,
+        schema_path: Path | str | None = DEFAULT_SCHEMA_PATH_TEMPLATE,
         custom_evaluators: Sequence[EvaluatorFunction[InputsT, OutputT, MetadataT]] = (),
-    ) -> str:
-        dataset_path = cls._get_relative_path(dataset_path)
+    ):
+        path = Path(path)
+        fmt = self._infer_fmt(path, fmt)
 
-        if schema_path is None:
-            if dataset_path.exists():
-                # Try to infer the schema path from the first line of the existing dataset file
-                first_line = dataset_path.read_text().split('\n', 1)[0]
-                if first_line.startswith('# yaml-language-server: $schema='):
-                    schema_path = (dataset_path.parent / first_line.split('=', 1)[1]).resolve()
-            if schema_path is None:
-                schema_path = cls._get_schema_path(dataset_path)
+        schema_ref: str | None = None
+        if schema_path is not None:
+            if isinstance(schema_path, str):
+                schema_path = Path(schema_path.format(stem=path.stem))
+
+            if not schema_path.is_absolute():
+                schema_ref = str(schema_path)
+                schema_path = path.parent / schema_path
+            elif schema_path.is_relative_to(path):
+                schema_ref = str(_get_relative_path_reference(schema_path, path))
+            else:
+                schema_ref = str(schema_path)
+            self._save_schema(schema_path, custom_evaluators)
+
+        dumped_data = to_jsonable_python(self.model_dump(context={'use_short_forms': True}, exclude_defaults=True))
+        if fmt == 'yaml':
+            content = yaml.dump(dumped_data, sort_keys=False)
+            if schema_ref:
+                yaml_language_server_line = f'# yaml-language-server: $schema={schema_ref}'
+                content = f'{yaml_language_server_line}\n{content}'
+            path.write_text(content)
         else:
-            schema_path = cls._get_relative_path(schema_path)
-
-        schema_content = to_json(cls.model_json_schema_with_evaluators(custom_evaluators), indent=2).decode() + '\n'
-        if not schema_path.exists() or schema_path.read_text() != schema_content:
-            schema_path.write_text(schema_content)
-
-        schema_ref = str(_get_relative_path_reference(schema_path, dataset_path.parent))
-        yaml_language_server_line = f'# yaml-language-server: $schema={schema_ref}'
-        if dataset_path.exists():
-            try:
-                cls.from_yaml(dataset_path, custom_evaluators)
-            except ValueError as e:
-                if isinstance(e.__cause__, ValidationError):
-                    raise ValueError(
-                        f'{cls.__name__} dataset file {dataset_path} already exists, but does not contain compatible data.'
-                        f' Fix or delete the file before calling this function:\n{e.__cause__}'
-                    ) from e.__cause__
-                else:
-                    raise
-            dataset_text = dataset_path.read_text()
-            cases_text_with_schema = _ensure_yaml_language_server_line(dataset_text, schema_ref)
-            if cases_text_with_schema != dataset_text:
-                dataset_path.write_text(cases_text_with_schema)
-        else:
-            content = yaml.dump(to_jsonable_python(cls(cases=[])), sort_keys=False)
-            dataset_path.write_text(f'{yaml_language_server_line}\n{content}')
-        return schema_ref
+            path.write_text(to_json(dumped_data, indent=2).decode() + '\n')
 
     @classmethod
     def model_json_schema_with_evaluators(
         cls,
-        scorers: Sequence[EvaluatorFunction[InputsT, OutputT, MetadataT]] = (),
+        custom_evaluators: Sequence[EvaluatorFunction[InputsT, OutputT, MetadataT]] = (),
     ) -> dict[str, Any]:
-        registry = {get_unwrapped_function_name(f): f for f in scorers}
+        registry = {get_unwrapped_function_name(f): f for f in custom_evaluators}
 
         evaluator_types: list[Any] = []
         for name, function in registry.items():
@@ -413,47 +400,20 @@ class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid', a
 
         return ClsDataset.model_json_schema()
 
-    # TODO: Task: Uncomment and finish implementing function to generate examples for a dataset using an LLM
-    # @classmethod
-    # def generate_dataset_examples(
-    #     cls,
-    #     model: models.Model | models.KnownModelName = 'gpt-4o',
-    #     min_count: int = 3,
-    #     dataset_path: Path | str = DEFAULT_DATASET_PATH,
-    # ):
-    #     dataset_path = cls._get_relative_path(dataset_path)
-    #     schema_ref = cls.generate_dataset_files(dataset_path=dataset_path, schema_path=None)
-    #
-    #     existing_content: str | None = None
-    #
-    #     try:
-    #         existing_rows = cls.from_yaml(dataset_path).rows
-    #         min_count = max(0, min_count - len(existing_rows))
-    #         if min_count == 0:
-    #             return  # nothing to do, already have enough examples
-    #         if existing_rows:
-    #             existing_content = dataset_path.read_text()
-    #     except FileNotFoundError:
-    #         pass  # in this case, we'll generate a new file, so we ignore the error
-    #
-    #     examples = asyncio.run(_generate_examples(cls, dataset_path, model, min_count))
-    #
-    #     if existing_content is None:
-    #         content = yaml.dump(to_jsonable_python(cls(rows=examples)), sort_keys=False)
-    #         content = _ensure_yaml_language_server_line(content, schema_ref)
-    #         dataset_path.write_text(content)
-    #     else:
-    #         new_lines = yaml.dump(to_jsonable_python(cls(rows=examples)), sort_keys=False).splitlines()
-    #         new_lines = new_lines[1:]  # drop the first line, which is the document start
-    #         new_content = _ensure_yaml_language_server_line(existing_content, schema_ref)
-    #         if not new_content.endswith('\n'):
-    #             new_content += '\n'
-    #         new_content += '\n'.join(new_lines)
-    #         dataset_path.write_text(new_content)
+    @classmethod
+    def _save_schema(
+        cls, path: Path | str, custom_evaluators: Sequence[EvaluatorFunction[InputsT, OutputT, MetadataT]] = ()
+    ):
+        path = Path(path)
+        json_schema = cls.model_json_schema_with_evaluators(custom_evaluators)
+        schema_content = to_json(json_schema, indent=2).decode() + '\n'
+        if not path.exists() or path.read_text() != schema_content:
+            path.write_text(schema_content)
 
     @classmethod
-    def _get_schema_path(cls, dataset_path: Path) -> Path:
-        return dataset_path.parent / f'./{dataset_path.stem}_schema.json'
+    @functools.cache
+    def _serialization_type(cls) -> type[_DatasetModel[InputsT, OutputT, MetadataT]]:
+        return _DatasetModel[cls._params()]  # type: ignore
 
     @classmethod
     def _get_relative_path(cls, path: Path | str) -> Path:
@@ -472,54 +432,15 @@ class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid', a
         root = Path(module_path).parent
         return root / path
 
-
-def _ensure_yaml_language_server_line(content: str, schema_ref: str) -> str:
-    first_line = content.split('\n', 1)[0]
-    yaml_language_server_line = f'# yaml-language-server: $schema={schema_ref}'
-    if first_line == yaml_language_server_line:
-        return content
-    elif first_line.startswith('# yaml-language-server: $schema='):
-        return '\n'.join([yaml_language_server_line] + content.split('\n')[1:])
-    else:
-        return f'{yaml_language_server_line}\n{content}'
-
-
-# TODO: Use or lose this function
-# async def _generate_examples(
-#     dataset_type: type[Dataset[Any, Any, Any]],
-#     path: Path,
-#     model: models.Model | models.KnownModelName = 'gpt-4o',
-#     n_examples: int = 3,
-# ) -> list[SerializedDatasetRow[Any, Any, Any]]:
-#     if path.exists():
-#         cases_text = path.read_text()
-#         try:
-#             loaded = yaml.safe_load(cases_text)
-#         except yaml.YAMLError:
-#             raise ValueError(f'Cases file {path} is not valid YAML')
-#
-#         try:
-#             existing_cases = dataset_type.type_adapter().validate_python(loaded).rows
-#         except ValidationError as e:
-#             raise ValueError(
-#                 f'Cases file {path} contains data that does not match the schema. Delete the file before calling this function.'
-#             ) from e
-#     else:
-#         existing_cases = []
-#
-#     n_examples = max(0, n_examples - len(existing_cases))
-#     if n_examples == 0:
-#         return []
-#
-#     from pydantic_ai import Agent  # import locally to prevent circular dependencies
-#
-#     agent = Agent(
-#         model,
-#         system_prompt=dedent('Generate concise example test cases that comply with the provided JSON schema.'),
-#         result_type=dataset_type,
-#         retries=1,
-#     )
-#     return (await agent.run(f'Generate {n_examples} examples')).data.rows
+    @classmethod
+    def _infer_fmt(cls, path: Path, fmt: Literal['yaml', 'json'] | None) -> Literal['yaml', 'json']:
+        if fmt is not None:
+            return fmt
+        if path.suffix in {'.yaml', '.yml'}:
+            return 'yaml'
+        if path.suffix == '.json':
+            return 'json'
+        raise ValueError(f'Unrecognized file format: {path.suffix}. Use the `fmt` argument to specify the format.')
 
 
 def _get_relative_path_reference(target: Path, source: Path, _prefix: str = '') -> Path:

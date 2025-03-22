@@ -3,7 +3,7 @@ from __future__ import annotations
 import inspect
 from collections.abc import Awaitable, Mapping
 from dataclasses import dataclass
-from functools import wraps
+from functools import partial, wraps
 from typing import Any, Callable, Concatenate, Generic, NotRequired, cast
 
 import anyio.to_thread
@@ -19,15 +19,16 @@ from pydantic import (
     model_validator,
 )
 from pydantic._internal import _typing_extra
+from pydantic_core import to_jsonable_python
 from pydantic_core.core_schema import SerializationInfo, SerializerFunctionWrapHandler
 from typing_extensions import Self, TypedDict, TypeVar
 
 from .._utils import get_unwrapped_function_name
 from .context import EvaluatorContext
 
-InputsT = TypeVar('InputsT', default=dict[str, Any])
-OutputT = TypeVar('OutputT', default=dict[str, Any])
-MetadataT = TypeVar('MetadataT', default=dict[str, Any])
+InputsT = TypeVar('InputsT', default=Any)
+OutputT = TypeVar('OutputT', default=Any)
+MetadataT = TypeVar('MetadataT', default=Any)
 
 
 class EvaluatorSpec(BaseModel):
@@ -184,12 +185,23 @@ class Evaluator(Generic[InputsT, OutputT, MetadataT]):
     spec: EvaluatorSpec
     function: BoundEvaluatorFunction[InputsT, OutputT, MetadataT]
 
+    @model_serializer(mode='plain')
+    def serialize(self) -> Any:
+        return to_jsonable_python(self.spec)
+
     @classmethod
     def from_function(
         cls,
         function: BoundEvaluatorFunction[InputsT, OutputT, MetadataT],
     ) -> Self:
-        spec = EvaluatorSpec(call=get_unwrapped_function_name(function))
+        def _get_partial_kwargs() -> dict[str, Any]:
+            if isinstance(function, partial):
+                sig = inspect.signature(function.func)
+                return sig.bind_partial(*function.args, **function.keywords).arguments
+            return {}
+
+        spec = EvaluatorSpec(call=get_unwrapped_function_name(function), kwargs=_get_partial_kwargs())
+
         return cls(spec=spec, function=function)
 
     @classmethod

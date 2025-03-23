@@ -41,6 +41,31 @@
               },
               {
                 "$ref": "#/$defs/short_evaluator_is_instance"
+              },
+              {
+                "$ref": "#/$defs/short_evaluator_equals"
+              },
+              {
+                "const": "equals_expected",
+                "type": "string"
+              },
+              {
+                "$ref": "#/$defs/short_evaluator_contains"
+              },
+              {
+                "$ref": "#/$defs/evaluator_contains"
+              },
+              {
+                "$ref": "#/$defs/short_evaluator_max_duration"
+              },
+              {
+                "$ref": "#/$defs/short_evaluator_span_query"
+              },
+              {
+                "$ref": "#/$defs/short_evaluator_python"
+              },
+              {
+                "$ref": "#/$defs/evaluator_python"
               }
             ]
           },
@@ -244,6 +269,95 @@
       ],
       "type": "string"
     },
+    "SpanQuery": {
+      "description": "A serializable query for filtering SpanNodes based on various conditions.\n\nAll fields are optional and combined with AND logic by default.\n\nDue to the presence of `__calL__`, a `SpanQuery` can be used as a predicate in `SpanTree.find_first`, etc.",
+      "properties": {
+        "name_equals": {
+          "title": "Name Equals",
+          "type": "string"
+        },
+        "name_contains": {
+          "title": "Name Contains",
+          "type": "string"
+        },
+        "name_matches_regex": {
+          "title": "Name Matches Regex",
+          "type": "string"
+        },
+        "has_attributes": {
+          "title": "Has Attributes",
+          "type": "object"
+        },
+        "has_attribute_keys": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Has Attribute Keys",
+          "type": "array"
+        },
+        "min_duration": {
+          "anyOf": [
+            {
+              "format": "duration",
+              "type": "string"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Min Duration"
+        },
+        "max_duration": {
+          "anyOf": [
+            {
+              "format": "duration",
+              "type": "string"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Max Duration"
+        },
+        "not_": {
+          "$ref": "#/$defs/SpanQuery"
+        },
+        "and_": {
+          "items": {
+            "$ref": "#/$defs/SpanQuery"
+          },
+          "title": "And",
+          "type": "array"
+        },
+        "or_": {
+          "items": {
+            "$ref": "#/$defs/SpanQuery"
+          },
+          "title": "Or",
+          "type": "array"
+        },
+        "some_child_has": {
+          "$ref": "#/$defs/SpanQuery"
+        },
+        "all_children_have": {
+          "$ref": "#/$defs/SpanQuery"
+        },
+        "no_child_has": {
+          "$ref": "#/$defs/SpanQuery"
+        },
+        "some_descendant_has": {
+          "$ref": "#/$defs/SpanQuery"
+        },
+        "all_descendants_have": {
+          "$ref": "#/$defs/SpanQuery"
+        },
+        "no_descendant_has": {
+          "$ref": "#/$defs/SpanQuery"
+        }
+      },
+      "title": "SpanQuery",
+      "type": "object"
+    },
     "TimeRangeBuilderError": {
       "description": "Response when a time range cannot not be generated.",
       "properties": {
@@ -314,6 +428,19 @@
       "title": "TimeRangeInputs",
       "type": "object"
     },
+    "evaluator_contains": {
+      "additionalProperties": false,
+      "properties": {
+        "contains": {
+          "$ref": "#/$defs/evaluator_params_contains"
+        }
+      },
+      "required": [
+        "contains"
+      ],
+      "title": "evaluator_contains",
+      "type": "object"
+    },
     "evaluator_llm_judge": {
       "additionalProperties": false,
       "properties": {
@@ -325,6 +452,27 @@
         "llm_judge"
       ],
       "title": "evaluator_llm_judge",
+      "type": "object"
+    },
+    "evaluator_params_contains": {
+      "additionalProperties": false,
+      "properties": {
+        "value": {
+          "title": "Value"
+        },
+        "case_sensitive": {
+          "title": "Case Sensitive",
+          "type": "boolean"
+        },
+        "as_strings": {
+          "title": "As Strings",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "value"
+      ],
+      "title": "evaluator_params_contains",
       "type": "object"
     },
     "evaluator_params_llm_judge": {
@@ -346,6 +494,70 @@
         "rubric"
       ],
       "title": "evaluator_params_llm_judge",
+      "type": "object"
+    },
+    "evaluator_params_python": {
+      "additionalProperties": false,
+      "properties": {
+        "condition": {
+          "title": "Condition",
+          "type": "string"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Name"
+        }
+      },
+      "required": [
+        "condition"
+      ],
+      "title": "evaluator_params_python",
+      "type": "object"
+    },
+    "evaluator_python": {
+      "additionalProperties": false,
+      "properties": {
+        "python": {
+          "$ref": "#/$defs/evaluator_params_python"
+        }
+      },
+      "required": [
+        "python"
+      ],
+      "title": "evaluator_python",
+      "type": "object"
+    },
+    "short_evaluator_contains": {
+      "additionalProperties": false,
+      "properties": {
+        "contains": {
+          "title": "Contains"
+        }
+      },
+      "required": [
+        "contains"
+      ],
+      "title": "short_evaluator_contains",
+      "type": "object"
+    },
+    "short_evaluator_equals": {
+      "additionalProperties": false,
+      "properties": {
+        "equals": {
+          "title": "Equals"
+        }
+      },
+      "required": [
+        "equals"
+      ],
+      "title": "short_evaluator_equals",
       "type": "object"
     },
     "short_evaluator_is_instance": {
@@ -375,6 +587,55 @@
       ],
       "title": "short_evaluator_llm_judge",
       "type": "object"
+    },
+    "short_evaluator_max_duration": {
+      "additionalProperties": false,
+      "properties": {
+        "max_duration": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "format": "duration",
+              "type": "string"
+            }
+          ],
+          "title": "Max Duration"
+        }
+      },
+      "required": [
+        "max_duration"
+      ],
+      "title": "short_evaluator_max_duration",
+      "type": "object"
+    },
+    "short_evaluator_python": {
+      "additionalProperties": false,
+      "properties": {
+        "python": {
+          "title": "Python",
+          "type": "string"
+        }
+      },
+      "required": [
+        "python"
+      ],
+      "title": "short_evaluator_python",
+      "type": "object"
+    },
+    "short_evaluator_span_query": {
+      "additionalProperties": false,
+      "properties": {
+        "span_query": {
+          "$ref": "#/$defs/SpanQuery"
+        }
+      },
+      "required": [
+        "span_query"
+      ],
+      "title": "short_evaluator_span_query",
+      "type": "object"
     }
   },
   "additionalProperties": false,
@@ -398,6 +659,31 @@
           },
           {
             "$ref": "#/$defs/short_evaluator_is_instance"
+          },
+          {
+            "$ref": "#/$defs/short_evaluator_equals"
+          },
+          {
+            "const": "equals_expected",
+            "type": "string"
+          },
+          {
+            "$ref": "#/$defs/short_evaluator_contains"
+          },
+          {
+            "$ref": "#/$defs/evaluator_contains"
+          },
+          {
+            "$ref": "#/$defs/short_evaluator_max_duration"
+          },
+          {
+            "$ref": "#/$defs/short_evaluator_span_query"
+          },
+          {
+            "$ref": "#/$defs/short_evaluator_python"
+          },
+          {
+            "$ref": "#/$defs/evaluator_python"
           }
         ]
       },

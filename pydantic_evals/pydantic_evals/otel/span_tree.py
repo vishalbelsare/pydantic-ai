@@ -2,14 +2,15 @@ from __future__ import annotations
 
 import re
 from collections.abc import Mapping
-from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
+from functools import partial
 from textwrap import indent
-from typing import Any, Callable
+from typing import Any, Callable, NotRequired
 
 from opentelemetry.sdk.trace import ReadableSpan
 from opentelemetry.trace import SpanContext
 from opentelemetry.util.types import AttributeValue
+from typing_extensions import TypedDict
 
 SpanId = int
 
@@ -351,8 +352,7 @@ class SpanTree:
         return self.repr_xml()
 
 
-@dataclass
-class SpanQuery:
+class SpanQuery(TypedDict):
     """A serializable query for filtering SpanNodes based on various conditions.
 
     All fields are optional and combined with AND logic by default.
@@ -362,88 +362,106 @@ class SpanQuery:
 
     # Individual span conditions
     ## Name conditions
-    name_equals: str | None = None
-    name_contains: str | None = None
-    name_matches_regex: str | None = None  # regex pattern
+    name_equals: NotRequired[str]
+    name_contains: NotRequired[str]
+    name_matches_regex: NotRequired[str]  # regex pattern
 
     ## Attribute conditions
-    has_attributes: dict[str, Any] = field(default_factory=dict)
-    has_attribute_keys: list[str] = field(default_factory=list)
+    has_attributes: NotRequired[dict[str, Any]]
+    has_attribute_keys: NotRequired[list[str]]
 
     ## Timing conditions
-    min_duration: timedelta | None = None
-    max_duration: timedelta | None = None
+    min_duration: NotRequired[timedelta | float]
+    max_duration: NotRequired[timedelta | float]
 
     # Logical combinations of conditions
-    not_: SpanQuery | None = None
-    and_: list[SpanQuery] = field(default_factory=list)
-    or_: list[SpanQuery] = field(default_factory=list)
+    not_: NotRequired[SpanQuery]
+    and_: NotRequired[list[SpanQuery]]
+    or_: NotRequired[list[SpanQuery]]
 
     # Descendant conditions
-    some_child_has: SpanQuery | None = None
-    all_children_have: SpanQuery | None = None
-    no_child_has: SpanQuery | None = None
+    some_child_has: NotRequired[SpanQuery]
+    all_children_have: NotRequired[SpanQuery]
+    no_child_has: NotRequired[SpanQuery]
 
-    some_descendant_has: SpanQuery | None = None
-    all_descendants_have: SpanQuery | None = None
-    no_descendant_has: SpanQuery | None = None
+    some_descendant_has: NotRequired[SpanQuery]
+    all_descendants_have: NotRequired[SpanQuery]
+    no_descendant_has: NotRequired[SpanQuery]
 
-    def __call__(self, span: SpanNode) -> bool:
-        """Check if the span matches the query conditions."""
-        return self.matches(span)
 
-    def matches(self, span: SpanNode) -> bool:  # noqa C901
-        """Check if the span matches the query conditions."""
-        # Logical combinations
-        if self.not_:
-            if self.not_.matches(span):
-                return False
-        if self.or_:
-            if any(cond.matches(span) for cond in self.or_):
-                return True
-        if self.and_:
-            if not all(cond.matches(span) for cond in self.and_):
-                return False
-        # At this point, all existing ANDs and no existing ORs have passed, so it comes down to this condition
+def as_predicate(query: SpanQuery) -> Callable[[SpanNode], bool]:
+    """Convert a SpanQuery into a callable predicate that can be used in SpanTree.find_first, etc."""
+    return partial(_matches, query)
 
-        # Name conditions
-        if self.name_equals and span.name != self.name_equals:
-            return False
-        if self.name_contains and self.name_contains not in span.name:
-            return False
-        if self.name_matches_regex and not re.match(self.name_matches_regex, span.name):
-            return False
 
-        # Attribute conditions
-        if self.has_attributes and not all(
-            span.attributes.get(key) == value for key, value in self.has_attributes.items()
-        ):
+def _matches(query: SpanQuery, span: SpanNode) -> bool:  # noqa C901
+    """Check if the span matches the query conditions."""
+    # Logical combinations
+    if not_ := query.get('not_'):
+        if _matches(not_, span):
             return False
-        if self.has_attribute_keys and not all(key in span.attributes for key in self.has_attribute_keys):
+    if or_ := query.get('or_'):
+        if any(_matches(q, span) for q in or_):
+            return True
+    if and_ := query.get('and_'):
+        if not all(_matches(q, span) for q in and_):
             return False
+    # At this point, all existing ANDs and no existing ORs have passed, so it comes down to this condition
 
-        # Timing conditions
-        if self.min_duration is not None and span.duration is not None and (span.duration < self.min_duration):
-            return False
-        if self.max_duration is not None and span.duration is not None and (span.duration > self.max_duration):
-            return False
+    # Name conditions
+    if (name_equals := query.get('name_equals')) and span.name != name_equals:
+        return False
+    if (name_contains := query.get('name_contains')) and name_contains not in span.name:
+        return False
+    if (name_matches_regex := query.get('name_matches_regex')) and not re.match(name_matches_regex, span.name):
+        return False
 
-        # Children conditions
-        if self.some_child_has and not any(self.some_child_has.matches(child) for child in span.children):
-            return False
-        if self.all_children_have and not all(self.all_children_have.matches(child) for child in span.children):
-            return False
-        if self.no_child_has and any(self.no_child_has.matches(child) for child in span.children):
-            return False
+    # Attribute conditions
+    if (has_attributes := query.get('has_attributes')) and not all(
+        span.attributes.get(key) == value for key, value in has_attributes.items()
+    ):
+        return False
+    if (has_attributes_keys := query.get('has_attribute_keys')) and not all(
+        key in span.attributes for key in has_attributes_keys
+    ):
+        return False
 
-        # Descendant conditions
-        if self.some_descendant_has and not any(self.some_descendant_has.matches(child) for child in span.descendants):
+    # Timing conditions
+    if (min_duration := query.get('min_duration')) is not None and span.duration is not None:
+        if not isinstance(min_duration, timedelta):
+            min_duration = timedelta(seconds=min_duration)
+        if span.duration < min_duration:
             return False
-        if self.all_descendants_have and not all(
-            self.all_descendants_have.matches(child) for child in span.descendants
-        ):
-            return False
-        if self.no_descendant_has and any(self.no_descendant_has.matches(child) for child in span.descendants):
+    if (max_duration := query.get('max_duration')) is not None and span.duration is not None:
+        if not isinstance(max_duration, timedelta):
+            max_duration = timedelta(seconds=max_duration)
+        if span.duration > max_duration:
             return False
 
-        return True
+    # Children conditions
+    if (some_child_has := query.get('some_child_has')) and not any(
+        _matches(some_child_has, child) for child in span.children
+    ):
+        return False
+    if (all_children_have := query.get('all_children_have')) and not all(
+        _matches(all_children_have, child) for child in span.children
+    ):
+        return False
+    if (no_child_has := query.get('no_child_has')) and any(_matches(no_child_has, child) for child in span.children):
+        return False
+
+    # Descendant conditions
+    if (some_descendant_has := query.get('some_descendant_has')) and not any(
+        _matches(some_descendant_has, child) for child in span.descendants
+    ):
+        return False
+    if (all_descendants_have := query.get('all_descendants_have')) and not all(
+        _matches(all_descendants_have, child) for child in span.descendants
+    ):
+        return False
+    if (no_descendant_has := query.get('no_descendant_has')) and any(
+        _matches(no_descendant_has, child) for child in span.descendants
+    ):
+        return False
+
+    return True

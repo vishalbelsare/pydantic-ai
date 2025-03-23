@@ -2,11 +2,12 @@ from __future__ import annotations as _annotations
 
 from collections.abc import Mapping
 from dataclasses import asdict
+from datetime import timedelta
 from typing import Any, cast
 
 from pydantic_ai import models
 
-from ..otel.span_tree import SpanQuery
+from ..otel.span_tree import SpanQuery, as_predicate
 from .context import EvaluatorContext
 from .spec import EvaluatorFunction, EvaluatorResult
 
@@ -105,9 +106,12 @@ async def is_instance(ctx: EvaluatorContext[object, object, object], type_name: 
     return EvaluatorResult(value=False, reason=reason)
 
 
-async def max_duration(ctx: EvaluatorContext[object, object, object], seconds: float) -> bool:
+async def max_duration(ctx: EvaluatorContext[object, object, object], seconds: float | timedelta) -> bool:
     """Check if the execution time is under the specified maximum."""
-    return ctx.duration < seconds
+    duration = timedelta(seconds=ctx.duration)
+    if not isinstance(seconds, timedelta):
+        seconds = timedelta(seconds=seconds)
+    return duration <= seconds
 
 
 async def llm_judge(
@@ -133,7 +137,7 @@ async def span_query(
     query: SpanQuery,
 ) -> bool:
     """Check if the span tree contains a span with the specified name."""
-    return ctx.span_tree.find_first(query) is not None
+    return ctx.span_tree.find_first(as_predicate(query)) is not None
 
 
 async def python(

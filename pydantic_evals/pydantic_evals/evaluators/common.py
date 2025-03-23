@@ -1,9 +1,113 @@
 from __future__ import annotations as _annotations
 
+from collections.abc import Mapping
+from dataclasses import asdict
+from typing import Any, cast
+
 from pydantic_ai import models
 
+from ..otel.span_tree import SpanQuery
 from .context import EvaluatorContext
-from .spec import EvaluatorResult
+from .spec import EvaluatorFunction, EvaluatorResult
+
+
+async def equals(ctx: EvaluatorContext[object, object, object], value: Any) -> bool:
+    """Check if the output exactly equals the provided value."""
+    return ctx.output == value
+
+
+async def equals_expected(ctx: EvaluatorContext[object, object, object]) -> Mapping[str, bool]:
+    """Check if the output exactly equals the expected output."""
+    if ctx.expected_output is None:
+        return {}  # Only compare if expected output is provided
+
+    return {'equals_expected': ctx.output == ctx.expected_output}
+
+
+_MAX_REASON_LENGTH = 500
+
+
+async def contains(  # noqa C901
+    ctx: EvaluatorContext[object, object, object], value: Any, case_sensitive: bool = True, as_strings: bool = False
+) -> EvaluatorResult:
+    """Check if the output contains the expected output.
+
+    For strings, checks if expected_output is a substring of output.
+    For lists/tuples, checks if expected_output is in output.
+    For dicts, checks if all key-value pairs in expected_output are in output.
+    """
+    # Convert objects to strings if requested
+    failure_reason: str | None = None
+    if as_strings:
+        output_str = str(ctx.output)
+        expected_str = str(value)
+
+        if not case_sensitive:
+            output_str = output_str.lower()
+            expected_str = expected_str.lower()
+
+        failure_reason: str | None = None
+        if expected_str not in output_str:
+            failure_reason = f'Output string {output_str!r} does not contain expected string {expected_str!r}'
+            if (
+                len(failure_reason) > _MAX_REASON_LENGTH
+            ):  # Only include the strings in the reason if it doesn't make it too long
+                failure_reason = 'Output string does not contain expected string'
+        return EvaluatorResult(value=failure_reason is None, reason=failure_reason)
+
+    try:
+        # Handle different collection types
+        if isinstance(ctx.output, dict):
+            if isinstance(value, dict):
+                # Cast to Any to avoid type checking issues
+                output_dict = cast(dict[Any, Any], ctx.output)  # pyright: ignore[reportUnknownMemberType]
+                expected_dict = cast(dict[Any, Any], value)
+                for k in expected_dict:
+                    if k not in output_dict:
+                        failure_reason = f'Output dictionary does not contain expected key {k!r}'
+                        break
+                    elif output_dict[k] != expected_dict[k]:
+                        failure_reason = f'Output dictionary has different value for key {k!r}: {output_dict[k]!r} != {expected_dict[k]!r}'
+                        if (
+                            len(failure_reason) > _MAX_REASON_LENGTH
+                        ):  # Only include the strings in the reason if it doesn't make it too long
+                            failure_reason = f'Output dictionary has different value for key {k!r}'
+                        break
+            else:
+                if value not in ctx.output:  # pyright: ignore[reportUnknownMemberType]
+                    failure_reason = f'Output {ctx.output!r} does not contain expected item as key'  # pyright: ignore[reportUnknownMemberType]
+                    if len(failure_reason) > _MAX_REASON_LENGTH:
+                        failure_reason = 'Output does not contain expected item as key'
+        elif value not in ctx.output:
+            failure_reason = f'Output {ctx.output!r} does not contain expected item {value!r}'
+            if len(failure_reason) > _MAX_REASON_LENGTH:
+                failure_reason = 'Output does not contain expected item'
+        else:
+            failure_reason = (
+                f'Unsupported types for containment check: {type(ctx.output).__name__} and {type(value).__name__}'
+            )
+    except (TypeError, ValueError) as e:
+        failure_reason = f'Containment check failed: {e}'
+
+    return EvaluatorResult(value=failure_reason is None, reason=failure_reason)
+
+
+async def is_instance(ctx: EvaluatorContext[object, object, object], type_name: str) -> EvaluatorResult:
+    """Check if the output is an instance of a type with the given name."""
+    output = ctx.output
+    for cls in type(output).__mro__:
+        if cls.__name__ == type_name or cls.__qualname__ == type_name:
+            return EvaluatorResult(value=True)
+
+    reason = f'output is of type {type(output).__name__}'
+    if type(output).__qualname__ != type(output).__name__:
+        reason += f' (qualname: {type(output).__qualname__})'
+    return EvaluatorResult(value=False, reason=reason)
+
+
+async def max_duration(ctx: EvaluatorContext[object, object, object], seconds: float) -> bool:
+    """Check if the execution time is under the specified maximum."""
+    return ctx.duration < seconds
 
 
 async def llm_judge(
@@ -24,18 +128,43 @@ async def llm_judge(
     return EvaluatorResult(value=grading_output.pass_, reason=grading_output.reason)
 
 
-async def is_instance(ctx: EvaluatorContext[object, object, object], type_name: str) -> EvaluatorResult:
-    """Check if the output is an instance of a type with the given name."""
-    output = ctx.output
-    for cls in type(output).__mro__:
-        if cls.__name__ == type_name or cls.__qualname__ == type_name:
-            return EvaluatorResult(value=True)
-
-    reason = f'output is of type {type(output).__name__}'
-    if type(output).__qualname__ != type(output).__name__:
-        reason += f' (qualname: {type(output).__qualname__})'
-    return EvaluatorResult(value=False, reason=reason)
+async def span_query(
+    ctx: EvaluatorContext[object, object, object],
+    query: SpanQuery,
+) -> bool:
+    """Check if the span tree contains a span with the specified name."""
+    return ctx.span_tree.find_first(query) is not None
 
 
-# TODO: Add a list of default evaluators or similar, and/or a decorator for registering them
-# DEFAULT_EVALUATORS: list[EvaluatorFunction[object, object, object]] = [llm_judge, is_instance]
+async def python(
+    ctx: EvaluatorContext[object, object, object], condition: str, name: str | None = None
+) -> dict[str, EvaluatorResult]:
+    """Check if the output satisfies a simple Python condition expression.
+
+    The condition should be a valid Python expression that returns a boolean.
+    The output is available as the variable 'output' in the expression.
+
+    Note — this evaluator runs arbitrary Python code, so you should ***NEVER*** use it with untrusted inputs.
+    """
+    # Evaluate the condition
+    namespace = asdict(ctx)  # allow referencing any field in the EvaluatorContext
+    result = eval(condition, {}, namespace)
+
+    if isinstance(result, dict):
+        # Assume a mapping of name to result was returned
+        return result  # pyright: ignore[reportUnknownVariableType]
+
+    name = name or condition
+    return {name: eval(condition, {}, namespace)}
+
+
+DEFAULT_EVALUATORS: tuple[EvaluatorFunction[object, object, object], ...] = (
+    equals,
+    equals_expected,
+    contains,
+    is_instance,
+    max_duration,
+    llm_judge,
+    span_query,
+    python,
+)

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from textwrap import indent
 from typing import Any, Callable
@@ -26,6 +28,17 @@ class SpanNode:
     @property
     def children(self) -> list[SpanNode]:
         return list(self.children_by_id.values())
+
+    @property
+    def descendants(self) -> list[SpanNode]:
+        """Return all descendants of this node in DFS order."""
+        descendants: list[SpanNode] = []
+        stack = list(self.children)
+        while stack:
+            node = stack.pop()
+            descendants.append(node)
+            stack.extend(node.children)
+        return descendants
 
     @property
     def context(self) -> SpanContext:
@@ -336,3 +349,101 @@ class SpanTree:
 
     def __repr__(self):
         return self.repr_xml()
+
+
+@dataclass
+class SpanQuery:
+    """A serializable query for filtering SpanNodes based on various conditions.
+
+    All fields are optional and combined with AND logic by default.
+
+    Due to the presence of `__calL__`, a `SpanQuery` can be used as a predicate in `SpanTree.find_first`, etc.
+    """
+
+    # Individual span conditions
+    ## Name conditions
+    name_equals: str | None = None
+    name_contains: str | None = None
+    name_matches_regex: str | None = None  # regex pattern
+
+    ## Attribute conditions
+    has_attributes: dict[str, Any] = field(default_factory=dict)
+    has_attribute_keys: list[str] = field(default_factory=list)
+
+    ## Timing conditions
+    min_duration: timedelta | None = None
+    max_duration: timedelta | None = None
+
+    # Logical combinations of conditions
+    not_: SpanQuery | None = None
+    and_: list[SpanQuery] = field(default_factory=list)
+    or_: list[SpanQuery] = field(default_factory=list)
+
+    # Descendant conditions
+    some_child_has: SpanQuery | None = None
+    all_children_have: SpanQuery | None = None
+    no_child_has: SpanQuery | None = None
+
+    some_descendant_has: SpanQuery | None = None
+    all_descendants_have: SpanQuery | None = None
+    no_descendant_has: SpanQuery | None = None
+
+    def __call__(self, span: SpanNode) -> bool:
+        """Check if the span matches the query conditions."""
+        return self.matches(span)
+
+    def matches(self, span: SpanNode) -> bool:  # noqa C901
+        """Check if the span matches the query conditions."""
+        # Logical combinations
+        if self.not_:
+            if self.not_.matches(span):
+                return False
+        if self.or_:
+            if any(cond.matches(span) for cond in self.or_):
+                return True
+        if self.and_:
+            if not all(cond.matches(span) for cond in self.and_):
+                return False
+        # At this point, all existing ANDs and no existing ORs have passed, so it comes down to this condition
+
+        # Name conditions
+        if self.name_equals and span.name != self.name_equals:
+            return False
+        if self.name_contains and self.name_contains not in span.name:
+            return False
+        if self.name_matches_regex and not re.match(self.name_matches_regex, span.name):
+            return False
+
+        # Attribute conditions
+        if self.has_attributes and not all(
+            span.attributes.get(key) == value for key, value in self.has_attributes.items()
+        ):
+            return False
+        if self.has_attribute_keys and not all(key in span.attributes for key in self.has_attribute_keys):
+            return False
+
+        # Timing conditions
+        if self.min_duration is not None and span.duration is not None and (span.duration < self.min_duration):
+            return False
+        if self.max_duration is not None and span.duration is not None and (span.duration > self.max_duration):
+            return False
+
+        # Children conditions
+        if self.some_child_has and not any(self.some_child_has.matches(child) for child in span.children):
+            return False
+        if self.all_children_have and not all(self.all_children_have.matches(child) for child in span.children):
+            return False
+        if self.no_child_has and any(self.no_child_has.matches(child) for child in span.children):
+            return False
+
+        # Descendant conditions
+        if self.some_descendant_has and not any(self.some_descendant_has.matches(child) for child in span.descendants):
+            return False
+        if self.all_descendants_have and not all(
+            self.all_descendants_have.matches(child) for child in span.descendants
+        ):
+            return False
+        if self.no_descendant_has and any(self.no_descendant_has.matches(child) for child in span.descendants):
+            return False
+
+        return True

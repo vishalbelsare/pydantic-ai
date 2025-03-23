@@ -17,6 +17,7 @@ from pydantic._internal import _typing_extra
 from pydantic_graph import _utils
 
 from ._utils import get_unwrapped_function_name
+from .evaluators.common import DEFAULT_EVALUATORS
 from .evaluators.context import EvaluatorContext
 from .evaluators.spec import SourcedEvaluatorOutput
 from .otel.context_in_memory_span_exporter import context_subtree
@@ -266,7 +267,7 @@ class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid', a
         dataset_model_type = cls._serialization_type()
         dataset_model: _DatasetModel[InputsT, OutputT, MetadataT] = dataset_model_type.model_validate(data)
 
-        registry = {get_unwrapped_function_name(f): f for f in custom_evaluators}
+        registry = _get_registry(custom_evaluators)
 
         cases: list[Case[InputsT, OutputT, MetadataT]] = []
         errors: list[ValueError] = []
@@ -341,7 +342,7 @@ class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid', a
         cls,
         custom_evaluators: Sequence[EvaluatorFunction[InputsT, OutputT, MetadataT]] = (),
     ) -> dict[str, Any]:
-        registry = {get_unwrapped_function_name(f): f for f in custom_evaluators}
+        registry = _get_registry(custom_evaluators)
 
         evaluator_types: list[Any] = []
         for name, function in registry.items():
@@ -643,3 +644,9 @@ def _get_span_duration(span: logfire.LogfireSpan) -> float:
     assert isinstance(start_time, int), 'span is not started'
     assert isinstance(end_time, int), 'span is not finished'
     return (end_time - start_time) / 1_000_000_000
+
+
+def _get_registry(
+    custom_evaluators: Sequence[EvaluatorFunction[InputsT, OutputT, MetadataT]],
+) -> dict[str, EvaluatorFunction[InputsT, OutputT, MetadataT]]:
+    return {get_unwrapped_function_name(f): f for f in tuple(custom_evaluators) + DEFAULT_EVALUATORS}

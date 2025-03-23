@@ -12,6 +12,7 @@ from typing import Any
 
 import httpx
 import pytest
+from _pytest.mark import ParameterSet
 from devtools import debug
 from pytest_examples import CodeExample, EvalExample, find_examples
 from pytest_mock import MockerFixture
@@ -52,13 +53,17 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-def find_filter_examples() -> Iterable[CodeExample]:
+def find_filter_examples() -> Iterable[ParameterSet]:
     for ex in find_examples('docs', 'pydantic_ai_slim', 'pydantic_graph'):
         if ex.path.name != '_utils.py':
-            yield ex
+            prefix_settings = ex.prefix_settings()
+            test_id = str(ex)
+            if opt_title := prefix_settings.get('title'):
+                test_id += f':{opt_title}'
+            yield pytest.param(ex, id=test_id)
 
 
-@pytest.mark.parametrize('example', find_filter_examples(), ids=str)
+@pytest.mark.parametrize('example', find_filter_examples())
 def test_docs_examples(  # noqa: C901
     example: CodeExample,
     eval_example: EvalExample,
@@ -77,6 +82,7 @@ def test_docs_examples(  # noqa: C901
     mocker.patch('httpx.AsyncClient.post', side_effect=async_http_request)
     mocker.patch('random.randint', return_value=4)
     mocker.patch('rich.prompt.Prompt.ask', side_effect=rich_prompt_ask)
+    mocker.patch('rich.console.Console.print', side_effect=rich_console_print)
 
     if sys.version_info >= (3, 10):
         mocker.patch('pydantic_ai.mcp.MCPServerHTTP', return_value=MockMCPServer())
@@ -187,6 +193,10 @@ def rich_prompt_ask(prompt: str, *_args: Any, **_kwargs: Any) -> str:
         return '2'
     else:  # pragma: no cover
         raise ValueError(f'Unexpected prompt: {prompt}')
+
+
+def rich_console_print(*args: Any, **kwargs: Any) -> None:
+    raise NotImplementedError('todo')
 
 
 class MockMCPServer:

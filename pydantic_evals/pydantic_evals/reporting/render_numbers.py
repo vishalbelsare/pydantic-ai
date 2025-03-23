@@ -5,6 +5,7 @@ __all__ = (
     'default_render_number_diff',
     'default_render_duration',
     'default_render_duration_diff',
+    'default_render_percentage',
 )
 
 # Configuration constants for number formatting

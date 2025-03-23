@@ -4,7 +4,7 @@ import pytest
 from pydantic import BaseModel
 
 from pydantic_evals.evaluators.spec import EvaluatorSpec, SourcedEvaluatorOutput
-from pydantic_evals.reporting.reports import (
+from pydantic_evals.reporting import (
     EvaluationReport,
     RenderNumberConfig,
     RenderValueConfig,

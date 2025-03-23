@@ -10,7 +10,7 @@ from pydantic import BaseModel
 from pydantic_evals import Case, Dataset
 from pydantic_evals.dataset import increment_eval_metric, set_eval_attribute
 from pydantic_evals.evaluators.context import EvaluatorContext
-from pydantic_evals.reporting.reports import ReportCase
+from pydantic_evals.reporting import ReportCase
 
 pytestmark = pytest.mark.anyio
 

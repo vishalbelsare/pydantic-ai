@@ -18,7 +18,7 @@ TODO(DavidM): Implement a CLI with some pytest-like filtering API to make it eas
 #   * The EvaluatorSpec class becomes purely a (private?) means for serializing/deserializing Evaluator instances (with registered EvaluatorFactories)
 #   * The thing currently called Evaluator goes away and we assume that serializing/deserializing between Evaluator and EvaluatorSpec is idempotent
 from .dataset import Case, Dataset, increment_eval_metric
-from .reporting.reports import RenderNumberConfig, RenderValueConfig
+from .reporting import RenderNumberConfig, RenderValueConfig
 
 __all__ = (
     'Case',

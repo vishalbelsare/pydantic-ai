@@ -14,9 +14,7 @@ To install the Pydantic Evals package, you can use:
 pip/uv-add pydantic-evals
 ```
 
-## Core Concepts
-
-### Datasets and Cases
+## Datasets and Cases
 
 The foundation of Pydantic Evals is the concept of datasets and test cases:
 
@@ -39,7 +37,7 @@ dataset = Dataset(cases=[case1])  # (2)!
 1. Create a test case
 2. Create a dataset from cases, in most real world cases you would have multiple cases `#!python Dataset(cases=[case1, case2, case3])`
 
-### Evaluators
+## Evaluators
 
 Evaluators are the components that analyze and score the results of your task when tested against a case.
 
@@ -74,7 +72,7 @@ dataset.add_evaluator(my_evaluator)
 2. Add built-in evaluators [`is_instance`][pydantic_evals.evaluators.is_instance] to the dataset.
 3. Create a custom evaluator function that takes an [`EvaluatorContext`][pydantic_evals.evaluators.context.EvaluatorContext] and returns a simple score.
 
-### Evaluation Process
+## Evaluation Process
 
 The evaluation process involves running a task against all cases in a dataset:
 
@@ -99,7 +97,7 @@ case1 = Case(  # (1)!
 )
 
 
-def my_evaluator(ctx: EvaluatorContext[str, str]) -> float:
+def my_evaluator(ctx: EvaluatorContext[str, str]) -> float:  # (2)!
     if ctx.output == ctx.expected_output:
         return 1.0
     elif (
@@ -113,17 +111,24 @@ def my_evaluator(ctx: EvaluatorContext[str, str]) -> float:
 
 dataset = Dataset(
     cases=[case1],
-    evaluators=[partial(is_instance, type_name='str'), my_evaluator],
+    evaluators=[partial(is_instance, type_name='str'), my_evaluator],  # (3)!
 )
 
 
-async def guess_city(question: str) -> str:
+async def guess_city(question: str) -> str:  # (4)!
     return 'Paris'
 
 
-report = dataset.evaluate_sync(guess_city)  # (2)!
-report.print(include_input=True, include_output=True)  # (3)!
+report = dataset.evaluate_sync(guess_city)  # (5)!
+report.print(include_input=True, include_output=True)  # (6)!
+# TODO get print working
 ```
+1. Create a [test case][pydantic_evals.Case] as above
+2. Also create a custom evaluator function as above
+3. Create a [`Dataset`][pydantic_evals.Dataset] with test cases, also set the [`evaluators`][pydantic_evals.Dataset.evaluators] when creating the dataset
+4. Our function to evaluate.
+5. Run the evaluation with [`evaluate_sync`][pydantic_evals.Dataset.evaluate_sync], which runs the function against all test cases in the dataset, and returns an [`EvaluationReport`][pydantic_evals.reporting.EvaluationReport] object.
+6. Print the report with [`print`][pydantic_evals.reporting.EvaluationReport.print], which shows the results of the evaluation, including input and output.
 
 # TODO complete from here on:
 
@@ -150,13 +155,14 @@ Pydantic Evals allows you to generate test datasets using LLMs:
 ```python
 from pydantic_evals.examples import generate_dataset
 
-dataset = await generate_dataset(
-    path="my_test_cases.yaml",
-    inputs_type=MyInputs,
-    output_type=MyOutput,
-    metadata_type=dict,
-    n_examples=5
-)
+async def main():
+    dataset = await generate_dataset(
+        path="my_test_cases.yaml",
+        inputs_type=MyInputs,
+        output_type=MyOutput,
+        metadata_type=dict,
+        n_examples=5
+    )
 ```
 
 ## Advanced Usage

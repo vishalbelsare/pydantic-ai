@@ -12,29 +12,26 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Generic, Literal, NotRequired, Self, Union
 
+import logfire
+import yaml
+from pydantic import BaseModel, Field, ValidationError
 from pydantic._internal import _typing_extra
+from pydantic_core import to_json, to_jsonable_python
+from typing_extensions import TypedDict, TypeVar
 
 from pydantic_graph._utils import run_until_complete
 
 from ._utils import get_unwrapped_function_name
 from .evaluators.common import DEFAULT_EVALUATORS
 from .evaluators.context import EvaluatorContext
-from .evaluators.spec import SourcedEvaluatorOutput
+from .evaluators.spec import BoundEvaluatorFunction, Evaluator, EvaluatorFunction, EvaluatorSpec, SourcedEvaluatorOutput
 from .otel.context_in_memory_span_exporter import context_subtree
-from .reporting.reports import EvaluationReport, ReportCase, ReportCaseAggregate
+from .reporting import EvaluationReport, ReportCase, ReportCaseAggregate
 
 if sys.version_info < (3, 11):
     from exceptiongroup import ExceptionGroup
 else:
     ExceptionGroup = ExceptionGroup
-
-import logfire
-import yaml
-from pydantic import BaseModel, Field, ValidationError
-from pydantic_core import from_json, to_json, to_jsonable_python
-from typing_extensions import TypedDict, TypeVar
-
-from .evaluators.spec import BoundEvaluatorFunction, Evaluator, EvaluatorFunction, EvaluatorSpec
 
 # while waiting for https://github.com/pydantic/logfire/issues/745
 try:
@@ -274,22 +271,31 @@ class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid', a
         contents: str,
         fmt: Literal['yaml', 'json'] = 'yaml',
         custom_evaluators: Sequence[EvaluatorFunction[InputsT, OutputT, MetadataT]] = (),
-    ):
+    ) -> Self:
         if fmt == 'yaml':
             loaded = yaml.safe_load(contents)
+            return cls.from_dict(loaded, custom_evaluators)
         else:
-            loaded = from_json(contents)
-        return cls.from_dict(loaded, custom_evaluators)
+            dataset_model_type = cls._serialization_type()
+            dataset_model = dataset_model_type.model_validate_json(contents)
+            return cls._from_dataset_model(dataset_model, custom_evaluators)
 
     @classmethod
     def from_dict(
         cls,
         data: dict[str, Any],
         custom_evaluators: Sequence[EvaluatorFunction[InputsT, OutputT, MetadataT]] = (),
-    ):
+    ) -> Self:
         dataset_model_type = cls._serialization_type()
-        dataset_model: _DatasetModel[InputsT, OutputT, MetadataT] = dataset_model_type.model_validate(data)
+        dataset_model = dataset_model_type.model_validate(data)
+        return cls._from_dataset_model(dataset_model, custom_evaluators)
 
+    @classmethod
+    def _from_dataset_model(
+        cls,
+        dataset_model: _DatasetModel[InputsT, OutputT, MetadataT],
+        custom_evaluators: Sequence[EvaluatorFunction[InputsT, OutputT, MetadataT]] = (),
+    ) -> Self:
         registry = _get_registry(custom_evaluators)
 
         cases: list[Case[InputsT, OutputT, MetadataT]] = []
@@ -350,15 +356,16 @@ class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid', a
                 schema_ref = str(schema_path)
             self._save_schema(schema_path, custom_evaluators)
 
-        dumped_data = to_jsonable_python(self.model_dump(context={'use_short_forms': True}, exclude_defaults=True))
         if fmt == 'yaml':
+            dumped_data = self.model_dump(context={'use_short_forms': True}, mode='json', exclude_defaults=True)
             content = yaml.dump(dumped_data, sort_keys=False)
             if schema_ref:
                 yaml_language_server_line = f'# yaml-language-server: $schema={schema_ref}'
                 content = f'{yaml_language_server_line}\n{content}'
             path.write_text(content)
         else:
-            path.write_text(to_json(dumped_data, indent=2).decode() + '\n')
+            json_data = self.model_dump_json(context={'use_short_forms': True}, indent=2, exclude_defaults=True)
+            path.write_text(json_data + '\n')
 
     @classmethod
     def model_json_schema_with_evaluators(

@@ -2,14 +2,16 @@
 
 Pydantic Evals is a powerful evaluation framework designed to help you systematically test and evaluate the quality of your code, especially when working with LLM-powered applications.
 
+!!! note "In Beta"
+    Pydantic Evals support was [introduced](https://github.com/pydantic/pydantic-ai/pull/935) in v0.0.44 and is currently in beta. The API is subject to change. The documentation is incomplete.
+
+
 ## Installation
 
 To install the Pydantic Evals package, you can use:
 
 ```bash
-pip install pydantic-evals
-# or
-uv add pydantic-evals
+pip/uv-add pydantic-evals
 ```
 
 ## Core Concepts
@@ -18,72 +20,114 @@ uv add pydantic-evals
 
 The foundation of Pydantic Evals is the concept of datasets and test cases:
 
-- **Case**: A single test scenario consisting of inputs, expected outputs, metadata, and optional evaluators.
-- **Dataset**: A collection of test cases designed to evaluate a specific task or function.
+- [`Case`][pydantic_evals.Case]: A single test scenario consisting of inputs, expected outputs, metadata, and optional evaluators.
+- [`Dataset`][pydantic_evals.Case]: A collection of test cases designed to evaluate a specific task or function.
 
-```python
+```python {title="simple_eval_dataset.py"}
 from pydantic_evals import Case, Dataset
 
-# Create individual test cases
-case1 = Case(
-    name="simple_case",
-    inputs={"query": "What is the capital of France?"},
-    expected_output={"answer": "Paris"},
-    metadata={"difficulty": "easy"}
+case1 = Case(  # (1)!
+    name='simple_case',
+    inputs='What is the capital of France?',
+    expected_output='Paris',
+    metadata={'difficulty': 'easy'},
 )
 
-# Create a dataset from cases
-dataset = Dataset(cases=[case1, case2, case3])
+dataset = Dataset(cases=[case1])  # (2)!
 ```
+
+1. Create a test case
+2. Create a dataset from cases, in most real world cases you would have multiple cases `#!python Dataset(cases=[case1, case2, case3])`
 
 ### Evaluators
 
-Evaluators are the components that analyze and score the results of your task when tested against a case:
-
-- **Evaluator**: A class that encapsulates the logic for evaluating the output of a function against expected results.
-- **EvaluatorSpec**: A specification for how an evaluator should be configured and run.
+Evaluators are the components that analyze and score the results of your task when tested against a case.
 
 Pydantic Evals includes several built-in evaluators and allows you to create custom evaluators:
 
-```python
-from pydantic_evals.evaluators.common import is_instance, llm_judge
+```python {title="simple_eval_evaluator.py"}
+from functools import partial
 
-# Add evaluators to the dataset
-dataset.add_evaluator(is_instance)
-dataset.add_evaluator(llm_judge)
+from simple_eval_dataset import dataset
 
-# Create a custom evaluator function
-async def my_evaluator(ctx):
-    # Custom evaluation logic
-    return {
-        "accuracy": 0.95,
-        "reasons": ["Matches expected format", "Contains all required information"]
-    }
+from pydantic_evals.evaluators.common import is_instance  # (1)!
+from pydantic_evals.evaluators.context import EvaluatorContext
+
+dataset.add_evaluator(partial(is_instance, type_name='str'))  # (2)!
+
+
+async def my_evaluator(ctx: EvaluatorContext[str, str]) -> float:  # (3)!
+    if ctx.output == ctx.expected_output:
+        return 1.0
+    elif (
+        isinstance(ctx.output, str)
+        and ctx.expected_output.lower() in ctx.output.lower()
+    ):
+        return 0.8
+    else:
+        return 0.0
+
 
 dataset.add_evaluator(my_evaluator)
 ```
+1. Import built-in evaluators, here we import [`is_instance`][pydantic_evals.evaluators.common.is_instance].
+2. Add built-in evaluators [`is_instance`][pydantic_evals.evaluators.common.is_instance] to the dataset.
+3. Create a custom evaluator function that takes an [`EvaluatorContext`][pydantic_evals.evaluators.context.EvaluatorContext] and returns a simple score.
 
 ### Evaluation Process
 
-The evaluation process involves running a task against all cases in a dataset and collecting metrics:
+The evaluation process involves running a task against all cases in a dataset:
 
-```python
-async def my_task(inputs):
-    # Your implementation here
-    return {"answer": "Paris"}
+Putting the above two examples together and using the more declarative `evaluators` kwarg to `Dataset`:
 
-# Run evaluation and get a report
-report = await dataset.evaluate(my_task)
+```python {title="simple_eval_complete.py"}
+from functools import partial
 
-# Print results
+import logfire
+
+from pydantic_evals import Case, Dataset
+from pydantic_evals.evaluators.common import is_instance
+from pydantic_evals.evaluators.context import EvaluatorContext
+
+logfire.configure()
+
+case1 = Case(  # (1)!
+    name='simple_case',
+    inputs='What is the capital of France?',
+    expected_output='Paris',
+    metadata={'difficulty': 'easy'},
+)
+
+
+def my_evaluator(ctx: EvaluatorContext[str, str]) -> float:
+    if ctx.output == ctx.expected_output:
+        return 1.0
+    elif (
+        isinstance(ctx.output, str)
+        and ctx.expected_output.lower() in ctx.output.lower()
+    ):
+        return 0.8
+    else:
+        return 0.0
+
+
+dataset = Dataset(
+    cases=[case1],
+    evaluators=[partial(is_instance, type_name='str'), my_evaluator],
+)
+
+
+async def guess_city(question: str) -> str:
+    return 'Paris'
+
+
+report = dataset.evaluate_sync(guess_city)
 report.print(include_input=True, include_output=True)
 ```
 
-## Working with LLMs
+## LLM as a Judge
 
 Pydantic Evals integrates seamlessly with LLMs for both evaluation and dataset generation:
-
-### LLM as a Judge
 
 You can use LLMs to evaluate the quality of outputs:
 

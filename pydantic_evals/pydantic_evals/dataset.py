@@ -14,7 +14,7 @@ from typing import Any, Callable, Generic, Literal, NotRequired, Self, Union
 
 from pydantic._internal import _typing_extra
 
-from pydantic_graph import _utils
+from pydantic_graph._utils import run_until_complete
 
 from ._utils import get_unwrapped_function_name
 from .evaluators.common import DEFAULT_EVALUATORS
@@ -165,9 +165,7 @@ class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid', a
 
         This is just a synchronous wrapper around `evaluate` provided for convenience.
         """
-        return _utils.get_event_loop().run_until_complete(
-            self.evaluate(task, name=name, max_concurrency=max_concurrency)
-        )
+        return run_until_complete(self.evaluate(task, name=name, max_concurrency=max_concurrency))
 
     def add_case(
         self,

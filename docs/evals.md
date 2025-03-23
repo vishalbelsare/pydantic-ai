@@ -121,16 +121,24 @@ async def guess_city(question: str) -> str:  # (4)!
 
 report = dataset.evaluate_sync(guess_city)  # (5)!
 report.print(include_input=True, include_output=True)  # (6)!
-# TODO get print working
+"""
+                                    Evaluation Summary: guess_city
+┏━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━━┓
+┃ Case ID     ┃ Inputs                         ┃ Outputs ┃ Scores             ┃ Assertions ┃ Duration ┃
+┡━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━━┩
+│ simple_case │ What is the capital of France? │ Paris   │ my_evaluator: 1.00 │ ✔          │    123µs │
+├─────────────┼────────────────────────────────┼─────────┼────────────────────┼────────────┼──────────┤
+│ Averages    │                                │         │ my_evaluator: 1.00 │ 100.0% ✔   │    123µs │
+└─────────────┴────────────────────────────────┴─────────┴────────────────────┴────────────┴──────────┘
+"""
 ```
+
 1. Create a [test case][pydantic_evals.Case] as above
 2. Also create a custom evaluator function as above
 3. Create a [`Dataset`][pydantic_evals.Dataset] with test cases, also set the [`evaluators`][pydantic_evals.Dataset.evaluators] when creating the dataset
 4. Our function to evaluate.
 5. Run the evaluation with [`evaluate_sync`][pydantic_evals.Dataset.evaluate_sync], which runs the function against all test cases in the dataset, and returns an [`EvaluationReport`][pydantic_evals.reporting.EvaluationReport] object.
 6. Print the report with [`print`][pydantic_evals.reporting.EvaluationReport.print], which shows the results of the evaluation, including input and output.
-
-# TODO complete from here on:
 
 ## LLM as a Judge
 

@@ -4,8 +4,10 @@ import json
 import os
 import re
 import sys
-from collections.abc import AsyncIterator, Iterable
+from collections.abc import AsyncIterator, Iterable, Sequence
 from dataclasses import dataclass
+from inspect import FrameInfo
+from io import StringIO
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -16,6 +18,7 @@ from _pytest.mark import ParameterSet
 from devtools import debug
 from pytest_examples import CodeExample, EvalExample, find_examples
 from pytest_mock import MockerFixture
+from rich.console import Console
 
 from pydantic_ai import ModelHTTPError
 from pydantic_ai._utils import group_by_temporal
@@ -33,6 +36,7 @@ from pydantic_ai.models import KnownModelName, Model, infer_model
 from pydantic_ai.models.fallback import FallbackModel
 from pydantic_ai.models.function import AgentInfo, DeltaToolCall, DeltaToolCalls, FunctionModel
 from pydantic_ai.models.test import TestModel
+from pydantic_evals.reporting import EvaluationReport
 
 from .conftest import ClientWithHandler, TestEnv
 
@@ -82,7 +86,7 @@ def test_docs_examples(  # noqa: C901
     mocker.patch('httpx.AsyncClient.post', side_effect=async_http_request)
     mocker.patch('random.randint', return_value=4)
     mocker.patch('rich.prompt.Prompt.ask', side_effect=rich_prompt_ask)
-    mocker.patch('rich.console.Console.print', side_effect=rich_console_print)
+    mocker.patch('pydantic_evals.dataset.EvaluationReport', side_effect=CustomEvaluationReport)
 
     if sys.version_info >= (3, 10):
         mocker.patch('pydantic_ai.mcp.MCPServerHTTP', return_value=MockMCPServer())
@@ -134,6 +138,7 @@ def test_docs_examples(  # noqa: C901
 
     eval_example.set_config(ruff_ignore=ruff_ignore, target_version='py39', line_length=line_length)
     eval_example.print_callback = print_callback
+    eval_example.include_print = custom_include_print
 
     call_name = prefix_settings.get('call_name', 'main')
 
@@ -165,7 +170,12 @@ def test_docs_examples(  # noqa: C901
 def print_callback(s: str) -> str:
     s = re.sub(r'datetime\.datetime\(.+?\)', 'datetime.datetime(...)', s, flags=re.DOTALL)
     s = re.sub(r'\d\.\d{4,}e-0\d', '0.0...', s)
+    s = re.sub(r'(:?\d+µs:|\d+(:?\.\d+)ms)', r'123µs', s)
     return re.sub(r'datetime.date\(', 'date(', s)
+
+
+def custom_include_print(path: Path, frame: FrameInfo, args: Sequence[Any]) -> bool:
+    return path.samefile(frame.filename) or frame.filename.endswith('test_examples.py')
 
 
 def http_request(url: str, **kwargs: Any) -> httpx.Response:
@@ -195,8 +205,12 @@ def rich_prompt_ask(prompt: str, *_args: Any, **_kwargs: Any) -> str:
         raise ValueError(f'Unexpected prompt: {prompt}')
 
 
-def rich_console_print(*args: Any, **kwargs: Any) -> None:
-    raise NotImplementedError('todo')
+class CustomEvaluationReport(EvaluationReport):
+    def print(self, *args: Any, **kwargs: Any) -> None:
+        table = self.console_table(*args, **kwargs)
+        io_file = StringIO()
+        Console(file=io_file).print(table)
+        print(io_file.getvalue())
 
 
 class MockMCPServer:

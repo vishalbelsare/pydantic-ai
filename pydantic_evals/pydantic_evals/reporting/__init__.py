@@ -4,6 +4,7 @@ from collections import defaultdict
 from collections.abc import Mapping
 from dataclasses import dataclass
 from functools import cached_property
+from io import StringIO
 from typing import Any, Callable, Literal, Protocol, TypeVar, cast
 
 from pydantic import BaseModel
@@ -34,6 +35,233 @@ __all__ = (
 MISSING_VALUE_STR = '[i]<missing>[/i]'
 EMPTY_CELL_STR = '-'
 EMPTY_AGGREGATE_CELL_STR = ''
+
+
+class ReportCase(BaseModel):
+    """A single case in an evaluation report."""
+
+    name: str
+    """The name of the [case][pydantic_evals.Case]."""
+    inputs: Any
+    """The inputs to the task, from [`Case.inputs`][pydantic_evals.Case.inputs]."""
+    metadata: Any
+    """Any metadata associated with the case, from [`Case.metadata`][pydantic_evals.Case.metadata]."""
+    expected_output: Any
+    """The expected output of the task, from [`Case.expected_output`][pydantic_evals.Case.expected_output]."""
+    output: Any
+    """The output of the task execution."""
+
+    metrics: dict[str, float | int]
+    attributes: dict[str, Any]
+
+    evaluator_outputs: list[SourcedEvaluatorOutput]
+    task_duration: float
+    total_duration: float  # includes evaluator execution time
+
+    # TODO(DavidM): Drop these once we can reference child spans in details panel:
+    trace_id: str
+    span_id: str
+
+    @property
+    def assertions(self) -> dict[str, SourcedEvaluatorOutput[bool]]:
+        return self._evaluator_outputs_by_type[0]
+
+    @property
+    def scores(self) -> dict[str, SourcedEvaluatorOutput[int | float]]:
+        return self._evaluator_outputs_by_type[1]
+
+    @property
+    def labels(self) -> dict[str, SourcedEvaluatorOutput[str]]:
+        return self._evaluator_outputs_by_type[2]
+
+    @cached_property
+    def _evaluator_outputs_by_type(
+        self,
+    ) -> tuple[
+        dict[str, SourcedEvaluatorOutput[bool]],
+        dict[str, SourcedEvaluatorOutput[int | float]],
+        dict[str, SourcedEvaluatorOutput[str]],
+    ]:
+        assertions: dict[str, SourcedEvaluatorOutput[bool]] = {}
+        scores: dict[str, SourcedEvaluatorOutput[int | float]] = {}
+        labels: dict[str, SourcedEvaluatorOutput[str]] = {}
+
+        seen_names = set[str]()
+        for a in self.evaluator_outputs:
+            name = a.name
+            # Dedupe repeated names by adding a numeric suffix
+            if name in seen_names:
+                suffix = 2
+                while f'{name}_{suffix}' in seen_names:
+                    suffix += 1
+                name = f'{name}_{suffix}'
+            seen_names.add(name)
+            if isinstance(a.value, bool):
+                assertions[name] = cast(SourcedEvaluatorOutput[bool], a)
+            elif isinstance(a.value, (int, float)):
+                scores[name] = cast(SourcedEvaluatorOutput[int | float], a)
+            elif isinstance(a.value, str):
+                labels[name] = cast(SourcedEvaluatorOutput[str], a)
+
+        return assertions, scores, labels
+
+
+class ReportCaseAggregate(BaseModel):
+    """A synthetic case that summarizes a set of cases."""
+
+    name: str
+
+    scores: dict[str, float | int]
+    labels: dict[str, dict[str, float]]
+    metrics: dict[str, float | int]
+    assertions: float | None
+    task_duration: float
+    total_duration: float
+
+    @staticmethod
+    def average(cases: list[ReportCase]) -> ReportCaseAggregate:
+        """Produce a synthetic "summary" case by averaging quantitative attributes."""
+        num_cases = len(cases)
+        if num_cases == 0:
+            raise ValueError('Cannot summarize an empty list of cases')
+
+        def _scores_averages(scores_by_name: list[dict[str, int | float | bool]]) -> dict[str, float]:
+            counts_by_name: dict[str, int] = defaultdict(int)
+            sums_by_name: dict[str, float] = defaultdict(float)
+            for sbn in scores_by_name:
+                for name, score in sbn.items():
+                    counts_by_name[name] += 1
+                    sums_by_name[name] += score
+            return {name: sums_by_name[name] / counts_by_name[name] for name in sums_by_name}
+
+        def _labels_averages(labels_by_name: list[dict[str, str]]) -> dict[str, dict[str, float]]:
+            counts_by_name: dict[str, int] = defaultdict(int)
+            sums_by_name: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
+            for lbn in labels_by_name:
+                for name, label in lbn.items():
+                    counts_by_name[name] += 1
+                    sums_by_name[name][label] += 1
+            return {
+                name: {value: count / counts_by_name[name] for value, count in sums_by_name[name].items()}
+                for name in sums_by_name
+            }
+
+        average_task_duration = sum(case.task_duration for case in cases) / num_cases
+        average_total_duration = sum(case.total_duration for case in cases) / num_cases
+
+        # average_assertions: dict[str, float] = _scores_averages([{k: v.value for k, v in case.scores.items()} for case in cases])
+        average_scores: dict[str, float] = _scores_averages(
+            [{k: v.value for k, v in case.scores.items()} for case in cases]
+        )
+        average_labels: dict[str, dict[str, float]] = _labels_averages(
+            [{k: v.value for k, v in case.labels.items()} for case in cases]
+        )
+        average_metrics: dict[str, float] = _scores_averages([case.metrics for case in cases])
+
+        average_assertions: float | None = None
+        n_assertions = sum(len(case.assertions) for case in cases)
+        if n_assertions > 0:
+            n_passing = sum(1 for case in cases for assertion in case.assertions.values() if assertion.value)
+            average_assertions = n_passing / n_assertions
+
+        return ReportCaseAggregate(
+            name='Averages',
+            scores=average_scores,
+            labels=average_labels,
+            metrics=average_metrics,
+            assertions=average_assertions,
+            task_duration=average_task_duration,
+            total_duration=average_total_duration,
+        )
+
+
+class EvaluationReport(BaseModel):
+    """A report of the results of evaluating a model on a set of cases."""
+
+    name: str
+    """The name of the report."""
+    cases: list[ReportCase]
+    """The cases in the report."""
+
+    def print(
+        self,
+        width: int | None = None,
+        baseline: EvaluationReport | None = None,
+        include_input: bool = False,
+        include_output: bool = False,
+        include_total_duration: bool = False,
+        include_removed_cases: bool = False,
+        include_averages: bool = True,
+        input_config: RenderValueConfig | None = None,
+        output_config: RenderValueConfig | None = None,
+        score_configs: dict[str, RenderNumberConfig] | None = None,
+        label_configs: dict[str, RenderValueConfig] | None = None,
+        metric_configs: dict[str, RenderNumberConfig] | None = None,
+        duration_config: RenderNumberConfig | None = None,
+    ):
+        """Print this report to the console, optionally comparing it to a baseline report.
+
+        If you want more control over the output, use `console_table` instead and pass it to `rich.Console.print`.
+        """
+        table = self.console_table(
+            baseline=baseline,
+            include_input=include_input,
+            include_output=include_output,
+            include_total_duration=include_total_duration,
+            include_removed_cases=include_removed_cases,
+            include_averages=include_averages,
+            input_config=input_config,
+            output_config=output_config,
+            score_configs=score_configs,
+            label_configs=label_configs,
+            metric_configs=metric_configs,
+            duration_config=duration_config,
+        )
+        Console(width=width).print(table)
+
+    def console_table(
+        self,
+        baseline: EvaluationReport | None = None,
+        include_input: bool = False,
+        include_output: bool = False,
+        include_total_duration: bool = False,
+        include_removed_cases: bool = False,
+        include_averages: bool = True,
+        input_config: RenderValueConfig | None = None,
+        output_config: RenderValueConfig | None = None,
+        score_configs: dict[str, RenderNumberConfig] | None = None,
+        label_configs: dict[str, RenderValueConfig] | None = None,
+        metric_configs: dict[str, RenderNumberConfig] | None = None,
+        duration_config: RenderNumberConfig | None = None,
+    ) -> Table:
+        """Return a table containing the data from this report, or the diff between this report and a baseline report.
+
+        Optionally include input and output details.
+        """
+        renderer = EvaluationRenderer(
+            include_input=include_input,
+            include_output=include_output,
+            include_total_duration=include_total_duration,
+            include_removed_cases=include_removed_cases,
+            include_averages=include_averages,
+            input_config={**_DEFAULT_VALUE_CONFIG, **(input_config or {})},
+            output_config=output_config or _DEFAULT_VALUE_CONFIG,
+            score_configs=score_configs or {},
+            label_configs=label_configs or {},
+            metric_configs=metric_configs or {},
+            duration_config=duration_config or _DEFAULT_DURATION_CONFIG,
+        )
+        if baseline is None:
+            return renderer.build_table(self)
+        else:
+            return renderer.build_diff_table(self, baseline)
+
+    def __str__(self) -> str:
+        """Return a string representation of the report."""
+        table = self.console_table()
+        io_file = StringIO()
+        Console(file=io_file).print(table)
+        return io_file.getvalue()
 
 
 class RenderValueConfig(TypedDict, total=False):
@@ -286,226 +514,6 @@ _DEFAULT_DURATION_CONFIG = RenderNumberConfig(
     diff_increase_style='red',
     diff_decrease_style='green',
 )
-
-
-class ReportCaseAggregate(BaseModel):
-    """A synthetic case that summarizes a set of cases."""
-
-    name: str
-
-    scores: dict[str, float | int]
-    labels: dict[str, dict[str, float]]
-    metrics: dict[str, float | int]
-    assertions: float | None
-    task_duration: float
-    total_duration: float
-
-    @staticmethod
-    def average(cases: list[ReportCase]) -> ReportCaseAggregate:
-        """Produce a synthetic "summary" case by averaging quantitative attributes."""
-        num_cases = len(cases)
-        if num_cases == 0:
-            raise ValueError('Cannot summarize an empty list of cases')
-
-        def _scores_averages(scores_by_name: list[dict[str, int | float | bool]]) -> dict[str, float]:
-            counts_by_name: dict[str, int] = defaultdict(int)
-            sums_by_name: dict[str, float] = defaultdict(float)
-            for sbn in scores_by_name:
-                for name, score in sbn.items():
-                    counts_by_name[name] += 1
-                    sums_by_name[name] += score
-            return {name: sums_by_name[name] / counts_by_name[name] for name in sums_by_name}
-
-        def _labels_averages(labels_by_name: list[dict[str, str]]) -> dict[str, dict[str, float]]:
-            counts_by_name: dict[str, int] = defaultdict(int)
-            sums_by_name: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
-            for lbn in labels_by_name:
-                for name, label in lbn.items():
-                    counts_by_name[name] += 1
-                    sums_by_name[name][label] += 1
-            return {
-                name: {value: count / counts_by_name[name] for value, count in sums_by_name[name].items()}
-                for name in sums_by_name
-            }
-
-        average_task_duration = sum(case.task_duration for case in cases) / num_cases
-        average_total_duration = sum(case.total_duration for case in cases) / num_cases
-
-        # average_assertions: dict[str, float] = _scores_averages([{k: v.value for k, v in case.scores.items()} for case in cases])
-        average_scores: dict[str, float] = _scores_averages(
-            [{k: v.value for k, v in case.scores.items()} for case in cases]
-        )
-        average_labels: dict[str, dict[str, float]] = _labels_averages(
-            [{k: v.value for k, v in case.labels.items()} for case in cases]
-        )
-        average_metrics: dict[str, float] = _scores_averages([case.metrics for case in cases])
-
-        average_assertions: float | None = None
-        n_assertions = sum(len(case.assertions) for case in cases)
-        if n_assertions > 0:
-            n_passing = sum(1 for case in cases for assertion in case.assertions.values() if assertion.value)
-            average_assertions = n_passing / n_assertions
-
-        return ReportCaseAggregate(
-            name='Averages',
-            scores=average_scores,
-            labels=average_labels,
-            metrics=average_metrics,
-            assertions=average_assertions,
-            task_duration=average_task_duration,
-            total_duration=average_total_duration,
-        )
-
-
-class ReportCase(BaseModel):
-    """A single case in an evaluation report."""
-
-    name: str
-    """The name of the [case][pydantic_evals.Case]."""
-    inputs: Any
-    """The inputs to the task, from [`Case.inputs`][pydantic_evals.Case.inputs]."""
-    metadata: Any
-    """Any metadata associated with the case, from [`Case.metadata`][pydantic_evals.Case.metadata]."""
-    expected_output: Any
-    """The expected output of the task, from [`Case.expected_output`][pydantic_evals.Case.expected_output]."""
-    output: Any
-    """The output of the task execution."""
-
-    metrics: dict[str, float | int]
-    attributes: dict[str, Any]
-
-    evaluator_outputs: list[SourcedEvaluatorOutput]
-    task_duration: float
-    total_duration: float  # includes evaluator execution time
-
-    # TODO(DavidM): Drop these once we can reference child spans in details panel:
-    trace_id: str
-    span_id: str
-
-    @property
-    def assertions(self) -> dict[str, SourcedEvaluatorOutput[bool]]:
-        return self._evaluator_outputs_by_type[0]
-
-    @property
-    def scores(self) -> dict[str, SourcedEvaluatorOutput[int | float]]:
-        return self._evaluator_outputs_by_type[1]
-
-    @property
-    def labels(self) -> dict[str, SourcedEvaluatorOutput[str]]:
-        return self._evaluator_outputs_by_type[2]
-
-    @cached_property
-    def _evaluator_outputs_by_type(
-        self,
-    ) -> tuple[
-        dict[str, SourcedEvaluatorOutput[bool]],
-        dict[str, SourcedEvaluatorOutput[int | float]],
-        dict[str, SourcedEvaluatorOutput[str]],
-    ]:
-        assertions: dict[str, SourcedEvaluatorOutput[bool]] = {}
-        scores: dict[str, SourcedEvaluatorOutput[int | float]] = {}
-        labels: dict[str, SourcedEvaluatorOutput[str]] = {}
-
-        seen_names = set[str]()
-        for a in self.evaluator_outputs:
-            name = a.name
-            # Dedupe repeated names by adding a numeric suffix
-            if name in seen_names:
-                suffix = 2
-                while f'{name}_{suffix}' in seen_names:
-                    suffix += 1
-                name = f'{name}_{suffix}'
-            seen_names.add(name)
-            if isinstance(a.value, bool):
-                assertions[name] = cast(SourcedEvaluatorOutput[bool], a)
-            elif isinstance(a.value, (int, float)):
-                scores[name] = cast(SourcedEvaluatorOutput[int | float], a)
-            elif isinstance(a.value, str):
-                labels[name] = cast(SourcedEvaluatorOutput[str], a)
-
-        return assertions, scores, labels
-
-
-class EvaluationReport(BaseModel):
-    """A report of the results of evaluating a model on a set of cases."""
-
-    name: str
-    """The name of the report."""
-    cases: list[ReportCase]
-    """The cases in the report."""
-
-    def print(
-        self,
-        width: int | None = None,
-        baseline: EvaluationReport | None = None,
-        include_input: bool = False,
-        include_output: bool = False,
-        include_total_duration: bool = False,
-        include_removed_cases: bool = False,
-        include_averages: bool = True,
-        input_config: RenderValueConfig | None = None,
-        output_config: RenderValueConfig | None = None,
-        score_configs: dict[str, RenderNumberConfig] | None = None,
-        label_configs: dict[str, RenderValueConfig] | None = None,
-        metric_configs: dict[str, RenderNumberConfig] | None = None,
-        duration_config: RenderNumberConfig | None = None,
-    ):
-        """Print this report to the console, optionally comparing it to a baseline report.
-
-        If you want more control over the output, use `console_table` instead and pass it to `rich.Console.print`.
-        """
-        table = self.console_table(
-            baseline=baseline,
-            include_input=include_input,
-            include_output=include_output,
-            include_total_duration=include_total_duration,
-            include_removed_cases=include_removed_cases,
-            include_averages=include_averages,
-            input_config=input_config,
-            output_config=output_config,
-            score_configs=score_configs,
-            label_configs=label_configs,
-            metric_configs=metric_configs,
-            duration_config=duration_config,
-        )
-        Console(width=width).print(table)
-
-    def console_table(
-        self,
-        baseline: EvaluationReport | None = None,
-        include_input: bool = False,
-        include_output: bool = False,
-        include_total_duration: bool = False,
-        include_removed_cases: bool = False,
-        include_averages: bool = True,
-        input_config: RenderValueConfig | None = None,
-        output_config: RenderValueConfig | None = None,
-        score_configs: dict[str, RenderNumberConfig] | None = None,
-        label_configs: dict[str, RenderValueConfig] | None = None,
-        metric_configs: dict[str, RenderNumberConfig] | None = None,
-        duration_config: RenderNumberConfig | None = None,
-    ) -> Table:
-        """Return a table containing the data from this report, or the diff between this report and a baseline report.
-
-        Optionally include input and output details.
-        """
-        renderer = EvaluationRenderer(
-            include_input=include_input,
-            include_output=include_output,
-            include_total_duration=include_total_duration,
-            include_removed_cases=include_removed_cases,
-            include_averages=include_averages,
-            input_config={**_DEFAULT_VALUE_CONFIG, **(input_config or {})},
-            output_config=output_config or _DEFAULT_VALUE_CONFIG,
-            score_configs=score_configs or {},
-            label_configs=label_configs or {},
-            metric_configs=metric_configs or {},
-            duration_config=duration_config or _DEFAULT_DURATION_CONFIG,
-        )
-        if baseline is None:
-            return renderer.build_table(self)
-        else:
-            return renderer.build_diff_table(self, baseline)
 
 
 T = TypeVar('T')

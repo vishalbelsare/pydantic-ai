@@ -4,6 +4,7 @@ import asyncio
 import functools
 import inspect
 import sys
+import warnings
 from collections.abc import Awaitable, Sequence
 from contextlib import nullcontext
 from contextvars import ContextVar
@@ -125,13 +126,11 @@ class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid', a
     ):
         super().__init__(
             cases=cases,
-            evaluators=evaluators,
+            evaluators=[
+                a if isinstance(a, Evaluator) else Evaluator[InputsT, OutputT, MetadataT].from_function(a)
+                for a in evaluators
+            ],
         )
-        self.cases = list(cases)
-        self.evaluators = [
-            a if isinstance(a, Evaluator) else Evaluator[InputsT, OutputT, MetadataT].from_function(a)
-            for a in evaluators
-        ]
 
     async def evaluate(
         self, task: Callable[[InputsT], Awaitable[OutputT]], name: str | None = None, max_concurrency: int | None = None
@@ -218,10 +217,16 @@ class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid', a
     @functools.cache
     def _params(cls) -> tuple[type[InputsT], type[OutputT], type[MetadataT]]:
         for c in cls.__mro__:
-            metadata = getattr(c, '__pydantic_generic_metadata__')
+            metadata = getattr(c, '__pydantic_generic_metadata__', {})
             if len(args := (metadata.get('args', ()) or getattr(c, '__args__', ()))) == 3:
                 return args
-        raise ValueError(f'Could not determine the generic parameters for {cls}')
+        warnings.warn(
+            f'Could not determine the generic parameters for {cls}; using `Any` for each. '
+            f'You should explicitly set the generic parameters via `Dataset[MyInputs, MyOutput, MyMetadata]`'
+            f'when serializing or deserializing.',
+            UserWarning,
+        )
+        return Any, Any, Any  # type: ignore
 
     @classmethod
     def from_file(
@@ -388,13 +393,17 @@ class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid', a
             inputs: in_type
             metadata: meta_type
             expected_output: out_type | None = None
-            evaluators: list[Union[tuple(evaluator_types)]] = []  # pyright: ignore  # noqa UP007
+            if evaluator_types:
+                # TODO: Add some default evaluator_types that are always included and remove this conditional
+                evaluators: list[Union[tuple(evaluator_types)]] = []  # pyright: ignore  # noqa UP007
 
         ClsDatasetRow.__name__ = cls.__name__ + 'Row'
 
         class ClsDataset(BaseModel, extra='forbid'):
             cases: list[ClsDatasetRow]
-            evaluators: list[Union[tuple(evaluator_types)]] = []  # pyright: ignore  # noqa UP007
+            if evaluator_types:
+                # TODO: Add some default evaluator_types that are always included and remove this conditional
+                evaluators: list[Union[tuple(evaluator_types)]] = []  # pyright: ignore  # noqa UP007
 
         ClsDataset.__name__ = cls.__name__
 
@@ -481,6 +490,8 @@ async def _run_task(
     task_run = _TaskRun()
     if _CURRENT_TASK_RUN.get() is not None:
         raise RuntimeError('A task run has already been entered. Task runs should not be nested')
+
+    # TODO: Should we handle task execution errors in some way? Right now they bubble up immediately
     token = _CURRENT_TASK_RUN.set(task_run)
     try:
         with _logfire.span('execute {task}', task=get_unwrapped_function_name(task)) as task_span:

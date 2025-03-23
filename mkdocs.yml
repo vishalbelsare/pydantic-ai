@@ -27,6 +27,7 @@ nav:
       - logfire.md
       - multi-agent-applications.md
       - graph.md
+      - evals.md
       - input.md
       - MCP:
         - mcp/index.md
@@ -77,6 +78,10 @@ nav:
       - api/pydantic_graph/persistence.md
       - api/pydantic_graph/mermaid.md
       - api/pydantic_graph/exceptions.md
+      - api/pydantic_evals/dataset.md
+      - api/pydantic_evals/evaluators.md
+      - api/pydantic_evals/reporting.md
+      - api/pydantic_evals/otel.md
 
 extra:
   # hide the "Made with Material for MkDocs" message

@@ -4,8 +4,9 @@ import uuid
 from collections import defaultdict
 from contextlib import contextmanager
 from contextvars import ContextVar
-from functools import cache
+from weakref import WeakValueDictionary
 
+from logfire._internal.tracer import ProxyTracerProvider as LogfireProxyTracerProvider
 from opentelemetry.sdk.trace import ReadableSpan
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor, SpanExporter, SpanExportResult
 from opentelemetry.trace import ProxyTracerProvider, get_tracer_provider
@@ -52,29 +53,6 @@ def _set_exporter_context_id(context_id: str | None = None) -> typing.Iterator[s
         _EXPORTER_CONTEXT_ID.reset(token)
 
 
-@cache
-def _add_context_span_exporter():
-    tracer_provider = get_tracer_provider()
-    # `tracer_provider` should generally be an `opentelemetry.sdk.trace.TracerProvider` or
-    # `logfire._internal.tracer.ProxyTracerProvider`, in which case the `add_span_processor` method will be present
-    if not hasattr(tracer_provider, 'add_span_processor'):
-        if isinstance(tracer_provider, ProxyTracerProvider):
-            # TODO: Question: Are we okay requiring opentelemetry and/or logfire as dependencies?
-            raise TypeError(
-                'A tracer provider has not been set. You need to call `logfire.configure(...)` or `opentelemetry.trace.set_tracer_provider(...)` before reaching this point'
-            )
-        else:
-            raise TypeError(
-                'Expected `tracer_provider` to have an `add_span_processor` method; '
-                f'got an instance of {type(tracer_provider)}.'
-            )
-
-    exporter = _ContextInMemorySpanExporter()
-    processor = SimpleSpanProcessor(exporter)
-    tracer_provider.add_span_processor(processor)  # type: ignore
-    return exporter
-
-
 class _ContextInMemorySpanExporter(SpanExporter):
     def __init__(self) -> None:
         self._finished_spans: dict[str, list[ReadableSpan]] = defaultdict(list)
@@ -119,3 +97,38 @@ class _ContextInMemorySpanExporter(SpanExporter):
 
     def force_flush(self, timeout_millis: int = 30000) -> bool:
         return True
+
+
+# This cache is mostly just necessary for testing
+# When running in "real" code, the tracer provider won't be reset
+_context_in_memory_providers: WeakValueDictionary[int, _ContextInMemorySpanExporter] = WeakValueDictionary()
+
+
+def _add_context_span_exporter() -> _ContextInMemorySpanExporter:
+    tracer_provider = get_tracer_provider()
+    if isinstance(tracer_provider, LogfireProxyTracerProvider):
+        cache_id = id(tracer_provider.provider)
+    else:
+        cache_id = id(tracer_provider)
+    if (cached_exporter := _context_in_memory_providers.get(cache_id)) is not None:
+        return cached_exporter
+
+    # `tracer_provider` should generally be an `opentelemetry.sdk.trace.TracerProvider` or
+    # `logfire._internal.tracer.ProxyTracerProvider`, in which case the `add_span_processor` method will be present
+    if not hasattr(tracer_provider, 'add_span_processor'):
+        if isinstance(tracer_provider, ProxyTracerProvider):
+            # TODO: Question: Are we okay requiring opentelemetry and/or logfire as dependencies?
+            raise TypeError(
+                'A tracer provider has not been set. You need to call `logfire.configure(...)` or `opentelemetry.trace.set_tracer_provider(...)` before reaching this point'
+            )
+        else:
+            raise TypeError(
+                'Expected `tracer_provider` to have an `add_span_processor` method; '
+                f'got an instance of {type(tracer_provider)}.'
+            )
+
+    exporter = _ContextInMemorySpanExporter()
+    _context_in_memory_providers[cache_id] = exporter
+    processor = SimpleSpanProcessor(exporter)
+    tracer_provider.add_span_processor(processor)  # type: ignore
+    return exporter

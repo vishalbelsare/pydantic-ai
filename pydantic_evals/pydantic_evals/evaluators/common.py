@@ -13,6 +13,17 @@ from ..otel.span_tree import SpanQuery, as_predicate
 from .context import EvaluatorContext
 from .spec import EvaluatorFunction, EvaluatorOutputValue, EvaluatorResult
 
+__all__ = (
+    'equals',
+    'equals_expected',
+    'contains',
+    'is_instance',
+    'max_duration',
+    'llm_judge',
+    'span_query',
+    'python',
+)
+
 
 async def equals(ctx: EvaluatorContext[object, object, object], value: Any) -> bool:
     """Check if the output exactly equals the provided value."""

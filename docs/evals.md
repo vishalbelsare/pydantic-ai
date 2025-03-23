@@ -70,8 +70,8 @@ async def my_evaluator(ctx: EvaluatorContext[str, str]) -> float:  # (3)!
 
 dataset.add_evaluator(my_evaluator)
 ```
-1. Import built-in evaluators, here we import [`is_instance`][pydantic_evals.evaluators.common.is_instance].
-2. Add built-in evaluators [`is_instance`][pydantic_evals.evaluators.common.is_instance] to the dataset.
+1. Import built-in evaluators, here we import [`is_instance`][pydantic_evals.evaluators.is_instance].
+2. Add built-in evaluators [`is_instance`][pydantic_evals.evaluators.is_instance] to the dataset.
 3. Create a custom evaluator function that takes an [`EvaluatorContext`][pydantic_evals.evaluators.context.EvaluatorContext] and returns a simple score.
 
 ### Evaluation Process
@@ -121,9 +121,11 @@ async def guess_city(question: str) -> str:
     return 'Paris'
 
 
-report = dataset.evaluate_sync(guess_city)
-report.print(include_input=True, include_output=True)
+report = dataset.evaluate_sync(guess_city)  # (2)!
+report.print(include_input=True, include_output=True)  # (3)!
 ```
+
+# TODO complete from here on:
 
 ## LLM as a Judge
 

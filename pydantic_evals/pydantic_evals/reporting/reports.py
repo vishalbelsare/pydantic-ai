@@ -352,7 +352,7 @@ class ReportCase(BaseModel):
     """A single case in an evaluation report."""
 
     name: str
-    inputs: dict[str, Any]
+    inputs: Any
     metadata: Any
     expected_output: Any
     output: Any

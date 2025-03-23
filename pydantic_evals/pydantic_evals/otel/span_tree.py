@@ -12,7 +12,7 @@ from opentelemetry.trace import SpanContext
 from opentelemetry.util.types import AttributeValue
 from typing_extensions import TypedDict
 
-SpanId = int
+__all__ = 'SpanNode', 'SpanTree'
 
 
 class SpanNode:
@@ -24,7 +24,7 @@ class SpanNode:
         assert self._span.context is not None, f'{span=} has no context'
 
         self.parent: SpanNode | None = None
-        self.children_by_id: dict[SpanId, SpanNode] = {}  # note: we rely on insertion order to determine child order
+        self.children_by_id: dict[int, SpanNode] = {}  # note: we rely on insertion order to determine child order
 
     @property
     def children(self) -> list[SpanNode]:
@@ -53,7 +53,7 @@ class SpanNode:
         return self._span.parent
 
     @property
-    def span_id(self) -> SpanId:
+    def span_id(self) -> int:
         """Return the integer span_id from the SpanContext."""
         return self.context.span_id
 

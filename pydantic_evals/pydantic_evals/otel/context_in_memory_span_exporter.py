@@ -13,6 +13,8 @@ from opentelemetry.trace import ProxyTracerProvider, get_tracer_provider
 
 from .span_tree import SpanTree
 
+__all__ = 'context_subtree', 'context_subtree_spans'
+
 _EXPORTER_CONTEXT_ID = ContextVar[str | None]('_EXPORTER_CONTEXT_ID', default=None)
 
 

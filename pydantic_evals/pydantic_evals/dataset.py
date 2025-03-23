@@ -49,16 +49,17 @@ else:
 _logfire = logfire.Logfire(otel_scope='pydantic-evals')
 
 InputsT = TypeVar('InputsT', default=Any)
+"""Generic type for the inputs to the task being evaluated."""
 OutputT = TypeVar('OutputT', default=Any)
+"""Generic type for the expected output of the task being evaluated."""
 MetadataT = TypeVar('MetadataT', default=Any)
+"""Generic type for the metadata associated with the task being evaluated."""
 
 DEFAULT_DATASET_PATH = './test_cases.yaml'
 DEFAULT_SCHEMA_PATH_TEMPLATE = './{stem}_schema.json'
 
 
 class _CaseModel(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid'):
-    """A single row of a "dataset", consisting of input, expected output, and metadata."""
-
     name: str | None = None
     inputs: InputsT
     metadata: MetadataT | None = None
@@ -67,21 +68,27 @@ class _CaseModel(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid'
 
 
 class _DatasetModel(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid'):
-    """A dataset of test cases, each consisting of input, expected output, and metadata."""
-
     cases: list[_CaseModel[InputsT, OutputT, MetadataT]]
     evaluators: list[EvaluatorSpec] = Field(default_factory=list)
 
 
 @dataclass(init=False)
 class Case(Generic[InputsT, OutputT, MetadataT]):
-    """A single row of a "dataset", consisting of input, expected output, and metadata."""
+    """A single row of a [`Dataset`][pydantic_evals.Dataset], consisting of input, expected output, and metadata."""
 
     name: str | None
+    """Name of the case. This is used to identify the case in the report and can be used to filter cases."""
     inputs: InputsT
+    """Inputs to the task. This is the input to the task that will be evaluated."""
     metadata: MetadataT | None
+    """Metadata to be used in the evaluation.
+
+    This can be used to provide additional information about the case to the evaluators.
+    """
     expected_output: OutputT | None
+    """Expected output of the task. This is the expected output of the task that will be evaluated."""
     evaluators: list[Evaluator[InputsT, OutputT, MetadataT]]
+    """Evaluators to be used just on this case."""
 
     def __init__(
         self,
@@ -112,10 +119,12 @@ class Case(Generic[InputsT, OutputT, MetadataT]):
 #  * Rename to `Evaluation`
 #  * Allow `task` to be sync _or_ async
 class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid', arbitrary_types_allowed=True):
-    """A dataset of test cases, each consisting of input, expected output, and metadata."""
+    """A dataset of test [cases][pydantic_evals.Case]."""
 
     cases: list[Case[InputsT, OutputT, MetadataT]]
+    """List of test cases in the dataset."""
     evaluators: list[Evaluator[InputsT, OutputT, MetadataT]] = []
+    """List of evaluators to be used on all cases in the dataset."""
 
     def __init__(
         self,
@@ -136,7 +145,17 @@ class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid', a
     async def evaluate(
         self, task: Callable[[InputsT], Awaitable[OutputT]], name: str | None = None, max_concurrency: int | None = None
     ) -> EvaluationReport:
-        """Evaluates the test cases in the dataset using the given task."""
+        """Evaluates the test cases in the dataset using the given task.
+
+        Args:
+            task: The task to evaluate. This should be a callable that takes the inputs of the case
+                and returns the output.
+            name: The name of the task being evaluated, this is used to identify the task in the report.
+                If omitted, the name of the task function will be used.
+            max_concurrency: The maximum number of concurrent evaluations of the task to allow.
+
+        Returns: A report containing the results of the evaluation.
+        """
         name = name or get_unwrapped_function_name(task)
 
         limiter = asyncio.Semaphore(max_concurrency) if max_concurrency is not None else nullcontext()
@@ -191,14 +210,20 @@ class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid', a
     def add_evaluator(
         self,
         evaluator: BoundEvaluatorFunction[InputsT, OutputT, MetadataT] | Evaluator[InputsT, OutputT, MetadataT],
-        case_name: str | None = None,
+        specific_case: str | None = None,
     ) -> None:
+        """Adds an evaluator to the dataset or to a specific case.
+
+        Args:
+            evaluator: The evaluator to add, TODO.
+            specific_case: Specific case to add the evaluator to. If `None`, the evaluator is added to all cases.
+        """
         evaluator = (
             evaluator
             if isinstance(evaluator, Evaluator)
             else Evaluator[InputsT, OutputT, MetadataT].from_function(evaluator)
         )
-        if case_name is None:
+        if specific_case is None:
             # Add the evaluator to the dataset itself
             self.evaluators.append(evaluator)
             return
@@ -206,11 +231,11 @@ class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid', a
         # Add the evaluator to rows with the given name (generally there should only be one), but error if none found
         added = False
         for case in self.cases:
-            if case.name == case_name:
+            if case.name == specific_case:
                 case.evaluators.append(evaluator)
                 added = True
         if not added:
-            raise ValueError(f'Case {case_name!r} not found in the dataset')
+            raise ValueError(f'Case {specific_case!r} not found in the dataset')
 
     @classmethod
     @functools.cache
@@ -568,10 +593,7 @@ async def _run_task_and_evaluators(
         trace_id = f'{context.trace_id:032x}'
         span_id = f'{context.span_id:016x}'
 
-    jsonable_inputs = to_jsonable_python(case.inputs)
-    report_inputs: dict[str, Any] = (
-        jsonable_inputs if isinstance(jsonable_inputs, dict) else {'inputs': jsonable_inputs}
-    )
+    report_inputs = to_jsonable_python(case.inputs)
 
     return ReportCase(
         name=report_case_name,

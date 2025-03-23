@@ -5,11 +5,13 @@ from dataclasses import asdict
 from datetime import timedelta
 from typing import Any, cast
 
+from pydantic import TypeAdapter, ValidationError
+
 from pydantic_ai import models
 
 from ..otel.span_tree import SpanQuery, as_predicate
 from .context import EvaluatorContext
-from .spec import EvaluatorFunction, EvaluatorResult
+from .spec import EvaluatorFunction, EvaluatorOutputValue, EvaluatorResult
 
 
 async def equals(ctx: EvaluatorContext[object, object, object], value: Any) -> bool:
@@ -36,9 +38,12 @@ async def contains(  # noqa C901
     For strings, checks if expected_output is a substring of output.
     For lists/tuples, checks if expected_output is in output.
     For dicts, checks if all key-value pairs in expected_output are in output.
+
+    Note: case_sensitive only applies when both the value and output are strings.
     """
     # Convert objects to strings if requested
     failure_reason: str | None = None
+    as_strings = as_strings or (isinstance(value, str) and isinstance(ctx.output, str))
     if as_strings:
         output_str = str(ctx.output)
         expected_str = str(value)
@@ -79,14 +84,10 @@ async def contains(  # noqa C901
                     failure_reason = f'Output {ctx.output!r} does not contain expected item as key'  # pyright: ignore[reportUnknownMemberType]
                     if len(failure_reason) > _MAX_REASON_LENGTH:
                         failure_reason = 'Output does not contain expected item as key'
-        elif value not in ctx.output:
+        elif value not in ctx.output:  # pyright: ignore[reportOperatorIssue]  # will be handled by except block
             failure_reason = f'Output {ctx.output!r} does not contain expected item {value!r}'
             if len(failure_reason) > _MAX_REASON_LENGTH:
                 failure_reason = 'Output does not contain expected item'
-        else:
-            failure_reason = (
-                f'Unsupported types for containment check: {type(ctx.output).__name__} and {type(value).__name__}'
-            )
     except (TypeError, ValueError) as e:
         failure_reason = f'Containment check failed: {e}'
 
@@ -140,9 +141,14 @@ async def span_query(
     return ctx.span_tree.find_first(as_predicate(query)) is not None
 
 
+evaluator_output_adapter = TypeAdapter[EvaluatorOutputValue | dict[str, EvaluatorOutputValue]](
+    EvaluatorOutputValue | dict[str, EvaluatorOutputValue]
+)
+
+
 async def python(
     ctx: EvaluatorContext[object, object, object], condition: str, name: str | None = None
-) -> dict[str, EvaluatorResult]:
+) -> Mapping[str, EvaluatorOutputValue | EvaluatorResult]:
     """Check if the output satisfies a simple Python condition expression.
 
     The condition should be a valid Python expression that returns a boolean.
@@ -154,12 +160,21 @@ async def python(
     namespace = asdict(ctx)  # allow referencing any field in the EvaluatorContext
     result = eval(condition, {}, namespace)
 
+    try:
+        result = evaluator_output_adapter.validate_python(result)
+    except ValidationError as e:
+        raise ValueError(f'Invalid output from Python evaluator: {e}') from e
+
     if isinstance(result, dict):
         # Assume a mapping of name to result was returned
-        return result  # pyright: ignore[reportUnknownVariableType]
+        return result
 
-    name = name or condition
-    return {name: eval(condition, {}, namespace)}
+    value = eval(condition, {}, namespace)
+
+    if name is None:
+        name = 'python'
+        value = EvaluatorResult(value, reason=f'({condition}) == {value}')
+    return {name: value}
 
 
 DEFAULT_EVALUATORS: tuple[EvaluatorFunction[object, object, object], ...] = (

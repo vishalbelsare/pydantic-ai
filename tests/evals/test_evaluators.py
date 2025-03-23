@@ -1,9 +1,20 @@
 from typing import Any
 
 import pytest
+from inline_snapshot import snapshot
+from logfire.testing import CaptureLogfire
 from pydantic import BaseModel
 
-from pydantic_evals.evaluators.common import is_instance, llm_judge
+from pydantic_evals.evaluators.common import (
+    contains,
+    equals,
+    equals_expected,
+    is_instance,
+    llm_judge,
+    max_duration,
+    python,
+    span_query,
+)
 from pydantic_evals.evaluators.context import EvaluatorContext
 from pydantic_evals.evaluators.spec import Evaluator, EvaluatorResult, EvaluatorSpec
 from pydantic_evals.otel.span_tree import SpanTree
@@ -221,3 +232,223 @@ async def test_evaluator_with_null_values():
     result = await test_evaluator(context)
     assert result['has_expected_output'] is False
     assert result['has_metadata'] is False
+
+
+async def test_equals_evaluator(test_context: EvaluatorContext[TaskInput, TaskOutput, TaskMetadata]):
+    """Test the equals evaluator."""
+    # Test with matching value
+    result = await equals(test_context, TaskOutput(answer='4'))
+    assert result is True
+
+    # Test with non-matching value
+    result = await equals(test_context, TaskOutput(answer='5'))
+    assert result is False
+
+    # Test with completely different type
+    result = await equals(test_context, 'not a TaskOutput')
+    assert result is False
+
+
+async def test_equals_expected_evaluator(test_context: EvaluatorContext[TaskInput, TaskOutput, TaskMetadata]):
+    """Test the equals_expected evaluator."""
+    # Test with matching expected output (already set in test_context)
+    result = await equals_expected(test_context)
+    assert 'equals_expected' in result
+    assert result['equals_expected'] is True
+
+    # Test with non-matching expected output
+    context_with_different_expected = EvaluatorContext[TaskInput, TaskOutput, TaskMetadata](
+        name='test_case',
+        inputs=TaskInput(query='What is 2+2?'),
+        output=TaskOutput(answer='4'),
+        expected_output=TaskOutput(answer='5'),  # Different expected output
+        metadata=TaskMetadata(difficulty='easy'),
+        duration=0.1,
+        span_tree=SpanTree(),
+        attributes={},
+        metrics={},
+    )
+    result = await equals_expected(context_with_different_expected)
+    assert 'equals_expected' in result
+    assert result['equals_expected'] is False
+
+    # Test with no expected output
+    context_with_no_expected = EvaluatorContext[TaskInput, TaskOutput, TaskMetadata](
+        name='test_case',
+        inputs=TaskInput(query='What is 2+2?'),
+        output=TaskOutput(answer='4'),
+        expected_output=None,  # No expected output
+        metadata=TaskMetadata(difficulty='easy'),
+        duration=0.1,
+        span_tree=SpanTree(),
+        attributes={},
+        metrics={},
+    )
+    result = await equals_expected(context_with_no_expected)
+    assert result == {}  # Should return empty dict when no expected output
+
+
+async def test_contains_evaluator():
+    """Test the contains evaluator."""
+    # Test with string output
+    string_context = EvaluatorContext[object, str, object](
+        name='string_test',
+        inputs="What's in the box?",
+        output='There is a cat in the box',
+        expected_output=None,
+        metadata=None,
+        duration=0.1,
+        span_tree=SpanTree(),
+        attributes={},
+        metrics={},
+    )
+
+    # String contains - case sensitive
+    result = await contains(string_context, 'cat in the')
+    assert result.value is True
+    assert result.reason is None
+
+    # String doesn't contain
+    result = await contains(string_context, 'dog')
+    assert result.value is False
+    assert result.reason is not None
+
+    # Case sensitivity
+    result = await contains(string_context, 'CAT', case_sensitive=True)
+    assert result.value is False
+
+    result = await contains(string_context, 'CAT', case_sensitive=False)
+    assert result.value is True
+
+    # Test with list output
+    list_context = EvaluatorContext[object, list[int], object](
+        name='list_test',
+        inputs='List items',
+        output=[1, 2, 3, 4, 5],
+        expected_output=None,
+        metadata=None,
+        duration=0.1,
+        span_tree=SpanTree(),
+        attributes={},
+        metrics={},
+    )
+
+    # List contains
+    result = await contains(list_context, 3)
+    assert result.value is True
+
+    # List doesn't contain
+    result = await contains(list_context, 6)
+    assert result.value is False
+
+    # Test with dict output
+    dict_context = EvaluatorContext[object, dict[str, str], object](
+        name='dict_test',
+        inputs='Dict items',
+        output={'key1': 'value1', 'key2': 'value2'},
+        expected_output=None,
+        metadata=None,
+        duration=0.1,
+        span_tree=SpanTree(),
+        attributes={},
+        metrics={},
+    )
+
+    # Dict contains key
+    result = await contains(dict_context, 'key1')
+    assert result.value is True
+
+    # Dict contains subset
+    result = await contains(dict_context, {'key1': 'value1'})
+    assert result.value is True
+
+    # Dict doesn't contain key-value pair
+    result = await contains(dict_context, {'key1': 'wrong_value'})
+    assert result.value is False
+
+
+async def test_max_duration_evaluator(test_context: EvaluatorContext[TaskInput, TaskOutput, TaskMetadata]):
+    """Test the max_duration evaluator."""
+    from datetime import timedelta
+
+    # Test with duration under the maximum (using float seconds)
+    result = await max_duration(test_context, 0.2)  # test_context has duration=0.1
+    assert result is True
+
+    # Test with duration over the maximum
+    result = await max_duration(test_context, 0.05)
+    assert result is False
+
+    # Test with timedelta
+    result = await max_duration(test_context, timedelta(milliseconds=200))
+    assert result is True
+
+    result = await max_duration(test_context, timedelta(milliseconds=50))
+    assert result is False
+
+
+async def test_span_query_evaluator(
+    capfire: CaptureLogfire,
+):
+    """Test the span_query evaluator."""
+    import logfire
+
+    from pydantic_evals.otel.context_in_memory_span_exporter import context_subtree
+    from pydantic_evals.otel.span_tree import SpanQuery
+
+    # Create a span tree with a known structure
+    with context_subtree() as tree:
+        with logfire.span('root_span'):
+            with logfire.span('child_span', type='important'):
+                pass
+
+    # Create a context with this span tree
+    context = EvaluatorContext[object, object, object](
+        name='span_test',
+        inputs=None,
+        output=None,
+        expected_output=None,
+        metadata=None,
+        duration=0.1,
+        span_tree=tree,
+        attributes={},
+        metrics={},
+    )
+
+    # Test positive case: query that matches
+    query: SpanQuery = {'name_equals': 'child_span', 'has_attributes': {'type': 'important'}}
+    result = await span_query(context, query)
+    assert result is True
+
+    # Test negative case: query that doesn't match
+    query = {'name_equals': 'non_existent_span'}
+    result = await span_query(context, query)
+    assert result is False
+
+
+async def test_python_evaluator(test_context: EvaluatorContext[TaskInput, TaskOutput, TaskMetadata]):
+    """Test the python evaluator."""
+    # Test with a simple condition
+    assert await python(test_context, "output.answer == '4'") == snapshot(
+        {'python': EvaluatorResult(value=True, reason="output.answer == '4'")}
+    )
+
+    # Test with a named condition
+    assert await python(test_context, "output.answer == '4'", name='correct_answer') == snapshot(
+        {'correct_answer': True}
+    )
+
+    # Test with a condition that returns false
+    assert await python(test_context, "output.answer == '5'") == snapshot(
+        {'python': EvaluatorResult(value=False, reason="output.answer == '5'")}
+    )
+
+    # Test with a condition that accesses context properties
+    assert await python(test_context, "output.answer == '4' and metadata.difficulty == 'easy'") == snapshot(
+        {'python': EvaluatorResult(value=True, reason="output.answer == '4' and metadata.difficulty == 'easy'")}
+    )
+
+    # Test with a condition that returns a dict
+    assert await python(
+        test_context, "{'is_correct': output.answer == '4', 'is_easy': metadata.difficulty == 'easy'}"
+    ) == snapshot({'is_correct': True, 'is_easy': True})

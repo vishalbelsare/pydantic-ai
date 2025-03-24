@@ -602,6 +602,7 @@ async def _run_task_and_evaluators(
 
     report_inputs = to_jsonable_python(case.inputs)
 
+    scores, labels, assertions = ReportCase.group_evaluator_outputs(evaluator_outputs)
     return ReportCase(
         name=report_case_name,
         inputs=report_inputs,
@@ -610,7 +611,9 @@ async def _run_task_and_evaluators(
         output=scoring_context.output,
         metrics=scoring_context.metrics,
         attributes=scoring_context.attributes,
-        evaluator_outputs=evaluator_outputs,
+        scores=scores,
+        labels=labels,
+        assertions=assertions,
         task_duration=scoring_context.duration,
         total_duration=_get_span_duration(case_span),
         trace_id=trace_id,

@@ -157,6 +157,7 @@ evaluator_output_adapter = TypeAdapter[EvaluatorOutputValue | dict[str, Evaluato
 )
 
 
+# TODO: Consider moving this to docs rather than providing it with the library, given the security implications
 async def python(
     ctx: EvaluatorContext[object, object, object], condition: str, name: str | None = None
 ) -> Mapping[str, EvaluatorOutputValue | EvaluatorResult]:
@@ -165,7 +166,7 @@ async def python(
     The condition should be a valid Python expression that returns a boolean.
     The output is available as the variable 'output' in the expression.
 
-    Note — this evaluator runs arbitrary Python code, so you should ***NEVER*** use it with untrusted inputs.
+    ***WARNING***: this evaluator runs arbitrary Python code, so you should ***NEVER*** use it with untrusted inputs.
     """
     # Evaluate the condition
     namespace = asdict(ctx)  # allow referencing any field in the EvaluatorContext
@@ -180,12 +181,12 @@ async def python(
         # Assume a mapping of name to result was returned
         return result
 
-    value = eval(condition, {}, namespace)
-
     if name is None:
         name = 'python'
-        value = EvaluatorResult(value, reason=f'({condition}) == {value}')
-    return {name: value}
+        operator = 'is' if isinstance(result, bool) else '=='
+        rendered = repr(result) if isinstance(result, str) else str(result)  # "True" for bool; "'abc'" for 'abc'
+        result = EvaluatorResult(result, reason=f'({condition}) {operator} {rendered}')
+    return {name: result}
 
 
 DEFAULT_EVALUATORS: tuple[EvaluatorFunction[object, object, object], ...] = (
@@ -196,5 +197,5 @@ DEFAULT_EVALUATORS: tuple[EvaluatorFunction[object, object, object], ...] = (
     max_duration,
     llm_judge,
     span_query,
-    python,
+    # python,
 )

@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 from dirty_equals import HasRepr
+from inline_snapshot import snapshot
 from logfire.testing import CaptureLogfire
 from pydantic import BaseModel
 
@@ -141,10 +142,27 @@ async def test_evaluate(example_dataset: Dataset[TaskInput, TaskOutput, TaskMeta
 
     assert report is not None
     assert len(report.cases) == 2
-    assert report.cases[0].evaluator_outputs
-    output = report.cases[0].evaluator_outputs[0]
-    assert output.name == 'correct'
-    assert output.value is True
+    assert report.cases[0].model_dump() == snapshot(
+        {
+            'assertions': {'correct': {'name': 'correct', 'reason': None, 'source': 'simple_evaluator', 'value': True}},
+            'attributes': {},
+            'expected_output': {'answer': '4', 'confidence': 1.0},
+            'inputs': {'query': 'What is 2+2?'},
+            'labels': {},
+            'metadata': {'category': 'general', 'difficulty': 'easy'},
+            'metrics': {},
+            'name': 'case1',
+            'output': {'answer': '4', 'confidence': 1.0},
+            'scores': {
+                'confidence': {'name': 'confidence', 'reason': None, 'source': 'simple_evaluator', 'value': 1.0},
+                'correct': {'name': 'correct', 'reason': None, 'source': 'simple_evaluator', 'value': True},
+            },
+            'span_id': '0000000000000003',
+            'task_duration': 1.0,
+            'total_duration': 6.0,
+            'trace_id': '00000000000000000000000000000001',
+        }
+    )
 
 
 async def test_evaluate_with_concurrency(example_dataset: Dataset[TaskInput, TaskOutput, TaskMetadata]):
@@ -162,10 +180,27 @@ async def test_evaluate_with_concurrency(example_dataset: Dataset[TaskInput, Tas
 
     assert report is not None
     assert len(report.cases) == 2
-    assert report.cases[0].evaluator_outputs
-    output = report.cases[0].evaluator_outputs[0]
-    assert output.name == 'correct'
-    assert output.value is True
+    assert report.cases[0].model_dump() == snapshot(
+        {
+            'assertions': {'correct': {'name': 'correct', 'reason': None, 'source': 'simple_evaluator', 'value': True}},
+            'attributes': {},
+            'expected_output': {'answer': '4', 'confidence': 1.0},
+            'inputs': {'query': 'What is 2+2?'},
+            'labels': {},
+            'metadata': {'category': 'general', 'difficulty': 'easy'},
+            'metrics': {},
+            'name': 'case1',
+            'output': {'answer': '4', 'confidence': 1.0},
+            'scores': {
+                'confidence': {'name': 'confidence', 'reason': None, 'source': 'simple_evaluator', 'value': 1.0},
+                'correct': {'name': 'correct', 'reason': None, 'source': 'simple_evaluator', 'value': True},
+            },
+            'span_id': '0000000000000003',
+            'task_duration': 1.0,
+            'total_duration': 3.0,
+            'trace_id': '00000000000000000000000000000001',
+        }
+    )
 
 
 async def test_evaluate_with_failing_task(example_dataset: Dataset[TaskInput, TaskOutput, TaskMetadata]):
@@ -232,7 +267,9 @@ async def test_increment_eval_metric(example_dataset: Dataset[TaskInput, TaskOut
             output=TaskOutput(answer='answer to What is 2+2?', confidence=1.0),
             metrics={'chars': 12},
             attributes={'is_about_france': False},
-            evaluator_outputs=[],
+            scores={},
+            labels={},
+            assertions={},
             task_duration=1.0,
             total_duration=3.0,
             trace_id='00000000000000000000000000000001',
@@ -246,7 +283,9 @@ async def test_increment_eval_metric(example_dataset: Dataset[TaskInput, TaskOut
             output=TaskOutput(answer='answer to What is the capital of France?', confidence=1.0),
             metrics={'chars': 30},
             attributes={'is_about_france': True},
-            evaluator_outputs=[],
+            scores={},
+            labels={},
+            assertions={},
             task_duration=1.0,
             total_duration=3.0,
             trace_id='00000000000000000000000000000001',

@@ -1,6 +1,7 @@
 from typing import Any
 
 import pytest
+from inline_snapshot import snapshot
 from pydantic import BaseModel
 
 from pydantic_evals.evaluators.spec import EvaluatorSpec, SourcedEvaluatorOutput
@@ -44,7 +45,7 @@ def mock_evaluator_spec() -> EvaluatorSpec:
 @pytest.fixture
 def sample_sourced_output(
     sample_evaluator_output: dict[str, Any], mock_evaluator_spec: EvaluatorSpec
-) -> SourcedEvaluatorOutput:
+) -> SourcedEvaluatorOutput[bool]:
     return SourcedEvaluatorOutput(
         name='test_evaluator',
         value=True,
@@ -54,7 +55,7 @@ def sample_sourced_output(
 
 
 @pytest.fixture
-def sample_report_case(sample_sourced_output: SourcedEvaluatorOutput) -> ReportCase:
+def sample_report_case(sample_sourced_output: SourcedEvaluatorOutput[bool]) -> ReportCase:
     return ReportCase(
         name='test_case',
         inputs={'query': 'What is 2+2?'},
@@ -63,7 +64,9 @@ def sample_report_case(sample_sourced_output: SourcedEvaluatorOutput) -> ReportC
         metadata={'difficulty': 'easy'},
         metrics={},
         attributes={},
-        evaluator_outputs=[sample_sourced_output],
+        scores={},
+        labels={},
+        assertions={sample_sourced_output.name: sample_sourced_output},
         task_duration=0.1,
         total_duration=0.2,
         trace_id='test-trace-id',
@@ -77,33 +80,6 @@ def sample_report(sample_report_case: ReportCase) -> EvaluationReport:
         cases=[sample_report_case],
         name='test_report',
     )
-
-
-async def test_report_case_init(sample_sourced_output: SourcedEvaluatorOutput, mock_evaluator_spec: EvaluatorSpec):
-    """Test ReportCase initialization."""
-    case = ReportCase(
-        name='test_case',
-        inputs={'query': 'What is 2+2?'},
-        output={'answer': '4'},
-        expected_output={'answer': '4'},
-        metadata={'difficulty': 'easy'},
-        metrics={},
-        attributes={},
-        evaluator_outputs=[sample_sourced_output],
-        task_duration=0.1,
-        total_duration=0.2,
-        trace_id='test-trace-id',
-        span_id='test-span-id',
-    )
-
-    assert case.name == 'test_case'
-    assert case.inputs['query'] == 'What is 2+2?'
-    assert case.output['answer'] == '4'
-    assert case.expected_output['answer'] == '4'
-    assert case.metadata['difficulty'] == 'easy'
-    assert len(case.evaluator_outputs) == 1
-    assert case.task_duration == 0.1
-    assert case.total_duration == 0.2
 
 
 async def test_report_init(sample_report_case: ReportCase):
@@ -132,7 +108,9 @@ async def test_report_add_case(
         metadata={'difficulty': 'medium'},
         metrics={},
         attributes={},
-        evaluator_outputs=[],
+        scores={},
+        labels={},
+        assertions={},
         task_duration=0.1,
         total_duration=0.15,
         trace_id='test-trace-id-2',
@@ -186,7 +164,7 @@ async def test_report_serialization(sample_report: EvaluationReport):
 async def test_report_with_error(mock_evaluator_spec: EvaluatorSpec):
     """Test a report with error in one of the cases."""
     # Create an evaluator output
-    error_output = SourcedEvaluatorOutput(
+    error_output = SourcedEvaluatorOutput[bool](
         name='error_evaluator',
         value=False,  # No result
         reason='Test error message',
@@ -202,7 +180,9 @@ async def test_report_with_error(mock_evaluator_spec: EvaluatorSpec):
         metadata={'difficulty': 'hard'},
         metrics={},
         attributes={'error': 'Division by zero'},
-        evaluator_outputs=[error_output],
+        scores={},
+        labels={},
+        assertions={error_output.name: error_output},
         task_duration=0.05,
         total_duration=0.1,
         trace_id='test-error-trace-id',
@@ -215,8 +195,31 @@ async def test_report_with_error(mock_evaluator_spec: EvaluatorSpec):
         name='error_report',
     )
 
-    assert report.cases[0].attributes['error'] == 'Division by zero'
-    assert report.cases[0].evaluator_outputs[0].reason == 'Test error message'
+    assert report.cases[0].model_dump() == snapshot(
+        {
+            'assertions': {
+                'error_evaluator': {
+                    'name': 'error_evaluator',
+                    'reason': 'Test error message',
+                    'source': 'test_call',
+                    'value': False,
+                }
+            },
+            'attributes': {'error': 'Division by zero'},
+            'expected_output': {'answer': 'Error'},
+            'inputs': {'query': 'What is 1/0?'},
+            'labels': {},
+            'metadata': {'difficulty': 'hard'},
+            'metrics': {},
+            'name': 'error_case',
+            'output': None,
+            'scores': {},
+            'span_id': 'test-error-span-id',
+            'task_duration': 0.05,
+            'total_duration': 0.1,
+            'trace_id': 'test-error-trace-id',
+        }
+    )
 
 
 async def test_render_config():

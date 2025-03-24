@@ -430,7 +430,12 @@ async def test_python_evaluator(test_context: EvaluatorContext[TaskInput, TaskOu
     """Test the python evaluator."""
     # Test with a simple condition
     assert await python(test_context, "output.answer == '4'") == snapshot(
-        {'python': EvaluatorResult(value=True, reason="output.answer == '4'")}
+        {'python': EvaluatorResult(value=True, reason="(output.answer == '4') is True")}
+    )
+
+    # Test type sensitivity
+    assert await python(test_context, 'output.answer == 4') == snapshot(
+        {'python': EvaluatorResult(value=False, reason='(output.answer == 4) is False')}
     )
 
     # Test with a named condition
@@ -440,12 +445,21 @@ async def test_python_evaluator(test_context: EvaluatorContext[TaskInput, TaskOu
 
     # Test with a condition that returns false
     assert await python(test_context, "output.answer == '5'") == snapshot(
-        {'python': EvaluatorResult(value=False, reason="output.answer == '5'")}
+        {'python': EvaluatorResult(value=False, reason="(output.answer == '5') is False")}
     )
 
     # Test with a condition that accesses context properties
     assert await python(test_context, "output.answer == '4' and metadata.difficulty == 'easy'") == snapshot(
-        {'python': EvaluatorResult(value=True, reason="output.answer == '4' and metadata.difficulty == 'easy'")}
+        {
+            'python': EvaluatorResult(
+                value=True, reason="(output.answer == '4' and metadata.difficulty == 'easy') is True"
+            )
+        }
+    )
+
+    # Test reason rendering for strings
+    assert await python(test_context, 'output.answer') == snapshot(
+        {'python': EvaluatorResult(value='4', reason="(output.answer) == '4'")}
     )
 
     # Test with a condition that returns a dict

@@ -1,11 +1,8 @@
 from __future__ import annotations as _annotations
 
 from collections.abc import Mapping
-from dataclasses import asdict
 from datetime import timedelta
 from typing import Any, cast
-
-from pydantic import TypeAdapter, ValidationError
 
 from pydantic_ai import models
 
@@ -152,41 +149,18 @@ async def span_query(
     return ctx.span_tree.find_first(as_predicate(query)) is not None
 
 
-evaluator_output_adapter = TypeAdapter[EvaluatorOutputValue | dict[str, EvaluatorOutputValue]](
-    EvaluatorOutputValue | dict[str, EvaluatorOutputValue]
-)
-
-
 # TODO: Consider moving this to docs rather than providing it with the library, given the security implications
 async def python(
-    ctx: EvaluatorContext[object, object, object], condition: str, name: str | None = None
+    ctx: EvaluatorContext[object, object, object], expr: str
 ) -> Mapping[str, EvaluatorOutputValue | EvaluatorResult]:
-    """Check if the output satisfies a simple Python condition expression.
+    """Evaluate a simple Python expression.
 
-    The condition should be a valid Python expression that returns a boolean.
-    The output is available as the variable 'output' in the expression.
+    All attributes of the EvaluatorContext are available as variables to use in the expression.
 
     ***WARNING***: this evaluator runs arbitrary Python code, so you should ***NEVER*** use it with untrusted inputs.
     """
-    # Evaluate the condition
-    namespace = asdict(ctx)  # allow referencing any field in the EvaluatorContext
-    result = eval(condition, {}, namespace)
-
-    try:
-        result = evaluator_output_adapter.validate_python(result)
-    except ValidationError as e:
-        raise ValueError(f'Invalid output from Python evaluator: {e}') from e
-
-    if isinstance(result, dict):
-        # Assume a mapping of name to result was returned
-        return result
-
-    if name is None:
-        name = 'python'
-        operator = 'is' if isinstance(result, bool) else '=='
-        rendered = repr(result) if isinstance(result, str) else str(result)  # "True" for bool; "'abc'" for 'abc'
-        result = EvaluatorResult(result, reason=f'({condition}) {operator} {rendered}')
-    return {name: result}
+    namespace = ctx.__dict__  # allow referencing any attribute in the EvaluatorContext
+    return eval(expr, {}, namespace)
 
 
 DEFAULT_EVALUATORS: tuple[EvaluatorFunction[object, object, object], ...] = (

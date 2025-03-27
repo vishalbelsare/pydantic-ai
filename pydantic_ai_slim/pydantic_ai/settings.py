@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from httpx import Timeout
 from typing_extensions import TypedDict
 
 if TYPE_CHECKING:
@@ -67,7 +66,7 @@ class ModelSettings(TypedDict, total=False):
     * Bedrock
     """
 
-    timeout: float | Timeout
+    timeout: float
     """Override the client-level default timeout for a request, in seconds.
 
     Supported by:

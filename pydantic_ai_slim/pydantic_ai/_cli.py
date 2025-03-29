@@ -177,7 +177,7 @@ async def ask_agent(
     messages: list[ModelMessage] | None = None,
 ) -> list[ModelMessage]:  # pragma: no cover
     status: None | Status = Status('[dim]Working on it…[/dim]', console=console)
-    live = Live('', refresh_per_second=15, console=console)
+    live = Live('', refresh_per_second=15, console=console, vertical_overflow='visible')
     status.start()
 
     async with agent.iter(prompt, message_history=messages) as agent_run:

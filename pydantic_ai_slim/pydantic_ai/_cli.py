@@ -11,7 +11,9 @@ from typing import cast
 
 from typing_inspection.introspection import get_literal_values
 
+from pydantic_ai.agent import Agent
 from pydantic_ai.exceptions import UserError
+from pydantic_ai.messages import ModelMessage, PartDeltaEvent, TextPartDelta
 from pydantic_ai.models import KnownModelName
 from pydantic_graph.nodes import End
 
@@ -33,9 +35,6 @@ except ImportError as _import_error:
         'Please install `rich`, `prompt-toolkit` and `argcomplete` to use the PydanticAI CLI, '
         'you can use the `cli` optional group — `pip install "pydantic-ai-slim[cli]"`'
     ) from _import_error
-
-from pydantic_ai.agent import Agent
-from pydantic_ai.messages import ModelMessage, PartDeltaEvent, TextPartDelta
 
 __version__ = version('pydantic-ai-slim')
 

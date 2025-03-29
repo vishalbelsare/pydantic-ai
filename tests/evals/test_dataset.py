@@ -684,7 +684,7 @@ async def test_duplicate_evaluator_failure(example_dataset: Dataset[TaskInput, T
     SecondEvaluator.__name__ = FirstEvaluator.__name__
     with pytest.raises(ValueError) as exc_info:
         Dataset[TaskInput, TaskOutput, TaskMetadata].from_dict(
-            {'cases': []}, custom_evaluator_types=(FirstEvaluator, SecondEvaluator)
+            {'cases': []}, custom_evaluators=(FirstEvaluator, SecondEvaluator)
         )
     assert str(exc_info.value) == snapshot("Duplicate evaluator class name: 'FirstEvaluator'")
 

@@ -31,7 +31,7 @@ async def main():
     )
     dataset = TimeRangeDataset.from_file(
         Path(__file__).parent / 'test_cases.yaml',
-        custom_evaluator_types=(IsInstance, LlmJudge),
+        custom_evaluators=(IsInstance, LlmJudge),
     )
 
     class MyEvaluator(Evaluator[TimeRangeInputs, TimeRangeResponse]):

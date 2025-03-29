@@ -19,7 +19,7 @@ from contextlib import AsyncExitStack
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Generic, Literal, Union, cast
+from typing import Any, Callable, Concatenate, Generic, Literal, Union, cast
 
 import anyio
 import logfire_api
@@ -33,10 +33,11 @@ from typing_extensions import NotRequired, Self, TypedDict, TypeVar
 from pydantic_evals._utils import get_event_loop
 
 from ._utils import get_unwrapped_function_name, task_group_gather
-from .evaluators import EvaluationResult, Evaluator, run_evaluator
+from .evaluators import EvaluationResult, Evaluator, EvaluatorOutput, run_evaluator
 from .evaluators._spec import EvaluatorSpec
 from .evaluators.common import DEFAULT_EVALUATORS
 from .evaluators.context import EvaluatorContext
+from .evaluators.function_evaluator import function_evaluator
 from .otel import SpanTree
 from .otel._context_in_memory_span_exporter import context_subtree
 from .reporting import EvaluationReport, ReportCase, ReportCaseAggregate
@@ -392,7 +393,7 @@ class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid', a
         cls,
         path: Path | str,
         fmt: Literal['yaml', 'json'] | None = None,
-        custom_evaluator_types: Sequence[type[Evaluator[InputsT, OutputT, MetadataT]]] = (),
+        custom_evaluators: Sequence[CustomEvaluator[InputsT, OutputT, MetadataT]] = (),
     ) -> Self:
         """Load a dataset from a file.
 
@@ -400,7 +401,7 @@ class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid', a
             path: Path to the file to load.
             fmt: Format of the file. If None, the format will be inferred from the file extension.
                 Must be either 'yaml' or 'json'.
-            custom_evaluator_types: Custom evaluator classes to use when deserializing the dataset.
+            custom_evaluators: Custom evaluator classes to use when deserializing the dataset.
                 These are additional evaluators beyond the default ones.
 
         Returns:
@@ -415,7 +416,7 @@ class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid', a
 
         raw = Path(path).read_text()
         try:
-            return cls.from_text(raw, fmt=fmt, custom_evaluator_types=custom_evaluator_types)
+            return cls.from_text(raw, fmt=fmt, custom_evaluators=custom_evaluators)
         except ValidationError as e:  # pragma: no cover
             raise ValueError(f'{path} contains data that does not match the schema for {cls.__name__}:\n{e}.') from e
 
@@ -424,14 +425,14 @@ class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid', a
         cls,
         contents: str,
         fmt: Literal['yaml', 'json'] = 'yaml',
-        custom_evaluator_types: Sequence[type[Evaluator[InputsT, OutputT, MetadataT]]] = (),
+        custom_evaluators: Sequence[CustomEvaluator[InputsT, OutputT, MetadataT]] = (),
     ) -> Self:
         """Load a dataset from a string.
 
         Args:
             contents: The string content to parse.
             fmt: Format of the content. Must be either 'yaml' or 'json'.
-            custom_evaluator_types: Custom evaluator classes to use when deserializing the dataset.
+            custom_evaluators: Custom evaluator classes to use when deserializing the dataset.
                 These are additional evaluators beyond the default ones.
 
         Returns:
@@ -442,23 +443,23 @@ class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid', a
         """
         if fmt == 'yaml':
             loaded = yaml.safe_load(contents)
-            return cls.from_dict(loaded, custom_evaluator_types)
+            return cls.from_dict(loaded, custom_evaluators)
         else:
             dataset_model_type = cls._serialization_type()
             dataset_model = dataset_model_type.model_validate_json(contents)
-            return cls._from_dataset_model(dataset_model, custom_evaluator_types)
+            return cls._from_dataset_model(dataset_model, custom_evaluators)
 
     @classmethod
     def from_dict(
         cls,
         data: dict[str, Any],
-        custom_evaluator_types: Sequence[type[Evaluator[InputsT, OutputT, MetadataT]]] = (),
+        custom_evaluators: Sequence[CustomEvaluator[InputsT, OutputT, MetadataT]] = (),
     ) -> Self:
         """Load a dataset from a dictionary.
 
         Args:
             data: Dictionary representation of the dataset.
-            custom_evaluator_types: Custom evaluator classes to use when deserializing the dataset.
+            custom_evaluators: Custom evaluator classes to use when deserializing the dataset.
                 These are additional evaluators beyond the default ones.
 
         Returns:
@@ -469,24 +470,24 @@ class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid', a
         """
         dataset_model_type = cls._serialization_type()
         dataset_model = dataset_model_type.model_validate(data)
-        return cls._from_dataset_model(dataset_model, custom_evaluator_types)
+        return cls._from_dataset_model(dataset_model, custom_evaluators)
 
     @classmethod
     def _from_dataset_model(
         cls,
         dataset_model: _DatasetModel[InputsT, OutputT, MetadataT],
-        custom_evaluator_types: Sequence[type[Evaluator[InputsT, OutputT, MetadataT]]] = (),
+        custom_evaluators: Sequence[CustomEvaluator[InputsT, OutputT, MetadataT]] = (),
     ) -> Self:
         """Create a Dataset from a _DatasetModel.
 
         Args:
             dataset_model: The _DatasetModel to convert.
-            custom_evaluator_types: Custom evaluator classes to register for deserialization.
+            custom_evaluators: Custom evaluator classes to register for deserialization.
 
         Returns:
             A new Dataset instance created from the _DatasetModel.
         """
-        registry = _get_registry(custom_evaluator_types)
+        registry = _get_registry(custom_evaluators)
 
         cases: list[Case[InputsT, OutputT, MetadataT]] = []
         errors: list[ValueError] = []
@@ -527,7 +528,7 @@ class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid', a
         path: Path | str,
         fmt: Literal['yaml', 'json'] | None = None,
         schema_path: Path | str | None = DEFAULT_SCHEMA_PATH_TEMPLATE,
-        custom_evaluator_types: Sequence[type[Evaluator[InputsT, OutputT, MetadataT]]] = (),
+        custom_evaluators: Sequence[CustomEvaluator[InputsT, OutputT, MetadataT]] = (),
     ):
         """Save the dataset to a file.
 
@@ -537,7 +538,7 @@ class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid', a
                 Must be either 'yaml' or 'json'.
             schema_path: Path to save the JSON schema to. If None, no schema will be saved.
                 Can be a string template with {stem} which will be replaced with the dataset filename stem.
-            custom_evaluator_types: Custom evaluator classes to include in the schema.
+            custom_evaluators: Custom evaluator classes to include in the schema.
         """
         path = Path(path)
         fmt = self._infer_fmt(path, fmt)
@@ -554,7 +555,7 @@ class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid', a
                 schema_ref = str(_get_relative_path_reference(schema_path, path))
             else:  # pragma: no cover
                 schema_ref = str(schema_path)
-            self._save_schema(schema_path, custom_evaluator_types)
+            self._save_schema(schema_path, custom_evaluators)
 
         context: dict[str, Any] = {'use_short_form': True}
         if fmt == 'yaml':
@@ -572,20 +573,20 @@ class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid', a
     @classmethod
     def model_json_schema_with_evaluators(
         cls,
-        custom_evaluator_types: Sequence[type[Evaluator[InputsT, OutputT, MetadataT]]] = (),
+        custom_evaluators: Sequence[CustomEvaluator[InputsT, OutputT, MetadataT]] = (),
     ) -> dict[str, Any]:
         """Generate a JSON schema for this dataset type, including evaluator details.
 
         This is useful for generating a schema that can be used to validate YAML-format dataset files.
 
         Args:
-            custom_evaluator_types: Custom evaluator classes to include in the schema.
+            custom_evaluators: Custom evaluator classes to include in the schema.
 
         Returns:
             A dictionary representing the JSON schema.
         """
         # Note: this function could maybe be simplified now that Evaluators are always dataclasses
-        registry = _get_registry(custom_evaluator_types)
+        registry = _get_registry(custom_evaluators)
 
         evaluator_schema_types: list[Any] = []
         for name, evaluator_class in registry.items():
@@ -650,16 +651,18 @@ class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid', a
 
     @classmethod
     def _save_schema(
-        cls, path: Path | str, custom_evaluator_types: Sequence[type[Evaluator[InputsT, OutputT, MetadataT]]] = ()
+        cls,
+        path: Path | str,
+        custom_evaluators: Sequence[CustomEvaluator[InputsT, OutputT, MetadataT]] = (),
     ):
         """Save the JSON schema for this dataset type to a file.
 
         Args:
             path: Path to save the schema to.
-            custom_evaluator_types: Custom evaluator classes to include in the schema.
+            custom_evaluators: Custom evaluator classes to include in the schema.
         """
         path = Path(path)
-        json_schema = cls.model_json_schema_with_evaluators(custom_evaluator_types)
+        json_schema = cls.model_json_schema_with_evaluators(custom_evaluators)
         schema_content = to_json(json_schema, indent=2).decode() + '\n'
         if not path.exists() or path.read_text() != schema_content:
             path.write_text(schema_content)
@@ -1010,32 +1013,38 @@ def _get_span_duration(span: logfire_api.LogfireSpan, fallback: float) -> float:
         return fallback
 
 
+CustomEvaluator = (
+    type[Evaluator[InputsT, OutputT, MetadataT]]
+    | Callable[..., Evaluator[InputsT, OutputT, MetadataT]]
+    | Callable[Concatenate[EvaluatorContext[InputsT, OutputT, MetadataT], ...], EvaluatorOutput]
+)
+
+
 def _get_registry(
-    custom_evaluator_types: Sequence[type[Evaluator[InputsT, OutputT, MetadataT]]],
-) -> Mapping[str, type[Evaluator[InputsT, OutputT, MetadataT]]]:
+    custom_evaluators: Sequence[CustomEvaluator[InputsT, OutputT, MetadataT]],
+) -> Mapping[str, CustomEvaluator[InputsT, OutputT, MetadataT]]:
     """Create a registry of evaluator types from default and custom evaluators.
 
     Args:
-        custom_evaluator_types: Additional evaluator classes to include in the registry.
+        custom_evaluators: Additional evaluator classes to include in the registry.
 
     Returns:
         A mapping from evaluator names to evaluator classes.
     """
     registry: dict[str, type[Evaluator[InputsT, OutputT, MetadataT]]] = {}
 
-    for evaluator_class in custom_evaluator_types:
-        if not issubclass(evaluator_class, Evaluator):
+    for custom_evaluator in custom_evaluators:
+        if not (isinstance(custom_evaluator, type) and issubclass(custom_evaluator, Evaluator)):
+            custom_evaluator = cast(type[Evaluator[InputsT, OutputT, MetadataT]], function_evaluator(custom_evaluator))  # type: ignore
+
+        if '__dataclass_fields__' not in custom_evaluator.__dict__:
             raise ValueError(
-                f'All custom evaluator classes must be subclasses of Evaluator, but {evaluator_class} is not'
+                f'All custom evaluator classes must be decorated with `@dataclass`, but {custom_evaluator} is not'
             )
-        if '__dataclass_fields__' not in evaluator_class.__dict__:
-            raise ValueError(
-                f'All custom evaluator classes must be decorated with `@dataclass`, but {evaluator_class} is not'
-            )
-        name = evaluator_class.name()
+        name = custom_evaluator.name()
         if name in registry:
             raise ValueError(f'Duplicate evaluator class name: {name!r}')
-        registry[name] = evaluator_class
+        registry[name] = custom_evaluator
 
     for evaluator_class in DEFAULT_EVALUATORS:
         # Allow overriding the default evaluators with custom evaluators raising an error
@@ -1045,7 +1054,7 @@ def _get_registry(
 
 
 def _load_evaluator_from_registry(
-    registry: Mapping[str, type[Evaluator[InputsT, OutputT, MetadataT]]],
+    registry: Mapping[str, CustomEvaluator[InputsT, OutputT, MetadataT]],
     case_name: str | None,
     spec: EvaluatorSpec,
 ) -> Evaluator[InputsT, OutputT, MetadataT]:
@@ -1068,7 +1077,10 @@ def _load_evaluator_from_registry(
             f'Evaluator {spec.name!r} is not in the provided registry. Registered choices: {list(registry.keys())}'
         )
     try:
-        return evaluator_class(*spec.args, **spec.kwargs)
+        if not (isinstance(evaluator_class, type) and issubclass(evaluator_class, Evaluator)):
+            evaluator_class = cast(type[Evaluator[InputsT, OutputT, MetadataT]], function_evaluator(evaluator_class))  # type: ignore
+
+        return evaluator_class(*spec.args, **spec.kwargs)  # type: ignore
     except Exception as e:
         case_detail = f'case {case_name!r}' if case_name is not None else 'dataset'
         raise ValueError(f'Failed to instantiate evaluator {spec.name!r} for {case_detail}: {e}') from e

@@ -1,6 +1,6 @@
-"""Tests of pydantic-ai actually connecting to OpenAI and Gemini models.
+"""Tests of pydantic-ai actually making request to live vendor model APIs.
 
-WARNING: running these tests will consume your OpenAI and Gemini credits.
+WARNING: running these tests will make use of the relevant API tokens (and cost money).
 """
 
 import os

@@ -66,6 +66,7 @@ Special prompt:
     )
     parser.add_argument('prompt', nargs='?', help='AI Prompt, if omitted fall into interactive mode')
     arg = parser.add_argument(
+        '-m',
         '--model',
         nargs='?',
         help='Model to use, it should be "<provider>:<model>" e.g. "openai:gpt-4o". If omitted it will default to "openai:gpt-4o"',
@@ -76,6 +77,7 @@ Special prompt:
     qualified_model_names = [n for n in get_literal_values(KnownModelName.__value__) if ':' in n]
     arg.completer = argcomplete.ChoicesCompleter(qualified_model_names)  # type: ignore[reportPrivateUsage]
     parser.add_argument(
+        '-l',
         '--list-models',
         action='store_true',
         help='List all available models and exit',

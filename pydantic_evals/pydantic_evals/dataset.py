@@ -876,6 +876,7 @@ async def _run_task_and_evaluators(
         case_name=case.name,
         inputs=case.inputs,
         metadata=case.metadata,
+        expected_output=case.expected_output,
     ) as case_span:
         t0 = time.time()
         scoring_context = await _run_task(task, case)

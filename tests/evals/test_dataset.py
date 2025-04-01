@@ -4,7 +4,6 @@ import asyncio
 import json
 import sys
 from dataclasses import dataclass
-from io import StringIO
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -12,9 +11,9 @@ import pytest
 from dirty_equals import HasRepr
 from inline_snapshot import snapshot
 from pydantic import BaseModel
-from rich.console import Console
 
 from ..conftest import try_import
+from .utils import render_table
 
 with try_import() as imports_successful:
     from pydantic_evals import Case, Dataset
@@ -1024,9 +1023,7 @@ def test_evaluate_non_serializable_inputs():
     assert [c.inputs for c in report.cases] == snapshot([MyInputs(result_type=str), MyInputs(result_type=int)])
 
     table = report.console_table(include_input=True)
-    string_io = StringIO()
-    Console(file=string_io).print(table)
-    assert string_io.getvalue() == snapshot("""\
+    assert render_table(table) == snapshot("""\
                                         Evaluation Summary: my_task
 ┏━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━┓
 ┃ Case ID  ┃ Inputs                                                                             ┃ Duration ┃

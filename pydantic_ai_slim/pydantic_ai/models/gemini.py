@@ -46,6 +46,14 @@ from . import (
     get_user_agent,
 )
 
+try:
+    ...
+except ImportError as _import_error:
+    raise ImportError(
+        'Please install `google-genai` to use the Gemini model, '
+        'you can use the `gemini` optional group — `pip install "pydantic-ai-slim[gemini]"`'
+    ) from _import_error
+
 LatestGeminiModelNames = Literal[
     'gemini-1.5-flash',
     'gemini-1.5-flash-8b',

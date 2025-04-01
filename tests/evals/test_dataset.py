@@ -4,6 +4,7 @@ import asyncio
 import json
 import sys
 from dataclasses import dataclass
+from io import StringIO
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -11,6 +12,7 @@ import pytest
 from dirty_equals import HasRepr
 from inline_snapshot import snapshot
 from pydantic import BaseModel
+from rich.console import Console
 
 from ..conftest import try_import
 
@@ -342,40 +344,42 @@ async def test_increment_eval_metric(example_dataset: Dataset[TaskInput, TaskOut
         return TaskOutput(answer=f'answer to {inputs.query}')
 
     report = await example_dataset.evaluate(my_task)
-    assert report.cases == [
-        ReportCase(
-            name='case1',
-            inputs={'query': 'What is 2+2?'},
-            metadata=TaskMetadata(difficulty='easy', category='general'),
-            expected_output=TaskOutput(answer='4', confidence=1.0),
-            output=TaskOutput(answer='answer to What is 2+2?', confidence=1.0),
-            metrics={'chars': 12},
-            attributes={'is_about_france': False},
-            scores={},
-            labels={},
-            assertions={},
-            task_duration=1.0,
-            total_duration=3.0,
-            trace_id='00000000000000000000000000000001',
-            span_id='0000000000000003',
-        ),
-        ReportCase(
-            name='case2',
-            inputs={'query': 'What is the capital of France?'},
-            metadata=TaskMetadata(difficulty='medium', category='geography'),
-            expected_output=TaskOutput(answer='Paris', confidence=1.0),
-            output=TaskOutput(answer='answer to What is the capital of France?', confidence=1.0),
-            metrics={'chars': 30},
-            attributes={'is_about_france': True},
-            scores={},
-            labels={},
-            assertions={},
-            task_duration=1.0,
-            total_duration=3.0,
-            trace_id='00000000000000000000000000000001',
-            span_id='0000000000000007',
-        ),
-    ]
+    assert report.cases == snapshot(
+        [
+            ReportCase(
+                name='case1',
+                inputs=TaskInput(query='What is 2+2?'),
+                metadata=TaskMetadata(difficulty='easy', category='general'),
+                expected_output=TaskOutput(answer='4', confidence=1.0),
+                output=TaskOutput(answer='answer to What is 2+2?', confidence=1.0),
+                metrics={'chars': 12},
+                attributes={'is_about_france': False},
+                scores={},
+                labels={},
+                assertions={},
+                task_duration=1.0,
+                total_duration=3.0,
+                trace_id='00000000000000000000000000000001',
+                span_id='0000000000000003',
+            ),
+            ReportCase(
+                name='case2',
+                inputs=TaskInput(query='What is the capital of France?'),
+                metadata=TaskMetadata(difficulty='medium', category='geography'),
+                expected_output=TaskOutput(answer='Paris', confidence=1.0),
+                output=TaskOutput(answer='answer to What is the capital of France?', confidence=1.0),
+                metrics={'chars': 30},
+                attributes={'is_about_france': True},
+                scores={},
+                labels={},
+                assertions={},
+                task_duration=1.0,
+                total_duration=3.0,
+                trace_id='00000000000000000000000000000001',
+                span_id='0000000000000007',
+            ),
+        ]
+    )
 
 
 async def test_repeated_name_outputs(example_dataset: Dataset[TaskInput, TaskOutput, TaskMetadata]):
@@ -393,7 +397,7 @@ async def test_repeated_name_outputs(example_dataset: Dataset[TaskInput, TaskOut
         [
             ReportCase(
                 name='case1',
-                inputs={'query': 'What is 2+2?'},
+                inputs=TaskInput(query='What is 2+2?'),
                 metadata=TaskMetadata(difficulty='easy', category='general'),
                 expected_output=TaskOutput(answer='4', confidence=1.0),
                 output=TaskOutput(answer='answer to What is 2+2?', confidence=1.0),
@@ -419,7 +423,7 @@ async def test_repeated_name_outputs(example_dataset: Dataset[TaskInput, TaskOut
             ),
             ReportCase(
                 name='case2',
-                inputs={'query': 'What is the capital of France?'},
+                inputs=TaskInput(query='What is the capital of France?'),
                 metadata=TaskMetadata(difficulty='medium', category='geography'),
                 expected_output=TaskOutput(answer='Paris', confidence=1.0),
                 output=TaskOutput(answer='answer to What is the capital of France?', confidence=1.0),
@@ -467,7 +471,7 @@ async def test_genai_attribute_collection(example_dataset: Dataset[TaskInput, Ta
         [
             ReportCase(
                 name='case1',
-                inputs={'query': 'What is 2+2?'},
+                inputs=TaskInput(query='What is 2+2?'),
                 metadata=TaskMetadata(difficulty='easy', category='general'),
                 expected_output=TaskOutput(answer='4', confidence=1.0),
                 output=TaskOutput(answer='answer to What is 2+2?', confidence=1.0),
@@ -483,7 +487,7 @@ async def test_genai_attribute_collection(example_dataset: Dataset[TaskInput, Ta
             ),
             ReportCase(
                 name='case2',
-                inputs={'query': 'What is the capital of France?'},
+                inputs=TaskInput(query='What is the capital of France?'),
                 metadata=TaskMetadata(difficulty='medium', category='geography'),
                 expected_output=TaskOutput(answer='Paris', confidence=1.0),
                 output=TaskOutput(answer='answer to What is the capital of France?', confidence=1.0),
@@ -988,3 +992,49 @@ def test_import_generate_dataset():
     from pydantic_evals.generation import generate_dataset
 
     assert generate_dataset
+
+
+def test_evaluate_non_serializable_inputs():
+    @dataclass
+    class MyInputs:
+        result_type: type[str] | type[int]
+
+    my_dataset = Dataset[MyInputs, Any, Any](
+        cases=[
+            Case(
+                name='str',
+                inputs=MyInputs(result_type=str),
+                expected_output='abc',
+            ),
+            Case(
+                name='int',
+                inputs=MyInputs(result_type=int),
+                expected_output=123,
+            ),
+        ],
+    )
+
+    async def my_task(my_inputs: MyInputs) -> int | str:
+        if issubclass(my_inputs.result_type, str):
+            return my_inputs.result_type('abc')
+        else:
+            return my_inputs.result_type(123)
+
+    report = my_dataset.evaluate_sync(task=my_task)
+    assert [c.inputs for c in report.cases] == snapshot([MyInputs(result_type=str), MyInputs(result_type=int)])
+
+    table = report.console_table(include_input=True)
+    string_io = StringIO()
+    Console(file=string_io).print(table)
+    assert string_io.getvalue() == snapshot("""\
+                                        Evaluation Summary: my_task
+┏━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━┓
+┃ Case ID  ┃ Inputs                                                                             ┃ Duration ┃
+┡━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━┩
+│ str      │ test_evaluate_non_serializable_inputs.<locals>.MyInputs(result_type=<class 'str'>) │     1.0s │
+├──────────┼────────────────────────────────────────────────────────────────────────────────────┼──────────┤
+│ int      │ test_evaluate_non_serializable_inputs.<locals>.MyInputs(result_type=<class 'int'>) │     1.0s │
+├──────────┼────────────────────────────────────────────────────────────────────────────────────┼──────────┤
+│ Averages │                                                                                    │     1.0s │
+└──────────┴────────────────────────────────────────────────────────────────────────────────────┴──────────┘
+""")

@@ -15,8 +15,8 @@ class GoogleProvider(Provider[genai.Client]):
     """Provider for Google API."""
 
     @property
-    def name(self):
-        return 'google'
+    def name(self) -> str:
+        return self._name
 
     @property
     def base_url(self) -> str:
@@ -26,6 +26,7 @@ class GoogleProvider(Provider[genai.Client]):
     def client(self) -> genai.Client:
         return self._client
 
-    def __init__(self, client: genai.Client | None = None) -> None:
+    def __init__(self, vertexai: bool = False, client: genai.Client | None = None) -> None:
         """Create a new Google GLA provider."""
-        self._client = client or genai.Client()
+        self._name = 'google-vertex' if vertexai else 'google-gla'
+        self._client = client or genai.Client(vertexai=vertexai)

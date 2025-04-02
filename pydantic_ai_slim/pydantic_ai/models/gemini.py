@@ -47,7 +47,8 @@ from . import (
 )
 
 try:
-    ...
+    from google import genai
+    from google.genai.types import FunctionDeclarationDict, GenerateContentResponse
 except ImportError as _import_error:
     raise ImportError(
         'Please install `google-genai` to use the Gemini model, '
@@ -101,7 +102,6 @@ class GeminiModel(Model):
 
     _model_name: GeminiModelName = field(repr=False)
     _provider: Literal['google-gla', 'google-vertex'] | Provider[httpx.AsyncClient] | None = field(repr=False)
-    _auth: AuthProtocol | None = field(repr=False)
     _url: str | None = field(repr=False)
     _system: str = field(default='gemini', repr=False)
 
@@ -847,3 +847,73 @@ def _ensure_decodeable(content: bytearray) -> bytearray:
             content = content[:-1]  # this will definitely succeed before we run out of bytes
         else:
             return content
+
+
+########################################################################################
+########################################################################################
+################################# Google GenAI SDK #####################################
+########################################################################################
+########################################################################################
+
+
+class _GeminiModel(Model):
+    """A model that uses the Google GenAI SDK."""
+
+    _model_name: GeminiModelName = field(repr=False)
+    _provider: Literal['google-gla', 'google-vertex'] | Provider[genai.Client] | None = field(repr=False)
+    _url: str | None = field(repr=False)
+    _system: str = field(default='gemini', repr=False)
+
+    def __init__(
+        self,
+        model_name: GeminiModelName,
+        *,
+        provider: Literal['google-gla', 'google-vertex'] | Provider[genai.Client] = 'google-gla',
+    ) -> None:
+        self._model_name = model_name
+        self._provider = provider
+
+        if isinstance(provider, str):
+            provider = infer_provider(provider)
+        self._system = provider.name
+        self.client = provider.client
+
+    async def request(
+        self,
+        messages: list[ModelMessage],
+        model_settings: ModelSettings | None,
+        model_request_parameters: ModelRequestParameters,
+    ) -> tuple[ModelResponse, usage.Usage]:
+        check_allow_model_requests()
+        response = await self._make_request(
+            messages, False, cast(GeminiModelSettings, model_settings or {}), model_request_parameters
+        )
+        # return self._process_response(response), _map_usage(response)
+
+    async def _make_request(
+        self,
+        messages: list[ModelMessage],
+        streamed: bool,
+        model_settings: GeminiModelSettings,
+        model_request_parameters: ModelRequestParameters,
+    ) -> GenerateContentResponse:
+        return await self.client.aio.models.generate_content(model=self._model_name)
+        # except APIStatusError as e:
+        #     if (status_code := e.status_code) >= 400:
+        #         raise ModelHTTPError(status_code=status_code, model_name=self.model_name, body=e.body) from e
+        #     raise
+
+    def _get_tools(self, model_request_parameters: ModelRequestParameters) -> list[FunctionDeclarationDict]:
+        tools = [self._map_tool_definition(r) for r in model_request_parameters.function_tools]
+        if model_request_parameters.result_tools:
+            tools += [self._map_tool_definition(r) for r in model_request_parameters.result_tools]
+        return tools
+
+    def _map_tool_definition(self, tool: ToolDefinition) -> FunctionDeclarationDict:
+        return {
+            'name': tool.name,
+            'parameters': tool.parameters_json_schema,
+            'description': tool.description,
+            # TODO(Marcelo): Gemini accepts the return type schema. We should pass it!
+            # 'response': ...,
+        }

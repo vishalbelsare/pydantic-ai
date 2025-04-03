@@ -8,6 +8,9 @@ import { z } from 'zod'
 import { runCode, asXml } from './runCode.js'
 
 export async function main() {
+  console.error(`
+NOTE: This package is deprecated, use the JSR package https://jsr.io/@pydantic/mcp-run-python instead.
+`)
   const args = process.argv.slice(2)
   if (args.length === 1 && args[0] === 'stdio') {
     await runStdio()
@@ -16,7 +19,6 @@ export async function main() {
   } else if (args.length === 1 && args[0] === 'warmup') {
     await warmup()
   } else {
-    console.error('Usage: npx @pydantic/mcp-run-python [stdio|sse|warmup]')
     process.exit(1)
   }
 }

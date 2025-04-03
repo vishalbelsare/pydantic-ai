@@ -7,17 +7,18 @@ from contextlib import asynccontextmanager
 from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Annotated, Any, Literal, Protocol, Union, cast
+from typing import Annotated, Any, Literal, Protocol, Union, cast, overload
 from uuid import uuid4
 
 import httpx
 import pydantic
-from httpx import USE_CLIENT_DEFAULT, Response as HTTPResponse
-from typing_extensions import NotRequired, TypedDict, assert_never
+from google.genai.types import GenerateContentConfigDict, SafetySettingDict
+from httpx import Response as HTTPResponse
+from typing_extensions import NotRequired, TypedDict, assert_never, deprecated
 
 from pydantic_ai.providers import Provider, infer_provider
 
-from .. import ModelHTTPError, UnexpectedModelBehavior, UserError, _utils, usage
+from .. import UnexpectedModelBehavior, UserError, _utils, usage
 from ..messages import (
     AudioUrl,
     BinaryContent,
@@ -85,7 +86,7 @@ class GeminiModelSettings(ModelSettings):
     ALL FIELDS MUST BE `gemini_` PREFIXED SO YOU CAN MERGE THEM WITH OTHER MODELS.
     """
 
-    gemini_safety_settings: list[GeminiSafetySettings]
+    gemini_safety_settings: list[SafetySettingDict]
 
 
 @dataclass(init=False)
@@ -98,18 +99,39 @@ class GeminiModel(Model):
     Apart from `__init__`, all methods are private or match those of the base class.
     """
 
-    client: httpx.AsyncClient = field(repr=False)
+    client: genai.Client = field(repr=False)
 
     _model_name: GeminiModelName = field(repr=False)
-    _provider: Literal['google-gla', 'google-vertex'] | Provider[httpx.AsyncClient] | None = field(repr=False)
+    _provider: Provider[genai.Client] = field(repr=False)
     _url: str | None = field(repr=False)
     _system: str = field(default='gemini', repr=False)
+
+    @overload
+    @deprecated(
+        'Use `pydantic_ai.providers.google.GoogleProvider` instead of `GoogleGLAProvider` or `GoogleVertexProvider`.'
+    )
+    def __init__(
+        self,
+        model_name: GeminiModelName,
+        *,
+        provider: Provider[httpx.AsyncClient],
+    ) -> None: ...
+
+    @overload
+    def __init__(
+        self,
+        model_name: GeminiModelName,
+        *,
+        provider: Literal['google-gla', 'google-vertex'] | Provider[genai.Client] = 'google-gla',
+    ) -> None: ...
 
     def __init__(
         self,
         model_name: GeminiModelName,
         *,
-        provider: Literal['google-gla', 'google-vertex'] | Provider[httpx.AsyncClient] = 'google-gla',
+        provider: Literal['google-gla', 'google-vertex']
+        | Provider[httpx.AsyncClient]
+        | Provider[genai.Client] = 'google-gla',
     ):
         """Initialize a Gemini model.
 
@@ -120,18 +142,20 @@ class GeminiModel(Model):
                 If not provided, a new provider will be created using the other parameters.
         """
         self._model_name = model_name
-        self._provider = provider
 
         if isinstance(provider, str):
             provider = infer_provider(provider)
+        if isinstance(provider.client, httpx.AsyncClient):
+            raise UserError('Use `GoogleProvider` instead of `GoogleGLAProvider` or `GoogleVertexProvider`.')
+        provider = cast(Provider[genai.Client], provider)
+
+        self._provider = provider
         self._system = provider.name
         self.client = provider.client
-        self._url = str(self.client.base_url)
 
     @property
     def base_url(self) -> str:
-        assert self._url is not None, 'URL not initialized'
-        return self._url
+        return self._provider.base_url
 
     async def request(
         self,
@@ -206,40 +230,36 @@ class GeminiModel(Model):
         if tool_config is not None:
             request_data['tool_config'] = tool_config
 
-        generation_config: _GeminiGenerationConfig = {}
-        if model_settings:
-            if (max_tokens := model_settings.get('max_tokens')) is not None:
-                generation_config['max_output_tokens'] = max_tokens
-            if (temperature := model_settings.get('temperature')) is not None:
-                generation_config['temperature'] = temperature
-            if (top_p := model_settings.get('top_p')) is not None:
-                generation_config['top_p'] = top_p
-            if (presence_penalty := model_settings.get('presence_penalty')) is not None:
-                generation_config['presence_penalty'] = presence_penalty
-            if (frequency_penalty := model_settings.get('frequency_penalty')) is not None:
-                generation_config['frequency_penalty'] = frequency_penalty
-            if (gemini_safety_settings := model_settings.get('gemini_safety_settings')) != []:
-                request_data['safety_settings'] = gemini_safety_settings
-        if generation_config:
-            request_data['generation_config'] = generation_config
+        try:
+            await self.client.aio.models.generate_content(
+                model=self._model_name,
+                contents=...,
+                config=GenerateContentConfigDict(
+                    http_options={'headers': {'Content-Type': 'application/json', 'User-Agent': get_user_agent()}},
+                    temperature=model_settings.get('temperature'),
+                    top_p=model_settings.get('top_p'),
+                    max_output_tokens=model_settings.get('max_tokens'),
+                    presence_penalty=model_settings.get('presence_penalty'),
+                    frequency_penalty=model_settings.get('frequency_penalty'),
+                    safety_settings=model_settings.get('gemini_safety_settings'),
+                ),
+            )
+        except Exception as e:
+            raise e
 
-        headers = {'Content-Type': 'application/json', 'User-Agent': get_user_agent()}
-        url = f'/{self._model_name}:{"streamGenerateContent" if streamed else "generateContent"}'
-
-        request_json = _gemini_request_ta.dump_json(request_data, by_alias=True)
-        async with self.client.stream(
-            'POST',
-            url,
-            content=request_json,
-            headers=headers,
-            timeout=model_settings.get('timeout', USE_CLIENT_DEFAULT),
-        ) as r:
-            if (status_code := r.status_code) != 200:
-                await r.aread()
-                if status_code >= 400:
-                    raise ModelHTTPError(status_code=status_code, model_name=self.model_name, body=r.text)
-                raise UnexpectedModelBehavior(f'Unexpected response from gemini {status_code}', r.text)
-            yield r
+        # async with self.client.stream(
+        #     'POST',
+        #     url,
+        #     content=request_json,
+        #     headers=headers,
+        #     timeout=model_settings.get('timeout', USE_CLIENT_DEFAULT),
+        # ) as r:
+        #     if (status_code := r.status_code) != 200:
+        #         await r.aread()
+        #         if status_code >= 400:
+        #             raise ModelHTTPError(status_code=status_code, model_name=self.model_name, body=r.text)
+        #         raise UnexpectedModelBehavior(f'Unexpected response from gemini {status_code}', r.text)
+        #     yield r
 
     def _process_response(self, response: _GeminiResponse) -> ModelResponse:
         if len(response['candidates']) != 1:
@@ -449,7 +469,7 @@ class _GeminiRequest(TypedDict):
     contents: list[_GeminiContent]
     tools: NotRequired[_GeminiTools]
     tool_config: NotRequired[_GeminiToolConfig]
-    safety_settings: NotRequired[list[GeminiSafetySettings]]
+    safety_settings: NotRequired[list[SafetySettingDict]]
     # we don't implement `generationConfig`, instead we use a named tool for the response
     system_instruction: NotRequired[_GeminiTextContent]
     """
@@ -647,9 +667,9 @@ class _GeminiFunction(TypedDict):
     """
 
 
-def _function_from_abstract_tool(tool: ToolDefinition) -> _GeminiFunction:
+def _function_from_abstract_tool(tool: ToolDefinition) -> FunctionDeclarationDict:
     json_schema = _GeminiJsonSchema(tool.parameters_json_schema).simplify()
-    f = _GeminiFunction(name=tool.name, description=tool.description)
+    f = FunctionDeclarationDict(name=tool.name, description=tool.description)
     if json_schema.get('properties'):
         f['parameters'] = json_schema
     return f
@@ -847,73 +867,3 @@ def _ensure_decodeable(content: bytearray) -> bytearray:
             content = content[:-1]  # this will definitely succeed before we run out of bytes
         else:
             return content
-
-
-########################################################################################
-########################################################################################
-################################# Google GenAI SDK #####################################
-########################################################################################
-########################################################################################
-
-
-class _GeminiModel(Model):
-    """A model that uses the Google GenAI SDK."""
-
-    _model_name: GeminiModelName = field(repr=False)
-    _provider: Literal['google-gla', 'google-vertex'] | Provider[genai.Client] | None = field(repr=False)
-    _url: str | None = field(repr=False)
-    _system: str = field(default='gemini', repr=False)
-
-    def __init__(
-        self,
-        model_name: GeminiModelName,
-        *,
-        provider: Literal['google-gla', 'google-vertex'] | Provider[genai.Client] = 'google-gla',
-    ) -> None:
-        self._model_name = model_name
-        self._provider = provider
-
-        if isinstance(provider, str):
-            provider = infer_provider(provider)
-        self._system = provider.name
-        self.client = provider.client
-
-    async def request(
-        self,
-        messages: list[ModelMessage],
-        model_settings: ModelSettings | None,
-        model_request_parameters: ModelRequestParameters,
-    ) -> tuple[ModelResponse, usage.Usage]:
-        check_allow_model_requests()
-        response = await self._make_request(
-            messages, False, cast(GeminiModelSettings, model_settings or {}), model_request_parameters
-        )
-        # return self._process_response(response), _map_usage(response)
-
-    async def _make_request(
-        self,
-        messages: list[ModelMessage],
-        streamed: bool,
-        model_settings: GeminiModelSettings,
-        model_request_parameters: ModelRequestParameters,
-    ) -> GenerateContentResponse:
-        return await self.client.aio.models.generate_content(model=self._model_name)
-        # except APIStatusError as e:
-        #     if (status_code := e.status_code) >= 400:
-        #         raise ModelHTTPError(status_code=status_code, model_name=self.model_name, body=e.body) from e
-        #     raise
-
-    def _get_tools(self, model_request_parameters: ModelRequestParameters) -> list[FunctionDeclarationDict]:
-        tools = [self._map_tool_definition(r) for r in model_request_parameters.function_tools]
-        if model_request_parameters.result_tools:
-            tools += [self._map_tool_definition(r) for r in model_request_parameters.result_tools]
-        return tools
-
-    def _map_tool_definition(self, tool: ToolDefinition) -> FunctionDeclarationDict:
-        return {
-            'name': tool.name,
-            'parameters': tool.parameters_json_schema,
-            'description': tool.description,
-            # TODO(Marcelo): Gemini accepts the return type schema. We should pass it!
-            # 'response': ...,
-        }

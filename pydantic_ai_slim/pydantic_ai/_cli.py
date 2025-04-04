@@ -2,19 +2,26 @@ from __future__ import annotations as _annotations
 
 import argparse
 import asyncio
+import os
+import shlex
+import subprocess
 import sys
 from asyncio import CancelledError
-from collections.abc import Sequence
+from collections.abc import Coroutine, Sequence
 from contextlib import ExitStack
 from datetime import datetime, timezone
 from importlib.metadata import version
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Callable, NotRequired, ParamSpec, cast
 
+from pydantic import TypeAdapter
+from pydantic.type_adapter import R
+from typing_extensions import TypedDict
 from typing_inspection.introspection import get_literal_values
 
 from pydantic_ai.agent import Agent
 from pydantic_ai.exceptions import UserError
+from pydantic_ai.mcp import MCPServer, MCPServerHTTP, MCPServerStdio
 from pydantic_ai.messages import ModelMessage, PartDeltaEvent, TextPartDelta
 from pydantic_ai.models import KnownModelName, infer_model
 
@@ -39,7 +46,19 @@ except ImportError as _import_error:
     ) from _import_error
 
 
+# logfire.configure()
+# logfire.log_slow_async_callbacks()
+
 __version__ = version('pydantic-ai-slim')
+
+PYDANTIC_AI_HOME = Path.home() / '.pydantic-ai'
+"""The home directory for PydanticAI.
+
+This folder is used to store the prompt history and configuration.
+"""
+
+PYDANTIC_AI_MCP_SERVERS_FILE = PYDANTIC_AI_HOME / 'mcp_servers.jsonc'
+"""The MCP servers configuration file."""
 
 
 class SimpleCodeBlock(CodeBlock):
@@ -123,6 +142,7 @@ Special prompt:
     )
     parser.add_argument('--no-stream', action='store_true', help='Whether to stream responses from the model')
     parser.add_argument('--version', action='store_true', help='Show version and exit')
+    parser.add_argument('--edit-mcp-servers', action='store_true', help='Open an editor to configure MCP servers')
 
     argcomplete.autocomplete(parser)
     args = parser.parse_args(args_list)
@@ -138,6 +158,12 @@ Special prompt:
         for model in qualified_model_names:
             console.print(f'  {model}', highlight=False)
         return 0
+    if args.edit_mcp_servers:
+        return edit_mcp_servers(console)
+
+    mcp_servers = mcp_servers_from_config()
+    # TODO(Marcelo): We should allow extending the list of MCP servers publicly.
+    cli_agent._mcp_servers.extend(mcp_servers)  # type: ignore[reportPrivateUsage]
 
     try:
         cli_agent.model = infer_model(args.model)
@@ -155,21 +181,30 @@ Special prompt:
 
     if prompt := cast(str, args.prompt):
         try:
-            asyncio.run(ask_agent(cli_agent, prompt, stream, console, code_theme))
+            asyncio.run(ask_agent(prompt, stream, console, code_theme))
         except KeyboardInterrupt:
             pass
         return 0
 
-    history = Path.home() / '.pai-prompt-history.txt'
+    history = PYDANTIC_AI_HOME / 'prompt-history.txt'
     # doing this instead of `PromptSession[Any](history=` allows mocking of PromptSession in tests
     session: PromptSession[Any] = PromptSession(history=FileHistory(str(history)))
     try:
-        return asyncio.run(run_chat(session, stream, cli_agent, console, code_theme))
+        return asyncio.run(run_chat(session, stream, console, code_theme))
     except KeyboardInterrupt:  # pragma: no cover
         return 0
 
 
-async def run_chat(session: PromptSession[Any], stream: bool, agent: Agent, console: Console, code_theme: str) -> int:
+def run_mcp_servers(func: Callable[P, Coroutine[Any, Any, R]]) -> Callable[P, Coroutine[Any, Any, R]]:
+    async def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
+        async with cli_agent.run_mcp_servers():
+            return await func(*args, **kwargs)
+
+    return wrapper
+
+
+@run_mcp_servers
+async def run_chat(session: PromptSession[Any], stream: bool, console: Console, code_theme: str) -> int:
     multiline = False
     messages: list[ModelMessage] = []
 
@@ -190,13 +225,13 @@ async def run_chat(session: PromptSession[Any], stream: bool, agent: Agent, cons
                 return exit_value
         else:
             try:
-                messages = await ask_agent(agent, text, stream, console, code_theme, messages)
+                messages = await ask_agent(text, stream, console, code_theme, messages)
             except CancelledError:  # pragma: no cover
                 console.print('[dim]Interrupted[/dim]')
 
 
+@run_mcp_servers
 async def ask_agent(
-    agent: Agent,
     prompt: str,
     stream: bool,
     console: Console,
@@ -207,13 +242,13 @@ async def ask_agent(
 
     if not stream:
         with status:
-            result = await agent.run(prompt, message_history=messages)
+            result = await cli_agent.run(prompt, message_history=messages)
         content = result.data
         console.print(Markdown(content, code_theme=code_theme))
         return result.all_messages()
 
     with status, ExitStack() as stack:
-        async with agent.iter(prompt, message_history=messages) as agent_run:
+        async with cli_agent.iter(prompt, message_history=messages) as agent_run:
             live = Live('', refresh_per_second=15, console=console, vertical_overflow='visible')
             content: str = ''
             async for node in agent_run:
@@ -285,6 +320,103 @@ def handle_slash_command(
     else:
         console.print(f'[red]Unknown command[/red] [magenta]`{ident_prompt}`[/magenta]')
     return None, multiline
+
+
+class _MCPServerHTTP(TypedDict):
+    url: str
+
+
+class _MCPServerStdio(TypedDict):
+    command: str
+    args: list[str]
+    env: NotRequired[dict[str, str]]
+
+
+class _MCPServers(TypedDict):
+    mcpServers: dict[str, _MCPServerHTTP | _MCPServerStdio]
+
+
+_mcp_servers_ta = TypeAdapter(_MCPServers)
+
+
+def edit_mcp_servers(console: Console) -> int:
+    """Open an editor to configure MCP servers.
+
+    Args:
+        console: The console to print messages to.
+
+    Returns:
+        0 on success, 1 on error.
+    """
+    PYDANTIC_AI_HOME.mkdir(parents=True, exist_ok=True)
+
+    default_content = """\
+/* This file is managed by PydanticAI CLI.
+
+You can include MCP servers in the following format:
+
+    ```jsonc
+    {
+        "mcpServers": {
+            "my-http-server": {
+            "url": "http://localhost:3000",
+        },
+        "my-stdio-server": {
+            "command": "uv",
+            "args": ["run", "my_script.py"]
+        }
+    }
+    ```
+
+For more information, visit: https://ai.pydantic.dev/cli/mcp
+*/
+{
+  "mcpServers": {}
+}
+"""
+
+    if not PYDANTIC_AI_MCP_SERVERS_FILE.exists():
+        PYDANTIC_AI_MCP_SERVERS_FILE.write_text(default_content)
+        console.print(f'Created new MCP servers configuration at [cyan]{PYDANTIC_AI_MCP_SERVERS_FILE}[/cyan]')
+
+    editor = os.environ.get('EDITOR', 'vim')
+    try:
+        subprocess.run(shlex.split(editor) + [str(PYDANTIC_AI_MCP_SERVERS_FILE)], check=True)
+        console.print(f'Successfully edited MCP servers configuration at [cyan]{PYDANTIC_AI_MCP_SERVERS_FILE}[/cyan]')
+        return 0
+    except subprocess.CalledProcessError as e:
+        console.print(f'[red]Error editing MCP servers configuration: {e}[/red]')
+        return 1
+
+
+def mcp_servers_from_config() -> list[MCPServer]:
+    if not PYDANTIC_AI_MCP_SERVERS_FILE.exists():
+        return []
+
+    file_content = PYDANTIC_AI_MCP_SERVERS_FILE.read_text()
+    # Remove multiline comments
+    cleaned_content = file_content
+    while True:
+        start = cleaned_content.find('/*')
+        if start == -1:
+            break
+        end = cleaned_content.find('*/', start)
+        if end == -1:
+            break
+        cleaned_content = cleaned_content[:start] + cleaned_content[end + 2 :]
+
+    mcp_server_config = _mcp_servers_ta.validate_json(cleaned_content)
+
+    mcp_servers: list[MCPServer] = []
+    for server in mcp_server_config['mcpServers'].values():
+        if 'url' in server:
+            mcp_servers.append(MCPServerHTTP(server['url']))
+        elif 'command' in server:
+            mcp_servers.append(MCPServerStdio(server['command'], server['args'], server.get('env', {})))
+    return mcp_servers
+
+
+P = ParamSpec('P')
 
 
 def app():  # pragma: no cover

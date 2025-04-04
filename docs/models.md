@@ -151,10 +151,27 @@ You can use the [`OpenAIResponsesModelSettings`][pydantic_ai.models.openai.OpenA
 class to make use of those built-in tools:
 
 ```python {title="openai_responses_model_settings.py"}
+from pathlib import Path
+from typing import Annotated
+
 from openai.types.responses import WebSearchToolParam  # (1)!
+from pydantic import BaseModel, TypeAdapter
 
 from pydantic_ai import Agent
 from pydantic_ai.models.openai import OpenAIResponsesModel, OpenAIResponsesModelSettings
+
+# Define the file path as a constant at the top
+WEATHER_FILE = Path("data/weather.json")  # (2)!
+
+# Define the model for validating the file contents
+class WeatherData(BaseModel):
+    temperature: Annotated[float, "Current temperature in Celsius"]
+    conditions: Annotated[str, "Current weather conditions"]
+    location: Annotated[str, "City name"]
+
+# Read and validate the file before making the request
+weather_adapter = TypeAdapter(WeatherData)
+weather_data = weather_adapter.validate_json(WEATHER_FILE.read_text())
 
 model_settings = OpenAIResponsesModelSettings(
     openai_builtin_tools=[WebSearchToolParam(type='web_search_preview')],
@@ -162,7 +179,7 @@ model_settings = OpenAIResponsesModelSettings(
 model = OpenAIResponsesModel('gpt-4o')
 agent = Agent(model=model, model_settings=model_settings)
 
-result = agent.run_sync('What is the weather in Tokyo?')
+result = agent.run_sync(f'What is the weather in {weather_data.location}?')
 print(result.data)
 """
 As of 7:48 AM on Wednesday, April 2, 2025, in Tokyo, Japan, the weather is cloudy with a temperature of 53°F (12°C).
@@ -170,6 +187,7 @@ As of 7:48 AM on Wednesday, April 2, 2025, in Tokyo, Japan, the weather is cloud
 ```
 
 1. The file search tool and computer use tool can also be imported from `openai.types.responses`.
+2. Define the file path as a constant at the top of the file for better maintainability.
 
 You can learn more about the differences between the Responses API and Chat Completions API in the [OpenAI API docs](https://platform.openai.com/docs/guides/responses-vs-chat-completions).
 

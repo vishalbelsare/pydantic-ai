@@ -236,6 +236,7 @@ class GeminiModel(Model):
                 contents=...,
                 config=GenerateContentConfigDict(
                     http_options={'headers': {'Content-Type': 'application/json', 'User-Agent': get_user_agent()}},
+                    system_instruction=sys_prompt_parts,
                     temperature=model_settings.get('temperature'),
                     top_p=model_settings.get('top_p'),
                     max_output_tokens=model_settings.get('max_tokens'),

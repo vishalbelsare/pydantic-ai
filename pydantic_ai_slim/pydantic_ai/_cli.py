@@ -22,7 +22,7 @@ from typing_inspection.introspection import get_literal_values
 from pydantic_ai.agent import Agent
 from pydantic_ai.exceptions import UserError
 from pydantic_ai.mcp import MCPServer, MCPServerHTTP, MCPServerStdio
-from pydantic_ai.messages import ModelMessage
+from pydantic_ai.messages import FunctionToolCallEvent, FunctionToolResultEvent, ModelMessage, ToolReturnPart
 from pydantic_ai.models import KnownModelName, infer_model
 
 try:
@@ -181,7 +181,7 @@ Special prompt:
 
     if prompt := cast(str, args.prompt):
         try:
-            asyncio.run(ask_agent(prompt, stream, console, code_theme))
+            asyncio.run(run_mcp_servers(ask_agent)(prompt, stream, console, code_theme))
         except KeyboardInterrupt:
             pass
         return 0
@@ -190,12 +190,17 @@ Special prompt:
     # doing this instead of `PromptSession[Any](history=` allows mocking of PromptSession in tests
     session: PromptSession[Any] = PromptSession(history=FileHistory(str(history)))
     try:
-        return asyncio.run(run_chat(session, stream, console, code_theme))
+        return asyncio.run(run_mcp_servers(run_chat)(session, stream, console, code_theme))
     except KeyboardInterrupt:  # pragma: no cover
         return 0
 
 
 def run_mcp_servers(func: Callable[P, Coroutine[Any, Any, R]]) -> Callable[P, Coroutine[Any, Any, R]]:
+    """Run the MCP servers before calling the function.
+
+    This is convenient for testing, as it allows us to not use the MCP servers in tests.
+    """
+
     async def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
         async with cli_agent.run_mcp_servers():
             return await func(*args, **kwargs)
@@ -203,7 +208,6 @@ def run_mcp_servers(func: Callable[P, Coroutine[Any, Any, R]]) -> Callable[P, Co
     return wrapper
 
 
-@run_mcp_servers
 async def run_chat(session: PromptSession[Any], stream: bool, console: Console, code_theme: str) -> int:
     multiline = False
     messages: list[ModelMessage] = []
@@ -230,7 +234,6 @@ async def run_chat(session: PromptSession[Any], stream: bool, console: Console, 
                 console.print('[dim]Interrupted[/dim]')
 
 
-@run_mcp_servers
 async def ask_agent(
     prompt: str,
     stream: bool,
@@ -250,18 +253,50 @@ async def ask_agent(
     with status, ExitStack() as stack:
         async with cli_agent.iter(prompt, message_history=messages) as agent_run:
             live = Live('', refresh_per_second=15, console=console, vertical_overflow='visible')
-            content: str = ''
+            # Keep track of all content pieces
+            content_pieces: list[str] = []
+            updated_content = ''
+
             async for node in agent_run:
+                status.stop()  # stopping multiple times is idempotent
+                stack.enter_context(live)  # entering multiple times is idempotent
+
                 if Agent.is_model_request_node(node):
                     async with node.stream(agent_run.ctx) as handle_stream:
-                        status.stop()  # stopping multiple times is idempotent
-                        stack.enter_context(live)  # entering multiple times is idempotent
-
                         async for content in handle_stream.stream_output():
-                            live.update(Markdown(content, code_theme=code_theme))
+                            updated_content = content
+                            # Show the current content plus all previous pieces
+                            display_content = '\n\n'.join(content_pieces + [updated_content])
+                            live.update(Markdown(display_content, code_theme=code_theme))
 
-        assert agent_run.result is not None
-        return agent_run.result.all_messages()
+                elif Agent.is_call_tools_node(node):
+                    # If there was model content before this tool call, save it
+                    if updated_content:
+                        content_pieces.append(updated_content)
+                        updated_content = ''
+
+                    async with node.stream(agent_run.ctx) as handle_stream:
+                        async for event in handle_stream:
+                            if isinstance(event, FunctionToolCallEvent):
+                                # Show all previous content plus the tool call indicator
+                                display_content = '\n\n'.join(content_pieces + ['']) if content_pieces else ''
+                                if display_content:
+                                    live.update(Markdown(display_content, code_theme=code_theme))
+                                # Show the "Calling..." message in the same format
+                                tool_name = event.part.tool_name
+                                display_content = '\n\n'.join(
+                                    content_pieces + [f'> 🔧 _Calling tool `{tool_name}`..._']
+                                )
+                                live.update(Markdown(display_content, code_theme=code_theme))
+                            elif isinstance(event, FunctionToolResultEvent) and isinstance(
+                                event.result, ToolReturnPart
+                            ):
+                                content = event.result
+                                tool_name = event.result.tool_name
+                                content_pieces.append(f'> 🔧 Called tool `{tool_name}`.')
+
+            assert agent_run.result is not None
+            return agent_run.result.all_messages()
 
 
 class CustomAutoSuggest(AutoSuggestFromHistory):

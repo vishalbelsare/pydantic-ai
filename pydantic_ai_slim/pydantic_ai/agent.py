@@ -1296,8 +1296,6 @@ class Agent(Generic[AgentDepsT, ResultDataT]):
         exit_stack = AsyncExitStack()
         try:
             for mcp_server in self._mcp_servers:
-                if mcp_server.is_running:
-                    continue
                 await exit_stack.enter_async_context(mcp_server)
             yield
         finally:

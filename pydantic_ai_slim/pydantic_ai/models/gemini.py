@@ -2,7 +2,7 @@ from __future__ import annotations as _annotations
 
 import base64
 import re
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable
 from contextlib import asynccontextmanager
 from copy import deepcopy
 from dataclasses import dataclass, field, replace
@@ -190,8 +190,7 @@ class GeminiModel(Model):
         check_allow_model_requests()
         model_settings = cast(GeminiModelSettings, model_settings or {})
         response = await self._generate_content(messages, True, model_settings, model_request_parameters)
-        async for chunk in response:
-            yield await self._process_streamed_response(chunk)
+        yield await self._process_streamed_response(response)
 
     def customize_request_parameters(self, model_request_parameters: ModelRequestParameters) -> ModelRequestParameters:
         def _customize_tool_def(t: ToolDefinition):
@@ -251,7 +250,7 @@ class GeminiModel(Model):
         stream: Literal[True],
         model_settings: GeminiModelSettings,
         model_request_parameters: ModelRequestParameters,
-    ) -> AsyncIterator[GenerateContentResponse]: ...
+    ) -> Awaitable[AsyncIterator[GenerateContentResponse]]: ...
 
     async def _generate_content(
         self,
@@ -259,7 +258,7 @@ class GeminiModel(Model):
         stream: bool,
         model_settings: GeminiModelSettings,
         model_request_parameters: ModelRequestParameters,
-    ) -> GenerateContentResponse | AsyncIterator[GenerateContentResponse]:
+    ) -> GenerateContentResponse | Awaitable[AsyncIterator[GenerateContentResponse]]:
         tools = self._get_tools(model_request_parameters)
         tool_config = self._get_tool_config(model_request_parameters, tools)
         system_instruction, contents = await self._map_messages(messages)
@@ -277,17 +276,8 @@ class GeminiModel(Model):
             tool_config=tool_config,
         )
 
-        if stream:
-            return cast(
-                AsyncIterator[GenerateContentResponse],
-                self.client.aio.models.generate_content_stream(
-                    model=self._model_name, contents=contents, config=config
-                ),
-            )
-        else:
-            return await self.client.aio.models.generate_content(
-                model=self._model_name, contents=contents, config=config
-            )
+        func = self.client.aio.models.generate_content_stream if stream else self.client.aio.models.generate_content
+        return await func(model=self._model_name, contents=contents, config=config)
 
     def _process_response(self, response: GenerateContentResponse) -> ModelResponse:
         if not response.candidates or len(response.candidates) != 1:
@@ -300,29 +290,20 @@ class GeminiModel(Model):
         parts = response.candidates[0].content.parts or []
         return _process_response_from_parts(parts, response.model_version or self._model_name)
 
-    async def _process_streamed_response(self, response: GenerateContentResponse) -> StreamedResponse:
+    async def _process_streamed_response(self, response: AsyncIterator[GenerateContentResponse]) -> StreamedResponse:
         """Process a streamed response, and prepare a streaming response to return."""
-        breakpoint()
-        aiter_bytes = http_response.aiter_bytes()
-        start_response: _GeminiResponse | None = None
-        content = bytearray()
-
-        async for chunk in aiter_bytes:
-            content.extend(chunk)
-            responses = _gemini_streamed_response_ta.validate_json(
-                _ensure_decodeable(content),
-                experimental_allow_partial='trailing-strings',
-            )
-            if responses:
-                last = responses[-1]
-                if last['candidates'] and last['candidates'][0].get('content', {}).get('parts'):
-                    start_response = last
-                    break
-
-        if start_response is None:
+        peekable_response = _utils.PeekableAsyncStream(response)
+        first_chunk = await peekable_response.peek()
+        if isinstance(first_chunk, _utils.Unset):
             raise UnexpectedModelBehavior('Streamed response ended without content or tool calls')
 
-        return GeminiStreamedResponse(_model_name=self._model_name, _content=content, _stream=aiter_bytes)
+        assert first_chunk.create_time is not None
+
+        return GeminiStreamedResponse(
+            _model_name=self._model_name,
+            _response=peekable_response,
+            _timestamp=first_chunk.create_time,
+        )
 
     @classmethod
     async def _map_messages(cls, messages: list[ModelMessage]) -> tuple[ContentDict | None, list[ContentUnionDict]]:
@@ -409,68 +390,32 @@ class GeminiStreamedResponse(StreamedResponse):
     """Implementation of `StreamedResponse` for the Gemini model."""
 
     _model_name: GeminiModelName
-    _content: bytearray
-    _stream: AsyncIterator[bytes]
-    _timestamp: datetime = field(default_factory=_utils.now_utc, init=False)
+    _response: AsyncIterator[GenerateContentResponse]
+    _timestamp: datetime
 
     async def _get_event_iterator(self) -> AsyncIterator[ModelResponseStreamEvent]:
-        async for gemini_response in self._get_gemini_responses():
-            candidate = gemini_response['candidates'][0]
-            if 'content' not in candidate:
-                raise UnexpectedModelBehavior('Streamed response has no content field')
-            gemini_part: _GeminiPartUnion
-            for gemini_part in candidate['content']['parts']:
-                if 'text' in gemini_part:
-                    # Using vendor_part_id=None means we can produce multiple text parts if their deltas are sprinkled
-                    # amongst the tool call deltas
-                    yield self._parts_manager.handle_text_delta(vendor_part_id=None, content=gemini_part['text'])
+        async for chunk in self._response:
+            self._usage += _metadata_as_usage(chunk)
 
-                elif 'function_call' in gemini_part:
-                    # Here, we assume all function_call parts are complete and don't have deltas.
-                    # We do this by assigning a unique randomly generated "vendor_part_id".
-                    # We need to confirm whether this is actually true, but if it isn't, we can still handle it properly
-                    # it would just be a bit more complicated. And we'd need to confirm the intended semantics.
+            assert chunk.candidates is not None
+            candidate = chunk.candidates[0]
+            if candidate.content is None:
+                raise UnexpectedModelBehavior('Streamed response has no content field')
+            assert candidate.content.parts is not None
+            for part in candidate.content.parts:
+                if part.text:
+                    yield self._parts_manager.handle_text_delta(vendor_part_id='content', content=part.text)
+                elif part.function_call:
                     maybe_event = self._parts_manager.handle_tool_call_delta(
                         vendor_part_id=uuid4(),
-                        tool_name=gemini_part['function_call']['name'],
-                        args=gemini_part['function_call']['args'],
-                        tool_call_id=None,
+                        tool_name=part.function_call.name,
+                        args=part.function_call.args,
+                        tool_call_id=part.function_call.id,
                     )
                     if maybe_event is not None:
                         yield maybe_event
                 else:
-                    assert 'function_response' in gemini_part, f'Unexpected part: {gemini_part}'
-
-    async def _get_gemini_responses(self) -> AsyncIterator[_GeminiResponse]:
-        # This method exists to ensure we only yield completed items, so we don't need to worry about
-        # partial gemini responses, which would make everything more complicated
-
-        gemini_responses: list[_GeminiResponse] = []
-        current_gemini_response_index = 0
-        # Right now, there are some circumstances where we will have information that could be yielded sooner than it is
-        # But changing that would make things a lot more complicated.
-        async for chunk in self._stream:
-            self._content.extend(chunk)
-
-            gemini_responses = _gemini_streamed_response_ta.validate_json(
-                _ensure_decodeable(self._content),
-                experimental_allow_partial='trailing-strings',
-            )
-
-            # The idea: yield only up to the latest response, which might still be partial.
-            # Note that if the latest response is complete, we could yield it immediately, but there's not a good
-            # allow_partial API to determine if the last item in the list is complete.
-            responses_to_yield = gemini_responses[:-1]
-            for r in responses_to_yield[current_gemini_response_index:]:
-                current_gemini_response_index += 1
-                self._usage += _metadata_as_usage(r)
-                yield r
-
-        # Now yield the final response, which should be complete
-        if gemini_responses:
-            r = gemini_responses[-1]
-            self._usage += _metadata_as_usage(r)
-            yield r
+                    assert part.function_response is not None, f'Unexpected part: {part}'
 
     @property
     def model_name(self) -> GeminiModelName:
@@ -611,9 +556,10 @@ def _metadata_as_usage(response: GenerateContentResponse) -> usage.Usage:
     metadata = response.usage_metadata
     if metadata is None:
         return usage.Usage()
-    # NOTE: We exclude the `prompt_tokens_details` field because on `usage.Usage.incr``, it will try to sum non-integer
-    # values with integers, which will fail. We should probably handle this in the `Usage` class.
-    details = metadata.model_dump(exclude={'prompt_tokens_details'}, exclude_defaults=True)
+    # TODO(Marcelo): We exclude the `prompt_tokens_details` and `candidate_token_details` fields because on
+    # `usage.Usage.incr``, it will try to sum non-integer values with integers, which will fail. We should probably
+    # handle this in the `Usage` class.
+    details = metadata.model_dump(exclude={'prompt_tokens_details', 'candidates_tokens_details'}, exclude_defaults=True)
     return usage.Usage(
         request_tokens=details.pop('prompt_token_count', 0),
         response_tokens=details.pop('candidates_token_count', 0),

@@ -2,7 +2,7 @@ from __future__ import annotations as _annotations
 
 import base64
 import re
-from collections.abc import AsyncIterator, Sequence
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from copy import deepcopy
 from dataclasses import dataclass, field, replace
@@ -12,8 +12,20 @@ from uuid import uuid4
 
 import httpx
 import pydantic
-from google.genai.types import GenerateContentConfigDict, SafetySettingDict
-from httpx import Response as HTTPResponse
+from google.genai.types import (
+    ContentDict,
+    ContentUnionDict,
+    FunctionCallDict,
+    FunctionCallingConfigDict,
+    FunctionCallingConfigMode,
+    GenerateContentConfigDict,
+    Part,
+    PartDict,
+    SafetySettingDict,
+    ToolConfigDict,
+    ToolDict,
+    ToolListUnionDict,
+)
 from typing_extensions import NotRequired, TypedDict, assert_never, deprecated
 
 from pydantic_ai.providers import Provider, infer_provider
@@ -164,11 +176,8 @@ class GeminiModel(Model):
         model_request_parameters: ModelRequestParameters,
     ) -> tuple[ModelResponse, usage.Usage]:
         check_allow_model_requests()
-        async with self._make_request(
-            messages, False, cast(GeminiModelSettings, model_settings or {}), model_request_parameters
-        ) as http_response:
-            data = await http_response.aread()
-            response = _gemini_response_ta.validate_json(data)
+        model_settings = cast(GeminiModelSettings, model_settings or {})
+        response = await self._generate_content(messages, False, model_settings, model_request_parameters)
         return self._process_response(response), _metadata_as_usage(response)
 
     @asynccontextmanager
@@ -179,10 +188,10 @@ class GeminiModel(Model):
         model_request_parameters: ModelRequestParameters,
     ) -> AsyncIterator[StreamedResponse]:
         check_allow_model_requests()
-        async with self._make_request(
-            messages, True, cast(GeminiModelSettings, model_settings or {}), model_request_parameters
-        ) as http_response:
-            yield await self._process_streamed_response(http_response)
+        model_settings = cast(GeminiModelSettings, model_settings or {})
+        response = await self._generate_content(messages, True, model_settings, model_request_parameters)
+        async for chunk in response:
+            yield await self._process_streamed_response(chunk)
 
     def customize_request_parameters(self, model_request_parameters: ModelRequestParameters) -> ModelRequestParameters:
         def _customize_tool_def(t: ToolDefinition):
@@ -204,87 +213,96 @@ class GeminiModel(Model):
         """The system / model provider."""
         return self._system
 
-    def _get_tools(self, model_request_parameters: ModelRequestParameters) -> _GeminiTools | None:
-        tools = [_function_from_abstract_tool(t) for t in model_request_parameters.function_tools]
+    def _get_tools(self, model_request_parameters: ModelRequestParameters) -> list[ToolDict] | None:
+        tools: list[ToolDict] = [
+            ToolDict(function_declarations=[_function_declaration_from_tool(t)])
+            for t in model_request_parameters.function_tools
+        ]
         if model_request_parameters.result_tools:
-            tools += [_function_from_abstract_tool(t) for t in model_request_parameters.result_tools]
-        return _GeminiTools(function_declarations=tools) if tools else None
+            tools += [
+                ToolDict(function_declarations=[_function_declaration_from_tool(t)])
+                for t in model_request_parameters.result_tools
+            ]
+        return tools
 
     def _get_tool_config(
-        self, model_request_parameters: ModelRequestParameters, tools: _GeminiTools | None
-    ) -> _GeminiToolConfig | None:
+        self, model_request_parameters: ModelRequestParameters, tools: list[ToolDict] | None
+    ) -> ToolConfigDict | None:
         if model_request_parameters.allow_text_result:
             return None
         elif tools:
-            return _tool_config([t['name'] for t in tools['function_declarations']])
+            return _tool_config([t['name'] for t in tools['function_declarations']])  # type: ignore
         else:
             return _tool_config([])
 
-    @asynccontextmanager
-    async def _make_request(
+    @overload
+    async def _generate_content(
         self,
         messages: list[ModelMessage],
-        streamed: bool,
+        stream: Literal[False],
         model_settings: GeminiModelSettings,
         model_request_parameters: ModelRequestParameters,
-    ) -> AsyncIterator[HTTPResponse]:
+    ) -> GenerateContentResponse: ...
+
+    @overload
+    async def _generate_content(
+        self,
+        messages: list[ModelMessage],
+        stream: Literal[True],
+        model_settings: GeminiModelSettings,
+        model_request_parameters: ModelRequestParameters,
+    ) -> AsyncIterator[GenerateContentResponse]: ...
+
+    async def _generate_content(
+        self,
+        messages: list[ModelMessage],
+        stream: bool,
+        model_settings: GeminiModelSettings,
+        model_request_parameters: ModelRequestParameters,
+    ) -> GenerateContentResponse | AsyncIterator[GenerateContentResponse]:
         tools = self._get_tools(model_request_parameters)
         tool_config = self._get_tool_config(model_request_parameters, tools)
-        sys_prompt_parts, contents = await self._message_to_gemini_content(messages)
+        system_instruction, contents = await self._map_messages(messages)
 
-        request_data = _GeminiRequest(contents=contents)
-        if sys_prompt_parts:
-            request_data['system_instruction'] = _GeminiTextContent(role='user', parts=sys_prompt_parts)
-        if tools is not None:
-            request_data['tools'] = tools
-        if tool_config is not None:
-            request_data['tool_config'] = tool_config
+        config = GenerateContentConfigDict(
+            http_options={'headers': {'Content-Type': 'application/json', 'User-Agent': get_user_agent()}},
+            system_instruction=system_instruction,
+            temperature=model_settings.get('temperature'),
+            top_p=model_settings.get('top_p'),
+            max_output_tokens=model_settings.get('max_tokens'),
+            presence_penalty=model_settings.get('presence_penalty'),
+            frequency_penalty=model_settings.get('frequency_penalty'),
+            safety_settings=model_settings.get('gemini_safety_settings'),
+            tools=cast(ToolListUnionDict, tools),
+            tool_config=tool_config,
+        )
 
-        try:
-            await self.client.aio.models.generate_content(
-                model=self._model_name,
-                contents=...,
-                config=GenerateContentConfigDict(
-                    http_options={'headers': {'Content-Type': 'application/json', 'User-Agent': get_user_agent()}},
-                    system_instruction=sys_prompt_parts,
-                    temperature=model_settings.get('temperature'),
-                    top_p=model_settings.get('top_p'),
-                    max_output_tokens=model_settings.get('max_tokens'),
-                    presence_penalty=model_settings.get('presence_penalty'),
-                    frequency_penalty=model_settings.get('frequency_penalty'),
-                    safety_settings=model_settings.get('gemini_safety_settings'),
+        if stream:
+            return cast(
+                AsyncIterator[GenerateContentResponse],
+                self.client.aio.models.generate_content_stream(
+                    model=self._model_name, contents=contents, config=config
                 ),
             )
-        except Exception as e:
-            raise e
+        else:
+            return await self.client.aio.models.generate_content(
+                model=self._model_name, contents=contents, config=config
+            )
 
-        # async with self.client.stream(
-        #     'POST',
-        #     url,
-        #     content=request_json,
-        #     headers=headers,
-        #     timeout=model_settings.get('timeout', USE_CLIENT_DEFAULT),
-        # ) as r:
-        #     if (status_code := r.status_code) != 200:
-        #         await r.aread()
-        #         if status_code >= 400:
-        #             raise ModelHTTPError(status_code=status_code, model_name=self.model_name, body=r.text)
-        #         raise UnexpectedModelBehavior(f'Unexpected response from gemini {status_code}', r.text)
-        #     yield r
-
-    def _process_response(self, response: _GeminiResponse) -> ModelResponse:
-        if len(response['candidates']) != 1:
+    def _process_response(self, response: GenerateContentResponse) -> ModelResponse:
+        if not response.candidates or len(response.candidates) != 1:
             raise UnexpectedModelBehavior('Expected exactly one candidate in Gemini response')
-        if 'content' not in response['candidates'][0]:
-            if response['candidates'][0].get('finish_reason') == 'SAFETY':
+        if response.candidates[0].content is None:
+            if response.candidates[0].finish_reason == 'SAFETY':
                 raise UnexpectedModelBehavior('Safety settings triggered', str(response))
             else:
                 raise UnexpectedModelBehavior('Content field missing from Gemini response', str(response))
-        parts = response['candidates'][0]['content']['parts']
-        return _process_response_from_parts(parts, model_name=response.get('model_version', self._model_name))
+        parts = response.candidates[0].content.parts or []
+        return _process_response_from_parts(parts, response.model_version or self._model_name)
 
-    async def _process_streamed_response(self, http_response: HTTPResponse) -> StreamedResponse:
+    async def _process_streamed_response(self, response: GenerateContentResponse) -> StreamedResponse:
         """Process a streamed response, and prepare a streaming response to return."""
+        breakpoint()
         aiter_bytes = http_response.aiter_bytes()
         start_response: _GeminiResponse | None = None
         content = bytearray()
@@ -307,63 +325,74 @@ class GeminiModel(Model):
         return GeminiStreamedResponse(_model_name=self._model_name, _content=content, _stream=aiter_bytes)
 
     @classmethod
-    async def _message_to_gemini_content(
-        cls, messages: list[ModelMessage]
-    ) -> tuple[list[_GeminiTextPart], list[_GeminiContent]]:
-        sys_prompt_parts: list[_GeminiTextPart] = []
-        contents: list[_GeminiContent] = []
+    async def _map_messages(cls, messages: list[ModelMessage]) -> tuple[ContentDict | None, list[ContentUnionDict]]:
+        contents: list[ContentUnionDict] = []
+        system_parts: list[PartDict] = []
+
         for m in messages:
             if isinstance(m, ModelRequest):
-                message_parts: list[_GeminiPartUnion] = []
+                message_parts: list[PartDict] = []
 
                 for part in m.parts:
                     if isinstance(part, SystemPromptPart):
-                        sys_prompt_parts.append(_GeminiTextPart(text=part.content))
+                        system_parts.append({'text': part.content})
                     elif isinstance(part, UserPromptPart):
                         message_parts.extend(await cls._map_user_prompt(part))
                     elif isinstance(part, ToolReturnPart):
-                        message_parts.append(_response_part_from_response(part.tool_name, part.model_response_object()))
+                        message_parts.append(
+                            {
+                                'function_response': {
+                                    'name': part.tool_name,
+                                    'response': part.model_response_object(),
+                                    'id': part.tool_call_id,
+                                }
+                            }
+                        )
                     elif isinstance(part, RetryPromptPart):
                         if part.tool_name is None:
-                            message_parts.append(_GeminiTextPart(text=part.model_response()))
+                            message_parts.append({'text': part.model_response()})
                         else:
-                            response = {'call_error': part.model_response()}
-                            message_parts.append(_response_part_from_response(part.tool_name, response))
+                            message_parts.append(
+                                {
+                                    'function_response': {
+                                        'name': part.tool_name,
+                                        'response': {'call_error': part.model_response()},
+                                        'id': part.tool_call_id,
+                                    }
+                                }
+                            )
                     else:
                         assert_never(part)
 
                 if message_parts:
-                    contents.append(_GeminiContent(role='user', parts=message_parts))
+                    contents.append({'role': 'user', 'parts': message_parts})
             elif isinstance(m, ModelResponse):
                 contents.append(_content_model_response(m))
             else:
                 assert_never(m)
 
-        return sys_prompt_parts, contents
+        system_instruction = ContentDict(role='user', parts=system_parts) if system_parts else None
+        return system_instruction, contents
 
     @staticmethod
-    async def _map_user_prompt(part: UserPromptPart) -> list[_GeminiPartUnion]:
+    async def _map_user_prompt(part: UserPromptPart) -> list[PartDict]:
         if isinstance(part.content, str):
             return [{'text': part.content}]
         else:
-            content: list[_GeminiPartUnion] = []
+            content: list[PartDict] = []
             for item in part.content:
                 if isinstance(item, str):
                     content.append({'text': item})
                 elif isinstance(item, BinaryContent):
-                    base64_encoded = base64.b64encode(item.data).decode('utf-8')
-                    content.append(
-                        _GeminiInlineDataPart(inline_data={'data': base64_encoded, 'mime_type': item.media_type})
-                    )
+                    base64_encoded = base64.b64encode(item.data)
+                    content.append({'inline_data': {'data': base64_encoded, 'mime_type': item.media_type}})
                 elif isinstance(item, (AudioUrl, ImageUrl, DocumentUrl)):
                     client = cached_async_http_client()
                     response = await client.get(item.url, follow_redirects=True)
                     response.raise_for_status()
                     mime_type = response.headers['Content-Type'].split(';')[0]
-                    inline_data = _GeminiInlineDataPart(
-                        inline_data={'data': base64.b64encode(response.content).decode('utf-8'), 'mime_type': mime_type}
-                    )
-                    content.append(inline_data)
+                    base64_encoded = base64.b64encode(response.content)
+                    content.append({'inline_data': {'data': base64_encoded, 'mime_type': mime_type}})
                 else:
                     assert_never(item)
         return content
@@ -373,17 +402,6 @@ class AuthProtocol(Protocol):
     """Abstract definition for Gemini authentication."""
 
     async def headers(self) -> dict[str, str]: ...
-
-
-@dataclass
-class ApiKeyAuth:
-    """Authentication using an API key for the `X-Goog-Api-Key` header."""
-
-    api_key: str
-
-    async def headers(self) -> dict[str, str]:
-        # https://cloud.google.com/docs/authentication/api-keys-use#using-with-rest
-        return {'X-Goog-Api-Key': self.api_key}
 
 
 @dataclass
@@ -470,93 +488,18 @@ class GeminiStreamedResponse(StreamedResponse):
 # TypeAdapters take care of validation and serialization
 
 
-@pydantic.with_config(pydantic.ConfigDict(defer_build=True))
-class _GeminiRequest(TypedDict):
-    """Schema for an API request to the Gemini API.
-
-    See <https://ai.google.dev/api/generate-content#request-body> for API docs.
-    """
-
-    contents: list[_GeminiContent]
-    tools: NotRequired[_GeminiTools]
-    tool_config: NotRequired[_GeminiToolConfig]
-    safety_settings: NotRequired[list[SafetySettingDict]]
-    # we don't implement `generationConfig`, instead we use a named tool for the response
-    system_instruction: NotRequired[_GeminiTextContent]
-    """
-    Developer generated system instructions, see
-    <https://ai.google.dev/gemini-api/docs/system-instructions?lang=rest>
-    """
-    generation_config: NotRequired[_GeminiGenerationConfig]
-
-
-class GeminiSafetySettings(TypedDict):
-    """Safety settings options for Gemini model request.
-
-    See [Gemini API docs](https://ai.google.dev/gemini-api/docs/safety-settings) for safety category and threshold descriptions.
-    For an example on how to use `GeminiSafetySettings`, see [here](../../agents.md#model-specific-settings).
-    """
-
-    category: Literal[
-        'HARM_CATEGORY_UNSPECIFIED',
-        'HARM_CATEGORY_HARASSMENT',
-        'HARM_CATEGORY_HATE_SPEECH',
-        'HARM_CATEGORY_SEXUALLY_EXPLICIT',
-        'HARM_CATEGORY_DANGEROUS_CONTENT',
-        'HARM_CATEGORY_CIVIC_INTEGRITY',
-    ]
-    """
-    Safety settings category.
-    """
-
-    threshold: Literal[
-        'HARM_BLOCK_THRESHOLD_UNSPECIFIED',
-        'BLOCK_LOW_AND_ABOVE',
-        'BLOCK_MEDIUM_AND_ABOVE',
-        'BLOCK_ONLY_HIGH',
-        'BLOCK_NONE',
-        'OFF',
-    ]
-    """
-    Safety settings threshold.
-    """
-
-
-class _GeminiGenerationConfig(TypedDict, total=False):
-    """Schema for an API request to the Gemini API.
-
-    Note there are many additional fields available that have not been added yet.
-
-    See <https://ai.google.dev/api/generate-content#generationconfig> for API docs.
-    """
-
-    max_output_tokens: int
-    temperature: float
-    top_p: float
-    presence_penalty: float
-    frequency_penalty: float
-
-
-class _GeminiContent(TypedDict):
-    role: Literal['user', 'model']
-    parts: list[_GeminiPartUnion]
-
-
-def _content_model_response(m: ModelResponse) -> _GeminiContent:
-    parts: list[_GeminiPartUnion] = []
+def _content_model_response(m: ModelResponse) -> ContentDict:
+    parts: list[PartDict] = []
     for item in m.parts:
         if isinstance(item, ToolCallPart):
-            parts.append(_function_call_part_from_call(item))
+            function_call = FunctionCallDict(name=item.tool_name, args=item.args_as_dict(), id=item.tool_call_id)
+            parts.append({'function_call': function_call})
         elif isinstance(item, TextPart):
             if item.content:
-                parts.append(_GeminiTextPart(text=item.content))
+                parts.append({'text': item.content})
         else:
             assert_never(item)
-    return _GeminiContent(role='model', parts=parts)
-
-
-class _GeminiTextPart(TypedDict):
-    text: str
+    return ContentDict(role='model', parts=parts)
 
 
 class _GeminiInlineData(TypedDict):
@@ -590,95 +533,26 @@ def _function_call_part_from_call(tool: ToolCallPart) -> _GeminiFunctionCallPart
 
 
 def _process_response_from_parts(
-    parts: Sequence[_GeminiPartUnion], model_name: GeminiModelName, timestamp: datetime | None = None
+    parts: list[Part], model_name: GeminiModelName, timestamp: datetime | None = None
 ) -> ModelResponse:
     items: list[ModelResponsePart] = []
     for part in parts:
-        if 'text' in part:
-            items.append(TextPart(content=part['text']))
-        elif 'function_call' in part:
-            items.append(ToolCallPart(tool_name=part['function_call']['name'], args=part['function_call']['args']))
-        elif 'function_response' in part:
+        if part.text:
+            items.append(TextPart(content=part.text))
+        elif part.function_call:
+            assert part.function_call.name is not None
+            tool_call_part = ToolCallPart(tool_name=part.function_call.name, args=part.function_call.args or {})
+            if part.function_call.id is not None:
+                tool_call_part.tool_call_id = part.function_call.id
+            items.append(tool_call_part)
+        elif part.function_response:
             raise UnexpectedModelBehavior(
                 f'Unsupported response from Gemini, expected all parts to be function calls or text, got: {part!r}'
             )
     return ModelResponse(parts=items, model_name=model_name, timestamp=timestamp or _utils.now_utc())
 
 
-class _GeminiFunctionCall(TypedDict):
-    """See <https://ai.google.dev/api/caching#FunctionCall>."""
-
-    name: str
-    args: dict[str, Any]
-
-
-class _GeminiFunctionResponsePart(TypedDict):
-    function_response: Annotated[_GeminiFunctionResponse, pydantic.Field(alias='functionResponse')]
-
-
-def _response_part_from_response(name: str, response: dict[str, Any]) -> _GeminiFunctionResponsePart:
-    return _GeminiFunctionResponsePart(function_response=_GeminiFunctionResponse(name=name, response=response))
-
-
-class _GeminiFunctionResponse(TypedDict):
-    """See <https://ai.google.dev/api/caching#FunctionResponse>."""
-
-    name: str
-    response: dict[str, Any]
-
-
-def _part_discriminator(v: Any) -> str:
-    if isinstance(v, dict):
-        if 'text' in v:
-            return 'text'
-        elif 'inlineData' in v:
-            return 'inline_data'
-        elif 'fileData' in v:
-            return 'file_data'
-        elif 'functionCall' in v or 'function_call' in v:
-            return 'function_call'
-        elif 'functionResponse' in v or 'function_response' in v:
-            return 'function_response'
-    return 'text'
-
-
-# See <https://ai.google.dev/api/caching#Part>
-# we don't currently support other part types
-# TODO discriminator
-_GeminiPartUnion = Annotated[
-    Union[
-        Annotated[_GeminiTextPart, pydantic.Tag('text')],
-        Annotated[_GeminiFunctionCallPart, pydantic.Tag('function_call')],
-        Annotated[_GeminiFunctionResponsePart, pydantic.Tag('function_response')],
-        Annotated[_GeminiInlineDataPart, pydantic.Tag('inline_data')],
-        Annotated[_GeminiFileDataPart, pydantic.Tag('file_data')],
-    ],
-    pydantic.Discriminator(_part_discriminator),
-]
-
-
-class _GeminiTextContent(TypedDict):
-    role: Literal['user', 'model']
-    parts: list[_GeminiTextPart]
-
-
-class _GeminiTools(TypedDict):
-    function_declarations: list[Annotated[_GeminiFunction, pydantic.Field(alias='functionDeclarations')]]
-
-
-class _GeminiFunction(TypedDict):
-    name: str
-    description: str
-    parameters: NotRequired[dict[str, Any]]
-    """
-    ObjectJsonSchema isn't really true since Gemini only accepts a subset of JSON Schema
-    <https://ai.google.dev/gemini-api/docs/function-calling#function_declarations>
-    and
-    <https://ai.google.dev/api/caching#FunctionDeclaration>
-    """
-
-
-def _function_from_abstract_tool(tool: ToolDefinition) -> FunctionDeclarationDict:
+def _function_declaration_from_tool(tool: ToolDefinition) -> FunctionDeclarationDict:
     json_schema = tool.parameters_json_schema
     f = FunctionDeclarationDict(name=tool.name, description=tool.description)
     if json_schema.get('properties'):
@@ -686,19 +560,10 @@ def _function_from_abstract_tool(tool: ToolDefinition) -> FunctionDeclarationDic
     return f
 
 
-class _GeminiToolConfig(TypedDict):
-    function_calling_config: _GeminiFunctionCallingConfig
-
-
-def _tool_config(function_names: list[str]) -> _GeminiToolConfig:
-    return _GeminiToolConfig(
-        function_calling_config=_GeminiFunctionCallingConfig(mode='ANY', allowed_function_names=function_names)
-    )
-
-
-class _GeminiFunctionCallingConfig(TypedDict):
-    mode: Literal['ANY', 'AUTO']
-    allowed_function_names: list[str]
+def _tool_config(function_names: list[str]) -> ToolConfigDict:
+    mode = FunctionCallingConfigMode.ANY
+    function_calling_config = FunctionCallingConfigDict(mode=mode, allowed_function_names=function_names)
+    return ToolConfigDict(function_calling_config=function_calling_config)
 
 
 @pydantic.with_config(pydantic.ConfigDict(defer_build=True))
@@ -742,17 +607,17 @@ class _GeminiUsageMetaData(TypedDict, total=False):
     cached_content_token_count: NotRequired[Annotated[int, pydantic.Field(alias='cachedContentTokenCount')]]
 
 
-def _metadata_as_usage(response: _GeminiResponse) -> usage.Usage:
-    metadata = response.get('usage_metadata')
+def _metadata_as_usage(response: GenerateContentResponse) -> usage.Usage:
+    metadata = response.usage_metadata
     if metadata is None:
         return usage.Usage()
-    details: dict[str, int] = {}
-    if cached_content_token_count := metadata.get('cached_content_token_count'):
-        details['cached_content_token_count'] = cached_content_token_count
+    # NOTE: We exclude the `prompt_tokens_details` field because on `usage.Usage.incr``, it will try to sum non-integer
+    # values with integers, which will fail. We should probably handle this in the `Usage` class.
+    details = metadata.model_dump(exclude={'prompt_tokens_details'}, exclude_defaults=True)
     return usage.Usage(
-        request_tokens=metadata.get('prompt_token_count', 0),
-        response_tokens=metadata.get('candidates_token_count', 0),
-        total_tokens=metadata.get('total_token_count', 0),
+        request_tokens=details.pop('prompt_token_count', 0),
+        response_tokens=details.pop('candidates_token_count', 0),
+        total_tokens=details.pop('total_token_count', 0),
         details=details,
     )
 
@@ -778,7 +643,6 @@ class _GeminiPromptFeedback(TypedDict):
     safety_ratings: Annotated[list[_GeminiSafetyRating], pydantic.Field(alias='safetyRatings')]
 
 
-_gemini_request_ta = pydantic.TypeAdapter(_GeminiRequest)
 _gemini_response_ta = pydantic.TypeAdapter(_GeminiResponse)
 
 # steam requests return a list of https://ai.google.dev/api/generate-content#method:-models.streamgeneratecontent

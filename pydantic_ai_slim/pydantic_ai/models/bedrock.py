@@ -10,7 +10,6 @@ from typing import TYPE_CHECKING, Generic, Literal, Union, cast, overload
 
 import anyio
 import anyio.to_thread
-from mypy_boto3_bedrock_runtime.type_defs import ConverseRequestTypeDef, SystemContentBlockTypeDef
 from typing_extensions import ParamSpec, assert_never
 
 from pydantic_ai import _utils, result
@@ -30,6 +29,7 @@ from pydantic_ai.messages import (
     ToolCallPart,
     ToolReturnPart,
     UserPromptPart,
+    VideoUrl,
 )
 from pydantic_ai.models import Model, ModelRequestParameters, StreamedResponse, cached_async_http_client
 from pydantic_ai.providers import Provider, infer_provider
@@ -43,14 +43,17 @@ if TYPE_CHECKING:
     from mypy_boto3_bedrock_runtime.type_defs import (
         ContentBlockOutputTypeDef,
         ContentBlockUnionTypeDef,
+        ConverseRequestTypeDef,
         ConverseResponseTypeDef,
         ConverseStreamMetadataEventTypeDef,
         ConverseStreamOutputTypeDef,
         ImageBlockTypeDef,
         InferenceConfigurationTypeDef,
         MessageUnionTypeDef,
+        SystemContentBlockTypeDef,
         ToolChoiceTypeDef,
         ToolTypeDef,
+        VideoBlockTypeDef,
     )
 
 
@@ -291,9 +294,8 @@ class BedrockConverseModel(Model):
             inference_config['temperature'] = temperature
         if top_p := model_settings.get('top_p'):
             inference_config['topP'] = top_p
-        # TODO(Marcelo): This is not included in model_settings yet.
-        # if stop_sequences := model_settings.get('stop_sequences'):
-        #     inference_config['stopSequences'] = stop_sequences
+        if stop_sequences := model_settings.get('stop_sequences'):
+            inference_config['stopSequences'] = stop_sequences
 
         return inference_config
 
@@ -379,9 +381,12 @@ class BedrockConverseModel(Model):
                     elif item.is_image:
                         assert format in ('jpeg', 'png', 'gif', 'webp')
                         content.append({'image': {'format': format, 'source': {'bytes': item.data}}})
+                    elif item.is_video:
+                        assert format in ('mkv', 'mov', 'mp4', 'webm', 'flv', 'mpeg', 'mpg', 'wmv', 'three_gp')
+                        content.append({'video': {'format': format, 'source': {'bytes': item.data}}})
                     else:
                         raise NotImplementedError('Binary content is not supported yet.')
-                elif isinstance(item, (ImageUrl, DocumentUrl)):
+                elif isinstance(item, (ImageUrl, DocumentUrl, VideoUrl)):
                     response = await cached_async_http_client().get(item.url)
                     response.raise_for_status()
                     if item.kind == 'image-url':
@@ -389,11 +394,20 @@ class BedrockConverseModel(Model):
                         assert format in ('jpeg', 'png', 'gif', 'webp'), f'Unsupported image format: {format}'
                         image: ImageBlockTypeDef = {'format': format, 'source': {'bytes': response.content}}
                         content.append({'image': image})
+
                     elif item.kind == 'document-url':
                         document_count += 1
                         name = f'Document {document_count}'
                         data = response.content
                         content.append({'document': {'name': name, 'format': item.format, 'source': {'bytes': data}}})
+
+                    elif item.kind == 'video-url':
+                        format = item.media_type.split('/')[1]
+                        assert format in ('mkv', 'mov', 'mp4', 'webm', 'flv', 'mpeg', 'mpg', 'wmv', 'three_gp'), (
+                            f'Unsupported video format: {format}'
+                        )
+                        video: VideoBlockTypeDef = {'format': format, 'source': {'bytes': response.content}}
+                        content.append({'video': video})
                 elif isinstance(item, AudioUrl):  # pragma: no cover
                     raise NotImplementedError('Audio is not supported yet.')
                 else:

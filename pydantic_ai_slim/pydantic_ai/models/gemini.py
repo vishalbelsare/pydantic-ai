@@ -7,11 +7,10 @@ from contextlib import asynccontextmanager
 from copy import deepcopy
 from dataclasses import dataclass, field, replace
 from datetime import datetime
-from typing import Annotated, Any, Literal, Protocol, Union, cast, overload
+from typing import Any, Literal, Union, cast, overload
 from uuid import uuid4
 
 import httpx
-import pydantic
 from google.genai.types import (
     ContentDict,
     ContentUnionDict,
@@ -26,7 +25,7 @@ from google.genai.types import (
     ToolDict,
     ToolListUnionDict,
 )
-from typing_extensions import NotRequired, TypedDict, assert_never, deprecated
+from typing_extensions import assert_never, deprecated
 
 from pydantic_ai.providers import Provider, infer_provider
 
@@ -47,6 +46,7 @@ from ..messages import (
     ToolCallPart,
     ToolReturnPart,
     UserPromptPart,
+    VideoUrl,
 )
 from ..settings import ModelSettings
 from ..tools import ToolDefinition
@@ -374,15 +374,11 @@ class GeminiModel(Model):
                     mime_type = response.headers['Content-Type'].split(';')[0]
                     base64_encoded = base64.b64encode(response.content)
                     content.append({'inline_data': {'data': base64_encoded, 'mime_type': mime_type}})
+                elif isinstance(item, VideoUrl):  # pragma: no cover
+                    raise NotImplementedError('VideoUrl is not supported for Gemini.')
                 else:
                     assert_never(item)
         return content
-
-
-class AuthProtocol(Protocol):
-    """Abstract definition for Gemini authentication."""
-
-    async def headers(self) -> dict[str, str]: ...
 
 
 @dataclass
@@ -428,11 +424,6 @@ class GeminiStreamedResponse(StreamedResponse):
         return self._timestamp
 
 
-# We use typed dicts to define the Gemini API response schema
-# once Pydantic partial validation supports, dataclasses, we could revert to using them
-# TypeAdapters take care of validation and serialization
-
-
 def _content_model_response(m: ModelResponse) -> ContentDict:
     parts: list[PartDict] = []
     for item in m.parts:
@@ -445,36 +436,6 @@ def _content_model_response(m: ModelResponse) -> ContentDict:
         else:
             assert_never(item)
     return ContentDict(role='model', parts=parts)
-
-
-class _GeminiInlineData(TypedDict):
-    data: str
-    mime_type: Annotated[str, pydantic.Field(alias='mimeType')]
-
-
-class _GeminiInlineDataPart(TypedDict):
-    """See <https://ai.google.dev/api/caching#Blob>."""
-
-    inline_data: Annotated[_GeminiInlineData, pydantic.Field(alias='inlineData')]
-
-
-class _GeminiFileData(TypedDict):
-    """See <https://ai.google.dev/api/caching#FileData>."""
-
-    file_uri: Annotated[str, pydantic.Field(alias='fileUri')]
-    mime_type: Annotated[str, pydantic.Field(alias='mimeType')]
-
-
-class _GeminiFileDataPart(TypedDict):
-    file_data: Annotated[_GeminiFileData, pydantic.Field(alias='fileData')]
-
-
-class _GeminiFunctionCallPart(TypedDict):
-    function_call: Annotated[_GeminiFunctionCall, pydantic.Field(alias='functionCall')]
-
-
-def _function_call_part_from_call(tool: ToolCallPart) -> _GeminiFunctionCallPart:
-    return _GeminiFunctionCallPart(function_call=_GeminiFunctionCall(name=tool.tool_name, args=tool.args_as_dict()))
 
 
 def _process_response_from_parts(
@@ -511,47 +472,6 @@ def _tool_config(function_names: list[str]) -> ToolConfigDict:
     return ToolConfigDict(function_calling_config=function_calling_config)
 
 
-@pydantic.with_config(pydantic.ConfigDict(defer_build=True))
-class _GeminiResponse(TypedDict):
-    """Schema for the response from the Gemini API.
-
-    See <https://ai.google.dev/api/generate-content#v1beta.GenerateContentResponse>
-    and <https://cloud.google.com/vertex-ai/docs/reference/rest/v1/GenerateContentResponse>
-    """
-
-    candidates: list[_GeminiCandidates]
-    # usageMetadata appears to be required by both APIs but is omitted when streaming responses until the last response
-    usage_metadata: NotRequired[Annotated[_GeminiUsageMetaData, pydantic.Field(alias='usageMetadata')]]
-    prompt_feedback: NotRequired[Annotated[_GeminiPromptFeedback, pydantic.Field(alias='promptFeedback')]]
-    model_version: NotRequired[Annotated[str, pydantic.Field(alias='modelVersion')]]
-
-
-class _GeminiCandidates(TypedDict):
-    """See <https://ai.google.dev/api/generate-content#v1beta.Candidate>."""
-
-    content: NotRequired[_GeminiContent]
-    finish_reason: NotRequired[Annotated[Literal['STOP', 'MAX_TOKENS', 'SAFETY'], pydantic.Field(alias='finishReason')]]
-    """
-    See <https://ai.google.dev/api/generate-content#FinishReason>, lots of other values are possible,
-    but let's wait until we see them and know what they mean to add them here.
-    """
-    avg_log_probs: NotRequired[Annotated[float, pydantic.Field(alias='avgLogProbs')]]
-    index: NotRequired[int]
-    safety_ratings: NotRequired[Annotated[list[_GeminiSafetyRating], pydantic.Field(alias='safetyRatings')]]
-
-
-class _GeminiUsageMetaData(TypedDict, total=False):
-    """See <https://ai.google.dev/api/generate-content#FinishReason>.
-
-    The docs suggest all fields are required, but some are actually not required, so we assume they are all optional.
-    """
-
-    prompt_token_count: Annotated[int, pydantic.Field(alias='promptTokenCount')]
-    candidates_token_count: NotRequired[Annotated[int, pydantic.Field(alias='candidatesTokenCount')]]
-    total_token_count: Annotated[int, pydantic.Field(alias='totalTokenCount')]
-    cached_content_token_count: NotRequired[Annotated[int, pydantic.Field(alias='cachedContentTokenCount')]]
-
-
 def _metadata_as_usage(response: GenerateContentResponse) -> usage.Usage:
     metadata = response.usage_metadata
     if metadata is None:
@@ -566,33 +486,6 @@ def _metadata_as_usage(response: GenerateContentResponse) -> usage.Usage:
         total_tokens=details.pop('total_token_count', 0),
         details=details,
     )
-
-
-class _GeminiSafetyRating(TypedDict):
-    """See <https://ai.google.dev/gemini-api/docs/safety-settings#safety-filters>."""
-
-    category: Literal[
-        'HARM_CATEGORY_HARASSMENT',
-        'HARM_CATEGORY_HATE_SPEECH',
-        'HARM_CATEGORY_SEXUALLY_EXPLICIT',
-        'HARM_CATEGORY_DANGEROUS_CONTENT',
-        'HARM_CATEGORY_CIVIC_INTEGRITY',
-    ]
-    probability: Literal['NEGLIGIBLE', 'LOW', 'MEDIUM', 'HIGH']
-    blocked: NotRequired[bool]
-
-
-class _GeminiPromptFeedback(TypedDict):
-    """See <https://ai.google.dev/api/generate-content#v1beta.GenerateContentResponse>."""
-
-    block_reason: Annotated[str, pydantic.Field(alias='blockReason')]
-    safety_ratings: Annotated[list[_GeminiSafetyRating], pydantic.Field(alias='safetyRatings')]
-
-
-_gemini_response_ta = pydantic.TypeAdapter(_GeminiResponse)
-
-# steam requests return a list of https://ai.google.dev/api/generate-content#method:-models.streamgeneratecontent
-_gemini_streamed_response_ta = pydantic.TypeAdapter(list[_GeminiResponse], config=pydantic.ConfigDict(defer_build=True))
 
 
 class _GeminiJsonSchema:
@@ -672,19 +565,3 @@ class _GeminiJsonSchema:
 
         if items_schema := schema.get('items'):  # pragma: no branch
             self._simplify(items_schema, refs_stack)
-
-
-def _ensure_decodeable(content: bytearray) -> bytearray:
-    """Trim any invalid unicode point bytes off the end of a bytearray.
-
-    This is necessary before attempting to parse streaming JSON bytes.
-
-    This is a temporary workaround until https://github.com/pydantic/pydantic-core/issues/1633 is resolved
-    """
-    while True:
-        try:
-            content.decode()
-        except UnicodeDecodeError:
-            content = content[:-1]  # this will definitely succeed before we run out of bytes
-        else:
-            return content

@@ -198,8 +198,8 @@ class GeminiModel(Model):
 
         return ModelRequestParameters(
             function_tools=[_customize_tool_def(tool) for tool in model_request_parameters.function_tools],
-            allow_text_result=model_request_parameters.allow_text_result,
-            result_tools=[_customize_tool_def(tool) for tool in model_request_parameters.result_tools],
+            allow_text_output=model_request_parameters.allow_text_output,
+            output_tools=[_customize_tool_def(tool) for tool in model_request_parameters.output_tools],
         )
 
     @property
@@ -217,17 +217,17 @@ class GeminiModel(Model):
             ToolDict(function_declarations=[_function_declaration_from_tool(t)])
             for t in model_request_parameters.function_tools
         ]
-        if model_request_parameters.result_tools:
+        if model_request_parameters.output_tools:
             tools += [
                 ToolDict(function_declarations=[_function_declaration_from_tool(t)])
-                for t in model_request_parameters.result_tools
+                for t in model_request_parameters.output_tools
             ]
         return tools
 
     def _get_tool_config(
         self, model_request_parameters: ModelRequestParameters, tools: list[ToolDict] | None
     ) -> ToolConfigDict | None:
-        if model_request_parameters.allow_text_result:
+        if model_request_parameters.allow_text_output:
             return None
         elif tools:
             return _tool_config([t['name'] for t in tools['function_declarations']])  # type: ignore

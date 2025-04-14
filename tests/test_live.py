@@ -12,7 +12,7 @@ import pytest
 from google import genai
 from pydantic import BaseModel
 
-from pydantic_ai import Agent
+from pydantic_ai import Agent, UnexpectedModelBehavior
 from pydantic_ai.models import Model
 
 pytestmark = [
@@ -130,8 +130,8 @@ def live_model(request: pytest.FixtureRequest, http_client: httpx.AsyncClient, t
 async def test_text(model: Model):
     agent = Agent(model, model_settings={'temperature': 0.0}, retries=2)
     result = await agent.run('What is the capital of France?')
-    print('Text response:', result.data)
-    assert 'paris' in result.data.lower()
+    print('Text response:', result.output)
+    assert 'paris' in result.output.lower()
     print('Text usage:', result.usage())
     usage = result.usage()
     assert usage.total_tokens is not None and usage.total_tokens > 0
@@ -143,7 +143,7 @@ async def test_text(model: Model):
 async def test_stream(model: Model):
     agent = Agent(model, model_settings={'temperature': 0.0}, retries=2)
     async with agent.run_stream('What is the capital of France?') as result:
-        data = await result.get_data()
+        data = await result.get_output()
     print('Stream response:', data)
     assert 'paris' in data.lower()
     print('Stream usage:', result.usage())
@@ -160,10 +160,20 @@ class MyModel(BaseModel):
     'model', ['openai', 'gemini', 'vertexai', 'groq', 'anthropic', 'mistral', 'cohere'], indirect=True
 )
 async def test_structured(model: Model):
-    agent = Agent(model, result_type=MyModel, model_settings={'temperature': 0.0}, retries=2)
-    result = await agent.run('What is the capital of the UK?')
-    print('Structured response:', result.data)
-    assert result.data.city.lower() == 'london'
+    agent = Agent(model, output_type=MyModel, model_settings={'temperature': 0.0}, retries=2)
+
+    async with agent.iter('What is the capital of the UK?') as run:
+        try:
+            async for _ in run:
+                pass
+        except UnexpectedModelBehavior as e:
+            raise RuntimeError(run._graph_run.state) from e  # pyright: ignore[reportPrivateUsage])
+
+    result = run.result
+    assert result is not None
+
+    print('Structured response:', result.output)
+    assert result.output.city.lower() == 'london'
     print('Structured usage:', result.usage())
     usage = result.usage()
     assert usage.total_tokens is not None and usage.total_tokens > 0

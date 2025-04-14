@@ -222,6 +222,7 @@ class GeminiModel(Model):
                 ToolDict(function_declarations=[_function_declaration_from_tool(t)])
                 for t in model_request_parameters.output_tools
             ]
+        breakpoint()
         return tools
 
     def _get_tool_config(
@@ -282,7 +283,7 @@ class GeminiModel(Model):
     def _process_response(self, response: GenerateContentResponse) -> ModelResponse:
         if not response.candidates or len(response.candidates) != 1:
             raise UnexpectedModelBehavior('Expected exactly one candidate in Gemini response')
-        if response.candidates[0].content is None:
+        if response.candidates[0].content is None or response.candidates[0].content.parts is None:
             if response.candidates[0].finish_reason == 'SAFETY':
                 raise UnexpectedModelBehavior('Safety settings triggered', str(response))
             else:
@@ -372,8 +373,15 @@ class GeminiModel(Model):
                     response = await client.get(item.url, follow_redirects=True)
                     response.raise_for_status()
                     mime_type = response.headers['Content-Type'].split(';')[0]
-                    base64_encoded = base64.b64encode(response.content)
-                    content.append({'inline_data': {'data': base64_encoded, 'mime_type': mime_type}})
+                    content.append(
+                        {
+                            'inline_data': {
+                                # NOTE: The type from Google GenAI is incorrect, it should be `str`, not `bytes`.
+                                'data': base64.b64encode(response.content).decode('utf-8'),  # type: ignore[reportArgumentType]
+                                'mime_type': mime_type,
+                            }
+                        }
+                    )
                 elif isinstance(item, VideoUrl):  # pragma: no cover
                     raise NotImplementedError('VideoUrl is not supported for Gemini.')
                 else:

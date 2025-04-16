@@ -45,14 +45,10 @@ from pydantic_ai.result import Usage
 from pydantic_ai.settings import ModelSettings
 from pydantic_ai.tools import ToolDefinition
 
-from ..conftest import ClientWithHandler, IsNow, IsStr, TestEnv, try_import
+from ..conftest import ClientWithHandler, IsDatetime, IsNow, IsStr, TestEnv, try_import
 
 with try_import() as imports_successful:
-    from google.genai.types import (
-        GenerateContentResponse,
-        HarmBlockThreshold,
-        HarmCategory,
-    )
+    from google.genai.types import GenerateContentResponse, HarmBlockThreshold, HarmCategory
 
     from pydantic_ai.models.gemini import GeminiModel, GeminiModelSettings, _content_model_response
     from pydantic_ai.providers.google import GoogleProvider
@@ -903,3 +899,24 @@ async def test_gemini_drop_exclusive_maximum(allow_model_requests: None, gemini_
 
     result = await agent.run('I want to know my chinese zodiac. I am 17 years old.')
     assert result.output == snapshot('I am sorry. I cannot fulfill this request. The age must be greater than 18.')
+
+
+@pytest.mark.vcr()
+async def test_gemini_model_instructions(allow_model_requests: None, gemini_api_key: str):
+    m = GeminiModel('gemini-1.5-flash', provider=GoogleProvider(api_key=gemini_api_key))
+    agent = Agent(m, instructions='You are a helpful assistant.')
+
+    result = await agent.run('What is the capital of France?')
+    assert result.all_messages() == snapshot(
+        [
+            ModelRequest(
+                parts=[UserPromptPart(content='What is the capital of France?', timestamp=IsDatetime())],
+                instructions='You are a helpful assistant.',
+            ),
+            ModelResponse(
+                parts=[TextPart(content='The capital of France is Paris.\n')],
+                model_name='gemini-1.5-flash',
+                timestamp=IsDatetime(),
+            ),
+        ]
+    )

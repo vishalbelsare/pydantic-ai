@@ -269,7 +269,7 @@ class BedrockConverseModel(Model):
             response_tokens=response['usage']['outputTokens'],
             total_tokens=response['usage']['totalTokens'],
         )
-        return ModelResponse(items, model_name=self.model_name), u
+        return ModelResponse(items, model_name=self.model_name, finish_reason=response['stopReason']), u
 
     @overload
     async def _messages_create(

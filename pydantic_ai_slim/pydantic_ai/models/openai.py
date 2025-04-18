@@ -301,7 +301,7 @@ class OpenAIModel(Model):
         if choice.message.tool_calls is not None:
             for c in choice.message.tool_calls:
                 items.append(ToolCallPart(c.function.name, c.function.arguments, tool_call_id=c.id))
-        return ModelResponse(items, model_name=response.model, timestamp=timestamp)
+        return ModelResponse(items, model_name=response.model, timestamp=timestamp, finish_reason=choice.finish_reason)
 
     async def _process_streamed_response(self, response: AsyncStream[ChatCompletionChunk]) -> OpenAIStreamedResponse:
         """Process a streamed response, and prepare a streaming response to return."""

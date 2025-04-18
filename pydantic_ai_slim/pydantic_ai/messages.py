@@ -553,6 +553,9 @@ class ModelResponse:
     If the model provides a timestamp in the response (as OpenAI does) that will be used.
     """
 
+    finish_reason: str | None = None
+    """The reason the agent run finished."""
+
     kind: Literal['response'] = 'response'
     """Message type identifier, this is available on all parts as a discriminator."""
 

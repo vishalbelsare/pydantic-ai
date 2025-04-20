@@ -139,7 +139,7 @@ def _json_fallback(value: Any) -> Any:
     elif module == 'pyodide.ffi':
         return value.to_py()
     else:
-        return repr(value)
+        return str(value)
 
 
 def _add_extra_dependencies(dependencies: list[str]) -> list[str]:

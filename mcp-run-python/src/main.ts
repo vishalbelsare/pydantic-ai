@@ -87,7 +87,7 @@ response.text
 `
   if (callbacks) {
     toolDescription += `
-The following functions are globally available to call:
+The following functions are already defined and available to call:
 
 \`\`\`python
 ${callbacks}

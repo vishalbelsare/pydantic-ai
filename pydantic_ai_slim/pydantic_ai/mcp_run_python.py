@@ -21,18 +21,21 @@ def mcp_run_python_stdio(callbacks: Sequence[Callback] = (), *, local_code: bool
     Returns:
         A server connection definition.
     """
-    return MCPServerStdio('deno', args=_deno_args('stdio', callbacks, local_code))
+    return MCPServerStdio(
+        'deno',
+        args=_deno_args('stdio', callbacks, local_code),
+        cwd='mcp-run-python' if local_code else None,
+    )
 
 
 def _deno_args(mode: Literal['stdio', 'sse'], callbacks: Sequence[Callback], local_code: bool) -> list[str]:
-    path_prefix = 'mcp-run-python/' if local_code else ''
     args = [
         'run',
         '-N',
-        f'-R={path_prefix}node_modules',
-        f'-W={path_prefix}node_modules',
+        '-R=node_modules',
+        '-W=node_modules',
         '--node-modules-dir=auto',
-        'mcp-run-python/src/main.ts' if local_code else f'jsr:@pydantic/mcp-run-python@{MCP_RUN_PYTHON_VERSION}',
+        'src/main.ts' if local_code else f'jsr:@pydantic/mcp-run-python@{MCP_RUN_PYTHON_VERSION}',
         mode,
     ]
 

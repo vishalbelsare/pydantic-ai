@@ -16,27 +16,28 @@ const VERSION = '0.0.13'
 export async function main() {
   const { args } = Deno
   const flags = parseArgs(args, {
-    string: ['port', 'functions'],
+    string: ['port', 'callbacks'],
     default: { port: '3001' },
   })
-  const functions = flags.functions ? flags.functions.split(',') : []
-  if (args.length >= 1 && args[0] === 'stdio') {
-    await runStdio(functions)
-  } else if (args.length >= 1 && args[0] === 'sse') {
-    const port = parseInt(flags.port)
-    runSse(functions, port)
-  } else if (args.length === 1 && args[0] === 'warmup') {
-    await warmup()
+  const { _: [task], callbacks, port } = flags
+  if (task === 'stdio') {
+    await runStdio(callbacks)
+  } else if (task === 'sse') {
+    runSse(parseInt(port), callbacks)
+  } else if (task === 'warmup') {
+    await warmup(callbacks)
   } else {
     console.error(
       `\
 Invalid arguments.
 
-Usage: deno run -N -R=node_modules -W=node_modules --node-modules-dir=auto jsr:@pydantic/mcp-run-python [stdio|sse|warmup]
+Usage:
+  deno run -N -R=node_modules -W=node_modules --node-modules-dir=auto \\
+    jsr:@pydantic/mcp-run-python [stdio|sse|warmup]
 
 options:
-  --port <port>  Port to run the SSE server on (default: 3001)
-  --functions <client-function-names> Comma separated list of client functions which the server can call`,
+  --port <port>                    Port to run the SSE server on (default: 3001).
+  --callbacks <python-signatures>  Python code representing the signatures of client functions the server can call.`,
     )
     Deno.exit(1)
   }
@@ -45,7 +46,8 @@ options:
 /*
  * Create an MCP server with the `run_python_code` tool registered.
  */
-function createServer(functions: string[]): McpServer {
+function createServer(callbacks?: string): McpServer {
+  const functions = _extractFunctions(callbacks)
   const server = new McpServer(
     {
       name: 'MCP Run Python',
@@ -59,9 +61,9 @@ function createServer(functions: string[]): McpServer {
     },
   )
 
-  const toolDescription = `Tool to execute Python code and return stdout, stderr, and return value.
+  let toolDescription = `Tool to execute Python code and return stdout, stderr, and return value.
 
-The code may be async, and the value on the last line will be returned as the return value.
+The code may be async, and the value on the last line will be returned as the return.
 
 The code will be executed with Python 3.12.
 
@@ -83,6 +85,15 @@ async with httpx.AsyncClient() as client:
 response.text
 \`\`\`
 `
+  if (callbacks) {
+    toolDescription += `
+The following functions are globally available to call:
+
+\`\`\`python
+${callbacks}
+\`\`\`
+    `
+  }
 
   let setLogLevel: LoggingLevel = 'emergency'
 
@@ -135,8 +146,8 @@ response.text
 /*
  * Run the MCP server using the SSE transport, e.g. over HTTP.
  */
-function runSse(functions: string[], port: number) {
-  const mcpServer = createServer(functions)
+function runSse(port: number, callbacks?: string) {
+  const mcpServer = createServer(callbacks)
   const transports: { [sessionId: string]: SSEServerTransport } = {}
 
   const server = http.createServer(async (req, res) => {
@@ -191,8 +202,8 @@ function runSse(functions: string[], port: number) {
 /*
  * Run the MCP server using the Stdio transport.
  */
-async function runStdio(functions: string[]) {
-  const mcpServer = createServer(functions)
+async function runStdio(callbacks?: string) {
+  const mcpServer = createServer(callbacks)
   const transport = new StdioServerTransport()
   await mcpServer.connect(transport)
 }
@@ -200,7 +211,11 @@ async function runStdio(functions: string[]) {
 /*
  * Run pyodide to download packages which can otherwise interrupt the server
  */
-async function warmup() {
+async function warmup(callbacks?: string) {
+  if (callbacks) {
+    const functions = _extractFunctions(callbacks)
+    console.error(`Functions extracted from callbacks: ${JSON.stringify(functions)}`)
+  }
   console.error(
     `Running warmup script for MCP Run Python version ${VERSION}...`,
   )
@@ -220,6 +235,10 @@ a
   console.log('Tool return value:')
   console.log(asXml(result))
   console.log('\nwarmup successful 🎉')
+}
+
+function _extractFunctions(callbacks?: string): string[] {
+  return callbacks ? [...callbacks.matchAll(/^async def (\w+)/g).map(([, f]) => f)] : []
 }
 
 // list of log levels to use for level comparison

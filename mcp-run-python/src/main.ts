@@ -22,7 +22,7 @@ export async function main() {
   const { _: [task], callbacks, port } = flags
   if (task === 'stdio') {
     await runStdio(callbacks)
-  } else if (task === 'sse') {
+  } else if (task === 'sse' || task === 'http') {
     runSse(parseInt(port), callbacks)
   } else if (task === 'warmup') {
     await warmup(callbacks)
@@ -87,7 +87,7 @@ response.text
 `
   if (callbacks) {
     toolDescription += `
-The following functions are already defined and available to call:
+The following functions are already defined globally and available to call from within your code:
 
 \`\`\`python
 ${callbacks}
@@ -122,8 +122,8 @@ ${callbacks}
         const { content } = await server.server.createMessage({
           messages: [],
           maxTokens: 0,
-          systemPrompt: '__python_function_call__',
-          metadata: { func, args, kwargs },
+          systemPrompt: '',
+          metadata: { pydantic_custom_use: '__python_function_call__', func, args, kwargs },
         })
         if (content.type !== 'text') {
           throw new Error('Expected return content type to be "text"')

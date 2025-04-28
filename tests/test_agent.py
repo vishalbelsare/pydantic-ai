@@ -874,6 +874,7 @@ def test_unknown_tool_fix():
     )
 
 
+@pytest.mark.skipif('google' not in sys.modules, reason='google not installed')
 def test_model_requests_blocked(env: TestEnv):
     env.set('GEMINI_API_KEY', 'foobar')
     agent = Agent('google-gla:gemini-1.5-flash', output_type=tuple[str, str], defer_model_check=True)

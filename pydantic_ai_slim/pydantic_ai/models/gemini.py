@@ -1,6 +1,7 @@
 from __future__ import annotations as _annotations
 
 import base64
+import warnings
 from collections.abc import AsyncIterator, Awaitable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field, replace
@@ -78,6 +79,7 @@ LatestGeminiModelNames = Literal[
     'gemini-2.0-flash',
     'gemini-2.0-flash-lite-preview-02-05',
     'gemini-2.0-pro-exp-02-05',
+    'gemini-2.5-flash-preview-04-17',
     'gemini-2.5-pro-exp-03-25',
     'gemini-2.5-pro-preview-03-25',
 ]
@@ -367,7 +369,7 @@ class GeminiModel(Model):
                 elif isinstance(item, BinaryContent):
                     base64_encoded = base64.b64encode(item.data)
                     content.append({'inline_data': {'data': base64_encoded, 'mime_type': item.media_type}})
-                elif isinstance(item, (AudioUrl, ImageUrl, DocumentUrl)):
+                elif isinstance(item, (AudioUrl, ImageUrl, DocumentUrl, VideoUrl)):
                     client = cached_async_http_client()
                     response = await client.get(item.url, follow_redirects=True)
                     response.raise_for_status()
@@ -381,8 +383,6 @@ class GeminiModel(Model):
                             }
                         }
                     )
-                elif isinstance(item, VideoUrl):  # pragma: no cover
-                    raise NotImplementedError('VideoUrl is not supported for Gemini.')
                 else:
                     assert_never(item)
         return content
@@ -510,6 +510,22 @@ class _GeminiJsonSchema(WalkJsonSchema):
         super().__init__(schema, prefer_inlined_defs=True, simplify_nullable_unions=True)
 
     def transform(self, schema: JsonSchema) -> JsonSchema:
+        # Note: we need to remove `additionalProperties: False` since it is currently mishandled by Gemini
+        additional_properties = schema.pop(
+            'additionalProperties', None
+        )  # don't pop yet so it's included in the warning
+        if additional_properties:  # pragma: no cover
+            original_schema = {**schema, 'additionalProperties': additional_properties}
+            warnings.warn(
+                '`additionalProperties` is not supported by Gemini; it will be removed from the tool JSON schema.'
+                f' Full schema: {self.schema}\n\n'
+                f'Source of additionalProperties within the full schema: {original_schema}\n\n'
+                'If this came from a field with a type like `dict[str, MyType]`, that field will always be empty.\n\n'
+                "If Google's APIs are updated to support this properly, please create an issue on the PydanticAI GitHub"
+                ' and we will fix this behavior.',
+                UserWarning,
+            )
+
         schema.pop('title', None)
         schema.pop('default', None)
         schema.pop('$schema', None)

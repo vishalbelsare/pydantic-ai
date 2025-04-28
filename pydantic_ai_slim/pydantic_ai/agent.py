@@ -27,7 +27,6 @@ from . import (
     result,
     usage as _usage,
 )
-from ._utils import AbstractSpan
 from .models.instrumented import InstrumentationSettings, InstrumentedModel
 from .result import FinalResult, OutputDataT, StreamedRunResult, ToolOutput
 from .settings import ModelSettings, merge_model_settings
@@ -153,7 +152,10 @@ class Agent(Generic[AgentDepsT, OutputDataT]):
         model: models.Model | models.KnownModelName | str | None = None,
         *,
         output_type: type[OutputDataT] | ToolOutput[OutputDataT] = str,
-        instructions: str | _system_prompt.SystemPromptFunc[AgentDepsT] | None = None,
+        instructions: str
+        | _system_prompt.SystemPromptFunc[AgentDepsT]
+        | Sequence[str | _system_prompt.SystemPromptFunc[AgentDepsT]]
+        | None = None,
         system_prompt: str | Sequence[str] = (),
         deps_type: type[AgentDepsT] = NoneType,
         name: str | None = None,
@@ -176,7 +178,10 @@ class Agent(Generic[AgentDepsT, OutputDataT]):
         model: models.Model | models.KnownModelName | str | None = None,
         *,
         result_type: type[OutputDataT] = str,
-        instructions: str | _system_prompt.SystemPromptFunc[AgentDepsT] | None = None,
+        instructions: str
+        | _system_prompt.SystemPromptFunc[AgentDepsT]
+        | Sequence[str | _system_prompt.SystemPromptFunc[AgentDepsT]]
+        | None = None,
         system_prompt: str | Sequence[str] = (),
         deps_type: type[AgentDepsT] = NoneType,
         name: str | None = None,
@@ -198,7 +203,10 @@ class Agent(Generic[AgentDepsT, OutputDataT]):
         *,
         # TODO change this back to `output_type: type[OutputDataT] | ToolOutput[OutputDataT] = str,` when we remove the overloads
         output_type: Any = str,
-        instructions: str | _system_prompt.SystemPromptFunc[AgentDepsT] | None = None,
+        instructions: str
+        | _system_prompt.SystemPromptFunc[AgentDepsT]
+        | Sequence[str | _system_prompt.SystemPromptFunc[AgentDepsT]]
+        | None = None,
         system_prompt: str | Sequence[str] = (),
         deps_type: type[AgentDepsT] = NoneType,
         name: str | None = None,
@@ -297,10 +305,16 @@ class Agent(Generic[AgentDepsT, OutputDataT]):
         )
         self._output_validators = []
 
-        self._instructions_functions = (
-            [_system_prompt.SystemPromptRunner(instructions)] if callable(instructions) else []
-        )
-        self._instructions = instructions if isinstance(instructions, str) else None
+        self._instructions = ''
+        self._instructions_functions = []
+        if isinstance(instructions, (str, Callable)):
+            instructions = [instructions]
+        for instruction in instructions or []:
+            if isinstance(instruction, str):
+                self._instructions += instruction + '\n'
+            else:
+                self._instructions_functions.append(_system_prompt.SystemPromptRunner(instruction))
+        self._instructions = self._instructions.strip() or None
 
         self._system_prompts = (system_prompt,) if isinstance(system_prompt, str) else tuple(system_prompt)
         self._system_prompt_functions = []
@@ -620,6 +634,15 @@ class Agent(Generic[AgentDepsT, OutputDataT]):
             },
         )
 
+        async def get_instructions(run_context: RunContext[AgentDepsT]) -> str | None:
+            if self._instructions is None and not self._instructions_functions:
+                return None
+
+            instructions = self._instructions or ''
+            for instructions_runner in self._instructions_functions:
+                instructions += '\n' + await instructions_runner.run(run_context)
+            return instructions.strip()
+
         graph_deps = _agent_graph.GraphAgentDeps[AgentDepsT, RunOutputDataT](
             user_deps=deps,
             prompt=user_prompt,
@@ -635,6 +658,7 @@ class Agent(Generic[AgentDepsT, OutputDataT]):
             mcp_servers=self._mcp_servers,
             run_span=run_span,
             tracer=tracer,
+            get_instructions=get_instructions,
         )
         start_node = _agent_graph.UserPromptNode[AgentDepsT](
             user_prompt=user_prompt,
@@ -649,7 +673,7 @@ class Agent(Generic[AgentDepsT, OutputDataT]):
             start_node,
             state=state,
             deps=graph_deps,
-            span=use_span(run_span, end_on_exit=True),
+            span=use_span(run_span, end_on_exit=True) if run_span.is_recording() else None,
             infer_name=False,
         ) as graph_run:
             yield AgentRun(graph_run)
@@ -1673,14 +1697,14 @@ class AgentRun(Generic[AgentDepsT, OutputDataT]):
     ]
 
     @overload
-    def _span(self, *, required: Literal[False]) -> AbstractSpan | None: ...
+    def _traceparent(self, *, required: Literal[False]) -> str | None: ...
     @overload
-    def _span(self) -> AbstractSpan: ...
-    def _span(self, *, required: bool = True) -> AbstractSpan | None:
-        span = self._graph_run._span(required=False)  # type: ignore[reportPrivateUsage]
-        if span is None and required:  # pragma: no cover
-            raise AttributeError('Span is not available for this agent run')
-        return span
+    def _traceparent(self) -> str: ...
+    def _traceparent(self, *, required: bool = True) -> str | None:
+        traceparent = self._graph_run._traceparent(required=False)  # type: ignore[reportPrivateUsage]
+        if traceparent is None and required:  # pragma: no cover
+            raise AttributeError('No span was created for this agent run')
+        return traceparent
 
     @property
     def ctx(self) -> GraphRunContext[_agent_graph.GraphAgentState, _agent_graph.GraphAgentDeps[AgentDepsT, Any]]:
@@ -1719,7 +1743,7 @@ class AgentRun(Generic[AgentDepsT, OutputDataT]):
             graph_run_result.output.tool_name,
             graph_run_result.state,
             self._graph_run.deps.new_message_index,
-            self._graph_run._span(required=False),  # type: ignore[reportPrivateUsage]
+            self._traceparent(required=False),
         )
 
     def __aiter__(
@@ -1837,16 +1861,16 @@ class AgentRunResult(Generic[OutputDataT]):
     _output_tool_name: str | None = dataclasses.field(repr=False)
     _state: _agent_graph.GraphAgentState = dataclasses.field(repr=False)
     _new_message_index: int = dataclasses.field(repr=False)
-    _span_value: AbstractSpan | None = dataclasses.field(repr=False)
+    _traceparent_value: str | None = dataclasses.field(repr=False)
 
     @overload
-    def _span(self, *, required: Literal[False]) -> AbstractSpan | None: ...
+    def _traceparent(self, *, required: Literal[False]) -> str | None: ...
     @overload
-    def _span(self) -> AbstractSpan: ...
-    def _span(self, *, required: bool = True) -> AbstractSpan | None:
-        if self._span_value is None and required:  # pragma: no cover
-            raise AttributeError('Span is not available for this agent run')
-        return self._span_value
+    def _traceparent(self) -> str: ...
+    def _traceparent(self, *, required: bool = True) -> str | None:
+        if self._traceparent_value is None and required:  # pragma: no cover
+            raise AttributeError('No span was created for this agent run')
+        return self._traceparent_value
 
     @property
     @deprecated('`result.data` is deprecated, use `result.output` instead.')

@@ -46,13 +46,13 @@ with try_import() as imports_successful:
     from pydantic_ai.models.gemini import GeminiModel, GeminiModelSettings, _content_model_response
     from pydantic_ai.providers.google import GoogleProvider
 
+    _gemini_response_ta = TypeAdapter(GenerateContentResponseDict)
+    _gemini_streamed_response_ta = TypeAdapter(list[GenerateContentResponseDict])
+
 pytestmark = [
     pytest.mark.skipif(not imports_successful(), reason='gemini not installed'),
     pytest.mark.anyio,
 ]
-
-_gemini_response_ta = TypeAdapter(GenerateContentResponseDict)
-_gemini_streamed_response_ta = TypeAdapter(list[GenerateContentResponseDict])
 
 
 async def test_model_simple(allow_model_requests: None):

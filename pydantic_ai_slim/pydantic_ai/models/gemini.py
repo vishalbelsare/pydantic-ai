@@ -192,7 +192,7 @@ class GeminiModel(Model):
         check_allow_model_requests()
         model_settings = cast(GeminiModelSettings, model_settings or {})
         response = await self._generate_content(messages, True, model_settings, model_request_parameters)
-        yield await self._process_streamed_response(response)
+        yield await self._process_streamed_response(response)  # type: ignore
 
     def customize_request_parameters(self, model_request_parameters: ModelRequestParameters) -> ModelRequestParameters:
         def _customize_tool_def(t: ToolDefinition):
@@ -224,8 +224,7 @@ class GeminiModel(Model):
                 ToolDict(function_declarations=[_function_declaration_from_tool(t)])
                 for t in model_request_parameters.output_tools
             ]
-        breakpoint()
-        return tools
+        return tools or None
 
     def _get_tool_config(
         self, model_request_parameters: ModelRequestParameters, tools: list[ToolDict] | None
@@ -233,7 +232,12 @@ class GeminiModel(Model):
         if model_request_parameters.allow_text_output:
             return None
         elif tools:
-            return _tool_config([t['name'] for t in tools['function_declarations']])  # type: ignore
+            names: list[str] = []
+            for tool in tools:
+                for function_declaration in tool.get('function_declarations') or []:
+                    if name := function_declaration.get('name'):
+                        names.append(name)
+            return _tool_config(names)
         else:
             return _tool_config([])
 
@@ -367,22 +371,17 @@ class GeminiModel(Model):
                 if isinstance(item, str):
                     content.append({'text': item})
                 elif isinstance(item, BinaryContent):
-                    base64_encoded = base64.b64encode(item.data)
-                    content.append({'inline_data': {'data': base64_encoded, 'mime_type': item.media_type}})
+                    # NOTE: The type from Google GenAI is incorrect, it should be `str`, not `bytes`.
+                    base64_encoded = base64.b64encode(item.data).decode('utf-8')
+                    content.append({'inline_data': {'data': base64_encoded, 'mime_type': item.media_type}})  # type: ignore
                 elif isinstance(item, (AudioUrl, ImageUrl, DocumentUrl, VideoUrl)):
                     client = cached_async_http_client()
                     response = await client.get(item.url, follow_redirects=True)
                     response.raise_for_status()
                     mime_type = response.headers['Content-Type'].split(';')[0]
-                    content.append(
-                        {
-                            'inline_data': {
-                                # NOTE: The type from Google GenAI is incorrect, it should be `str`, not `bytes`.
-                                'data': base64.b64encode(response.content).decode('utf-8'),  # type: ignore[reportArgumentType]
-                                'mime_type': mime_type,
-                            }
-                        }
-                    )
+                    # NOTE: The type from Google GenAI is incorrect, it should be `str`, not `bytes`.
+                    base64_encoded = base64.b64encode(response.content).decode('utf-8')
+                    content.append({'inline_data': {'data': base64_encoded, 'mime_type': mime_type}})  # type: ignore
                 else:
                     assert_never(item)
         return content
@@ -469,7 +468,7 @@ def _function_declaration_from_tool(tool: ToolDefinition) -> FunctionDeclaration
     json_schema = tool.parameters_json_schema
     f = FunctionDeclarationDict(name=tool.name, description=tool.description)
     if json_schema.get('properties'):
-        f['parameters'] = json_schema
+        f['parameters'] = json_schema  # type: ignore
     return f
 
 

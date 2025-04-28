@@ -252,7 +252,7 @@ interactions:
       accept-ranges:
       - bytes
       age:
-      - '245946'
+      - '329924'
       alt-svc:
       - h3=":443"; ma=86400
       cache-control:
@@ -268,7 +268,7 @@ interactions:
       etag:
       - '"33d0-438b181451e00"'
       expires:
-      - Fri, 11 Apr 2025 22:36:01 GMT
+      - Thu, 24 Apr 2025 19:04:29 GMT
       last-modified:
       - Mon, 27 Aug 2007 17:15:36 GMT
       strict-transport-security:
@@ -309,11 +309,11 @@ interactions:
       alt-svc:
       - h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
       content-length:
-      - '757'
+      - '664'
       content-type:
       - application/json; charset=UTF-8
       server-timing:
-      - gfet4t7; dur=2334
+      - gfet4t7; dur=1977
       transfer-encoding:
       - chunked
       vary:
@@ -324,21 +324,21 @@ interactions:
       candidates:
       - content:
           parts:
-          - text: The main content of this document is that it is a **dummy PDF file**. The document contains the text "Dummy
-              PDF file" at the top, indicating that it is a placeholder or example PDF document.
+          - text: The main content on this document is the phrase "Dummy PDF file".
           role: model
         finishReason: STOP
         index: 0
-      modelVersion: gemini-2.0-flash-thinking-exp-01-21
+      modelVersion: models/gemini-2.5-flash-preview-04-17
       usageMetadata:
-        candidatesTokenCount: 41
+        candidatesTokenCount: 14
         promptTokenCount: 268
         promptTokensDetails:
         - modality: TEXT
           tokenCount: 10
         - modality: DOCUMENT
           tokenCount: 258
-        totalTokenCount: 309
+        thoughtsTokenCount: 47
+        totalTokenCount: 329
     status:
       code: 200
       message: OK

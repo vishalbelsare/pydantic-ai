@@ -3,7 +3,6 @@ from __future__ import annotations as _annotations
 import os
 from typing import Literal, overload
 
-from pydantic_ai.exceptions import UserError
 from pydantic_ai.models import get_user_agent
 from pydantic_ai.providers import Provider
 
@@ -33,7 +32,7 @@ class GoogleProvider(Provider[genai.Client]):
         return self._client
 
     @overload
-    def __init__(self, *, api_key: str | None = None) -> None: ...
+    def __init__(self, *, api_key: str) -> None: ...
 
     @overload
     def __init__(
@@ -45,7 +44,10 @@ class GoogleProvider(Provider[genai.Client]):
     ) -> None: ...
 
     @overload
-    def __init__(self, *, client: genai.Client | None = None) -> None: ...
+    def __init__(self, *, client: genai.Client) -> None: ...
+
+    @overload
+    def __init__(self, *, vertexai: bool = False) -> None: ...
 
     def __init__(
         self,
@@ -55,6 +57,7 @@ class GoogleProvider(Provider[genai.Client]):
         project: str | None = None,
         location: VertexAILocation | Literal['global'] = 'global',
         client: genai.Client | None = None,
+        vertexai: bool | None = None,
     ) -> None:
         """Create a new Google GLA provider.
 
@@ -70,17 +73,14 @@ class GoogleProvider(Provider[genai.Client]):
             location: The location to send API requests to (for example, us-central1). Can be obtained from environment variables.
                 Applies to the Vertex AI API only.
             client: A pre-initialized client to use.
+            vertexai: Force the use of the Vertex AI API. If `False`, the Google Generative Language API will be used.
+                Defaults to `False`.
         """
         if client is None:
             # NOTE: We are keeping GEMINI_API_KEY for backwards compatibility.
             api_key = api_key or os.environ.get('GEMINI_API_KEY') or os.environ.get('GOOGLE_API_KEY')
-            if not api_key:
-                raise UserError(
-                    'Set the `GEMINI_API_KEY` environment variable or pass it via `GoogleGLAProvider(api_key=...)`'
-                    'to use the Google GLA provider.'
-                )
 
-            if api_key:
+            if api_key and not vertexai:
                 self._client = genai.Client(
                     vertexai=False,
                     api_key=api_key,

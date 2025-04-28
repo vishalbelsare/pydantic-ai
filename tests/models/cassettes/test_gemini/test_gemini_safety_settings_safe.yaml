@@ -30,11 +30,11 @@ interactions:
       alt-svc:
       - h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
       content-length:
-      - '1179'
+      - '1185'
       content-type:
       - application/json; charset=UTF-8
       server-timing:
-      - gfet4t7; dur=444
+      - gfet4t7; dur=514
       transfer-encoding:
       - chunked
       vary:
@@ -43,11 +43,11 @@ interactions:
       - Referer
     parsed_body:
       candidates:
-      - avgLogprobs: -0.17134136738984482
+      - avgLogprobs: -0.06646083792050679
         content:
           parts:
           - text: |
-              Potatoes come in a variety of colors, including brown, red, white, yellow, purple, and blue.
+              Potatoes come in a variety of colors, including brown, white, red, yellow, purple, and even blue.
           role: model
         finishReason: STOP
         safetyRatings:
@@ -61,15 +61,15 @@ interactions:
           probability: NEGLIGIBLE
       modelVersion: gemini-1.5-flash
       usageMetadata:
-        candidatesTokenCount: 23
+        candidatesTokenCount: 24
         candidatesTokensDetails:
         - modality: TEXT
-          tokenCount: 23
+          tokenCount: 24
         promptTokenCount: 5
         promptTokensDetails:
         - modality: TEXT
           tokenCount: 5
-        totalTokenCount: 28
+        totalTokenCount: 29
     status:
       code: 200
       message: OK

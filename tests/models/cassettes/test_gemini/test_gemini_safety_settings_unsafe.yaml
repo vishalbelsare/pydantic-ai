@@ -30,11 +30,11 @@ interactions:
       alt-svc:
       - h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
       content-length:
-      - '810'
+      - '817'
       content-type:
       - application/json; charset=UTF-8
       server-timing:
-      - gfet4t7; dur=454
+      - gfet4t7; dur=402
       transfer-encoding:
       - chunked
       vary:
@@ -47,7 +47,7 @@ interactions:
         finishReason: SAFETY
         safetyRatings:
         - category: HARM_CATEGORY_HATE_SPEECH
-          probability: LOW
+          probability: NEGLIGIBLE
         - category: HARM_CATEGORY_DANGEROUS_CONTENT
           probability: NEGLIGIBLE
         - blocked: true

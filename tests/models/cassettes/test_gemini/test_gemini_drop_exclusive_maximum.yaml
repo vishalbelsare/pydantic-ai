@@ -41,7 +41,7 @@ interactions:
       content-type:
       - application/json; charset=UTF-8
       server-timing:
-      - gfet4t7; dur=499
+      - gfet4t7; dur=469
       transfer-encoding:
       - chunked
       vary:
@@ -97,12 +97,12 @@ interactions:
         - functionCall:
             args:
               age: 20
-            id: pyd_ai_e1755475d1444f39bdd7c73b97ad7939
+            id: pyd_ai_58f6a613051e4ec5a88dfcc7869654db
             name: get_chinese_zodiac
         role: model
       - parts:
         - functionResponse:
-            id: pyd_ai_e1755475d1444f39bdd7c73b97ad7939
+            id: pyd_ai_58f6a613051e4ec5a88dfcc7869654db
             name: get_chinese_zodiac
             response:
               return_value: Dragon
@@ -129,7 +129,7 @@ interactions:
       content-type:
       - application/json; charset=UTF-8
       server-timing:
-      - gfet4t7; dur=397
+      - gfet4t7; dur=438
       transfer-encoding:
       - chunked
       vary:
@@ -197,11 +197,11 @@ interactions:
       alt-svc:
       - h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
       content-length:
-      - '733'
+      - '734'
       content-type:
       - application/json; charset=UTF-8
       server-timing:
-      - gfet4t7; dur=451
+      - gfet4t7; dur=465
       transfer-encoding:
       - chunked
       vary:
@@ -210,7 +210,7 @@ interactions:
       - Referer
     parsed_body:
       candidates:
-      - avgLogprobs: 5.033366116029876e-06
+      - avgLogprobs: 2.7694373524614742e-06
         content:
           parts:
           - functionCall:
@@ -257,12 +257,12 @@ interactions:
         - functionCall:
             args:
               age: 17
-            id: pyd_ai_796f1d1c5ea64a89b186371c2f8b4406
+            id: pyd_ai_b053eea8a96346fe82b58be58d3ecdd6
             name: get_chinese_zodiac
         role: model
       - parts:
         - functionResponse:
-            id: pyd_ai_796f1d1c5ea64a89b186371c2f8b4406
+            id: pyd_ai_b053eea8a96346fe82b58be58d3ecdd6
             name: get_chinese_zodiac
             response:
               call_error: |-
@@ -297,11 +297,11 @@ interactions:
       alt-svc:
       - h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
       content-length:
-      - '681'
+      - '685'
       content-type:
       - application/json; charset=UTF-8
       server-timing:
-      - gfet4t7; dur=482
+      - gfet4t7; dur=527
       transfer-encoding:
       - chunked
       vary:
@@ -310,10 +310,10 @@ interactions:
       - Referer
     parsed_body:
       candidates:
-      - avgLogprobs: -0.1788372278213501
+      - avgLogprobs: -0.1178963303565979
         content:
           parts:
-          - text: I am sorry. I cannot fulfill this request. The age must be greater than 18.
+          - text: I am sorry. I cannot fulfill this request because you must be over 18 years old.
           role: model
         finishReason: STOP
       modelVersion: gemini-2.0-flash

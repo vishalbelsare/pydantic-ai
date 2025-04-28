@@ -173,37 +173,38 @@ agent = Agent(model)
 ...
 ```
 
-### Customising region
+### Customize location
 
-Whichever way you authenticate, you can specify which region requests will be sent to via the `region` argument.
+Whichever way you authenticate, you can specify which location requests will be sent to via the `location` argument.
 
-Using a region close to your application can improve latency and might be important from a regulatory perspective.
+Using a location close to your application can improve latency and might be important from a regulatory perspective.
 
 ```python
 from pydantic_ai import Agent
 from pydantic_ai.models.gemini import GeminiModel
-from pydantic_ai.providers.google_vertex import GoogleVertexProvider
+from pydantic_ai.providers.google import GoogleProvider
 
 model = GeminiModel(
-    'gemini-2.0-flash', provider=GoogleVertexProvider(region='asia-east1')
+    'gemini-2.0-flash', provider=GoogleProvider(location='asia-east1')
 )
 agent = Agent(model)
 ...
 ```
 
-You can also customize the `GoogleVertexProvider` with a custom `http_client`:
+You can also customize the [`GoogleProvider`][pydantic_ai.providers.google.GoogleProvider] with a
+custom `genai.Client`:
 
 ```python
-from httpx import AsyncClient
+from google import genai
 
 from pydantic_ai import Agent
 from pydantic_ai.models.gemini import GeminiModel
-from pydantic_ai.providers.google_vertex import GoogleVertexProvider
+from pydantic_ai.providers.google import GoogleProvider
 
-custom_http_client = AsyncClient(timeout=30)
+custom_client = genai.Client(api_key='your-api-key')
 model = GeminiModel(
     'gemini-2.0-flash',
-    provider=GoogleVertexProvider(region='asia-east1', http_client=custom_http_client),
+    provider=GoogleProvider(location='asia-east1', client=custom_client),
 )
 agent = Agent(model)
 ...

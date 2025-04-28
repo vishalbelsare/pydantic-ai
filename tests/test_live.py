@@ -9,7 +9,6 @@ from pathlib import Path
 
 import httpx
 import pytest
-from google import genai
 from pydantic import BaseModel
 
 from pydantic_ai import Agent, UnexpectedModelBehavior
@@ -29,6 +28,8 @@ def openai(http_client: httpx.AsyncClient, _tmp_path: Path) -> Model:
 
 
 def gemini(timeout: int, _tmp_path: Path) -> Model:
+    from google import genai
+
     from pydantic_ai.models.gemini import GeminiModel
     from pydantic_ai.providers.google import GoogleProvider
 

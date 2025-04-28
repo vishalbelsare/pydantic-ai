@@ -874,10 +874,12 @@ def test_unknown_tool_fix():
     )
 
 
-@pytest.mark.skipif('google' not in sys.modules, reason='google not installed')
 def test_model_requests_blocked(env: TestEnv):
     env.set('GEMINI_API_KEY', 'foobar')
-    agent = Agent('google-gla:gemini-1.5-flash', output_type=tuple[str, str], defer_model_check=True)
+    try:
+        agent = Agent('google-gla:gemini-1.5-flash', output_type=tuple[str, str], defer_model_check=True)
+    except ModuleNotFoundError:  # pragma: no cover
+        pytest.skip('google not installed')
 
     with pytest.raises(RuntimeError, match='Model requests are not allowed, since ALLOW_MODEL_REQUESTS is False'):
         agent.run_sync('Hello')

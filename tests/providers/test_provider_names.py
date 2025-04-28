@@ -18,8 +18,7 @@ with try_import() as imports_successful:
     from pydantic_ai.providers.azure import AzureProvider
     from pydantic_ai.providers.cohere import CohereProvider
     from pydantic_ai.providers.deepseek import DeepSeekProvider
-    from pydantic_ai.providers.google_gla import GoogleGLAProvider
-    from pydantic_ai.providers.google_vertex import GoogleVertexProvider
+    from pydantic_ai.providers.google import GoogleProvider
     from pydantic_ai.providers.groq import GroqProvider
     from pydantic_ai.providers.mistral import MistralProvider
     from pydantic_ai.providers.openai import OpenAIProvider
@@ -30,8 +29,8 @@ with try_import() as imports_successful:
         ('deepseek', DeepSeekProvider, 'DEEPSEEK_API_KEY'),
         ('openai', OpenAIProvider, 'OPENAI_API_KEY'),
         ('azure', AzureProvider, 'AZURE_OPENAI'),
-        ('google-vertex', GoogleVertexProvider, None),
-        ('google-gla', GoogleGLAProvider, 'GEMINI_API_KEY'),
+        ('google-vertex', GoogleProvider, None),
+        ('google-gla', GoogleProvider, 'GEMINI_API_KEY'),
         ('groq', GroqProvider, 'GROQ_API_KEY'),
         ('mistral', MistralProvider, 'MISTRAL_API_KEY'),
     ]

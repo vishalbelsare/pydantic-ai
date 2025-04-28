@@ -29,7 +29,6 @@ from pydantic_ai.messages import (
     ToolReturnPart,
     UserPromptPart,
 )
-from pydantic_ai.models.gemini import GeminiModel
 from pydantic_ai.result import Usage
 from pydantic_ai.settings import ModelSettings
 
@@ -50,6 +49,7 @@ with try_import() as imports_successful:
     from openai.types.chat.chat_completion_message_tool_call import Function
     from openai.types.completion_usage import CompletionUsage, PromptTokensDetails
 
+    from pydantic_ai.models.gemini import GeminiModel
     from pydantic_ai.models.openai import (
         OpenAIModel,
         OpenAIModelSettings,

@@ -10,20 +10,6 @@ from typing import Literal, Union, cast, overload
 from uuid import uuid4
 
 import httpx
-from google.genai.types import (
-    ContentDict,
-    ContentUnionDict,
-    FunctionCallDict,
-    FunctionCallingConfigDict,
-    FunctionCallingConfigMode,
-    GenerateContentConfigDict,
-    Part,
-    PartDict,
-    SafetySettingDict,
-    ToolConfigDict,
-    ToolDict,
-    ToolListUnionDict,
-)
 from typing_extensions import assert_never, deprecated
 
 from pydantic_ai.providers import Provider, infer_provider
@@ -61,7 +47,22 @@ from ._json_schema import JsonSchema, WalkJsonSchema
 
 try:
     from google import genai
-    from google.genai.types import FunctionDeclarationDict, GenerateContentResponse
+    from google.genai.types import (
+        ContentDict,
+        ContentUnionDict,
+        FunctionCallDict,
+        FunctionCallingConfigDict,
+        FunctionCallingConfigMode,
+        FunctionDeclarationDict,
+        GenerateContentConfigDict,
+        GenerateContentResponse,
+        Part,
+        PartDict,
+        SafetySettingDict,
+        ToolConfigDict,
+        ToolDict,
+        ToolListUnionDict,
+    )
 except ImportError as _import_error:
     raise ImportError(
         'Please install `google-genai` to use the Gemini model, '

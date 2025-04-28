@@ -12,13 +12,13 @@ from inline_snapshot import snapshot
 from pytest_mock import MockerFixture
 
 from pydantic_ai.agent import Agent
-from pydantic_ai.models.gemini import GeminiModel
 
 from ..conftest import try_import
 
 with try_import() as imports_successful:
     from google.auth.transport.requests import Request
 
+    from pydantic_ai.models.gemini import GeminiModel
     from pydantic_ai.providers.google_vertex import GoogleVertexProvider
 
 pytestmark = [

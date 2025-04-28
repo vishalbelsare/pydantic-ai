@@ -38,6 +38,7 @@ def gemini(timeout: int, _tmp_path: Path) -> Model:
 
 
 def vertexai(timeout: int, _tmp_path: Path) -> Model:
+    from google import genai
     from google.oauth2.service_account import Credentials
 
     from pydantic_ai.models.gemini import GeminiModel

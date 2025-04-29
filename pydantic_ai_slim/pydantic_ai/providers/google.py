@@ -41,7 +41,7 @@ class GoogleProvider(Provider[genai.Client]):
         *,
         credentials: Credentials | None = None,
         project: str | None = None,
-        location: VertexAILocation | Literal['global'] = 'global',
+        location: VertexAILocation | Literal['global'] | None = None,
     ) -> None: ...
 
     @overload
@@ -56,7 +56,7 @@ class GoogleProvider(Provider[genai.Client]):
         api_key: str | None = None,
         credentials: Credentials | None = None,
         project: str | None = None,
-        location: VertexAILocation | Literal['global'] = 'global',
+        location: VertexAILocation | Literal['global'] | None = None,
         client: genai.Client | None = None,
         vertexai: bool | None = None,
     ) -> None:
@@ -93,13 +93,10 @@ class GoogleProvider(Provider[genai.Client]):
                     http_options={'headers': {'User-Agent': get_user_agent()}},
                 )
             else:
-                project = project or os.environ.get('GOOGLE_CLOUD_PROJECT')
-                location = location or os.environ.get('GOOGLE_CLOUD_LOCATION')
-
                 self._client = genai.Client(
                     vertexai=True,
-                    project=project,
-                    location=location,
+                    project=project or os.environ.get('GOOGLE_CLOUD_PROJECT'),
+                    location=location or os.environ.get('GOOGLE_CLOUD_LOCATION'),
                     credentials=credentials,
                     http_options={'headers': {'User-Agent': get_user_agent()}},
                 )

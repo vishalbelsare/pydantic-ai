@@ -751,18 +751,18 @@ async def test_gemini_stream_responses(allow_model_requests: None, gemini_api_ke
     assert messages == snapshot(
         [
             ModelResponse(
-                parts=[TextPart(content='Hello')],
-                model_name='gemini-1.5-flash',
+                parts=[TextPart(content='Hi')],
+                model_name='gemini-2.0-flash-exp',
                 timestamp=IsDatetime(),
             ),
             ModelResponse(
-                parts=[TextPart(content='Hello')],
-                model_name='gemini-1.5-flash',
+                parts=[TextPart(content='Hi')],
+                model_name='gemini-2.0-flash-exp',
                 timestamp=IsDatetime(),
             ),
             ModelResponse(
-                parts=[TextPart(content='Hello there! How can I help you today?\n')],
-                model_name='gemini-1.5-flash',
+                parts=[TextPart(content='Hi there! How can I help you today?\n')],
+                model_name='gemini-2.0-flash-exp',
                 timestamp=IsDatetime(),
             ),
         ]

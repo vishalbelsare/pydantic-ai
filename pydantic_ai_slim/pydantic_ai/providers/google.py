@@ -3,6 +3,7 @@ from __future__ import annotations as _annotations
 import os
 from typing import Literal, overload
 
+from pydantic_ai.exceptions import UserError
 from pydantic_ai.models import get_user_agent
 from pydantic_ai.providers import Provider
 
@@ -80,7 +81,12 @@ class GoogleProvider(Provider[genai.Client]):
             # NOTE: We are keeping GEMINI_API_KEY for backwards compatibility.
             api_key = api_key or os.environ.get('GEMINI_API_KEY') or os.environ.get('GOOGLE_API_KEY')
 
-            if api_key and not vertexai:
+            if not vertexai:
+                if api_key is None:
+                    raise UserError(
+                        'Set the `GOOGLE_API_KEY` environment variable or pass it via `GoogleProvider(api_key=...)`'
+                        'to use the Google Generative Language API.'
+                    )
                 self._client = genai.Client(
                     vertexai=False,
                     api_key=api_key,

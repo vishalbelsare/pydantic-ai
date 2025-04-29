@@ -12,6 +12,7 @@ from pydantic_ai.providers import Provider, infer_provider
 from ..conftest import try_import
 
 with try_import() as imports_successful:
+    from google.auth.exceptions import DefaultCredentialsError
     from openai import OpenAIError
 
     from pydantic_ai.providers.anthropic import AnthropicProvider
@@ -29,7 +30,7 @@ with try_import() as imports_successful:
         ('deepseek', DeepSeekProvider, 'DEEPSEEK_API_KEY'),
         ('openai', OpenAIProvider, 'OPENAI_API_KEY'),
         ('azure', AzureProvider, 'AZURE_OPENAI'),
-        ('google-vertex', GoogleProvider, None),
+        ('google-vertex', GoogleProvider, 'Your default credentials were not found'),
         ('google-gla', GoogleProvider, 'GEMINI_API_KEY'),
         ('groq', GroqProvider, 'GROQ_API_KEY'),
         ('mistral', MistralProvider, 'MISTRAL_API_KEY'),
@@ -50,7 +51,7 @@ def empty_env():
 @pytest.mark.parametrize(('provider', 'provider_cls', 'exception_has'), test_infer_provider_params)
 def test_infer_provider(provider: str, provider_cls: type[Provider[Any]], exception_has: str | None):
     if exception_has is not None:
-        with pytest.raises((UserError, OpenAIError), match=rf'.*{exception_has}.*'):
+        with pytest.raises((UserError, OpenAIError, DefaultCredentialsError), match=rf'.*{exception_has}.*'):
             infer_provider(provider)
     else:
         assert isinstance(infer_provider(provider), provider_cls)

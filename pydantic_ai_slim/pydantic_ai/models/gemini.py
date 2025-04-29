@@ -160,7 +160,7 @@ class GeminiModel(Model):
 
         if isinstance(provider, str):
             provider = infer_provider(provider)
-        if isinstance(provider.client, httpx.AsyncClient):
+        if isinstance(provider.client, httpx.AsyncClient):  # pragma: no cover
             raise UserError('Use `GoogleProvider` instead of `GoogleGLAProvider` or `GoogleVertexProvider`.')
         provider = cast(Provider[genai.Client], provider)
 

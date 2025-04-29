@@ -733,12 +733,12 @@ async def test_gemini_stream_text_heterogeneous(allow_model_requests: None, gemi
     async with agent.run_stream('What is the location of San Francisco?') as result:
         data = await result.get_output()
 
-    assert data == snapshot('The location of San Francisco is Location for San Francisco.\n')
+    assert data == snapshot('The location of San Francisco is Location for San Francisco.')
 
 
 @pytest.mark.vcr()
 async def test_gemini_stream_responses(allow_model_requests: None, gemini_api_key: str):
-    m = GeminiModel('gemini-1.5-flash', provider=GoogleProvider(api_key=gemini_api_key))
+    m = GeminiModel('gemini-2.0-flash-exp', provider=GoogleProvider(api_key=gemini_api_key))
     agent = Agent(m)
 
     messages: list[ModelResponse] = []

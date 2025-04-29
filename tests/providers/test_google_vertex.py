@@ -156,7 +156,7 @@ def vertex_provider_auth(mocker: MockerFixture) -> None:
         def refresh(self, request: Request): ...
 
     return_value = (NoOpCredentials(), 'pydantic-ai')
-    mocker.patch('pydantic_ai.providers.google_vertex.google.auth.default', return_value=return_value)
+    mocker.patch('pydantic_ai.providers.google.google.genai_api_client._load_auth', return_value=return_value)
 
 
 @pytest.mark.skipif(
@@ -164,8 +164,8 @@ def vertex_provider_auth(mocker: MockerFixture) -> None:
 )
 @pytest.mark.vcr()
 async def test_vertexai_provider(allow_model_requests: None):
-    m = GeminiModel('gemini-2.0-flash', provider='google-vertex')
+    m = GeminiModel('gemini-2.5-pro-exp-03-25', provider='google-vertex')
     agent = Agent(m)
 
     result = await agent.run('What is the capital of France?')
-    assert result.output == snapshot('The capital of France is **Paris**.\n')
+    assert result.output == snapshot('The capital of France is **Paris**.')

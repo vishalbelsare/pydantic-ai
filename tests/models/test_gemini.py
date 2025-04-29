@@ -2,6 +2,7 @@
 from __future__ import annotations as _annotations
 
 import datetime
+import json
 from typing import Annotated
 
 import pytest
@@ -9,12 +10,14 @@ from inline_snapshot import snapshot
 from pydantic import BaseModel, Field, TypeAdapter
 
 from pydantic_ai import Agent, UnexpectedModelBehavior, UserError
+from pydantic_ai.exceptions import ModelRetry
 from pydantic_ai.messages import (
     BinaryContent,
     DocumentUrl,
     ImageUrl,
     ModelRequest,
     ModelResponse,
+    RetryPromptPart,
     TextPart,
     ToolCallPart,
     ToolReturnPart,
@@ -764,6 +767,76 @@ async def test_gemini_stream_responses(allow_model_requests: None, gemini_api_ke
                 parts=[TextPart(content='Hi there! How can I help you today?\n')],
                 model_name='gemini-2.0-flash-exp',
                 timestamp=IsDatetime(),
+            ),
+        ]
+    )
+
+
+@pytest.mark.vcr()
+async def test_gemini_request_tool_call(allow_model_requests: None, gemini_api_key: str):
+    m = GeminiModel('gemini-2.0-flash-exp', provider=GoogleProvider(api_key=gemini_api_key))
+    agent = Agent(m)
+
+    @agent.tool_plain
+    async def get_location(loc_name: str) -> str:
+        if loc_name == 'London':
+            return json.dumps({'lat': 51, 'lng': 0})
+        elif loc_name == 'New York':
+            return json.dumps({'lat': 41, 'lng': -74})
+        else:
+            raise ModelRetry('Wrong location, only allowed locations are London and New York')
+
+    result = await agent.run('What is the location of Potatoland and New York?')
+    assert result.all_messages() == snapshot(
+        [
+            ModelRequest(
+                parts=[
+                    UserPromptPart(
+                        content='What is the location of Potatoland and New York?',
+                        timestamp=datetime.datetime(2025, 4, 29, 13, 44, 45, 909123, tzinfo=datetime.timezone.utc),
+                    )
+                ]
+            ),
+            ModelResponse(
+                parts=[
+                    ToolCallPart(
+                        tool_name='get_location',
+                        args={'loc_name': 'Potatoland'},
+                        tool_call_id='pyd_ai_d269810efcdd463183eca3e2d901036c',
+                    ),
+                    ToolCallPart(
+                        tool_name='get_location',
+                        args={'loc_name': 'New York'},
+                        tool_call_id='pyd_ai_88ab47d2424e46efb34449166d6ceb53',
+                    ),
+                ],
+                model_name='gemini-2.0-flash-exp',
+                timestamp=datetime.datetime(2025, 4, 29, 13, 44, 47, 119763, tzinfo=datetime.timezone.utc),
+            ),
+            ModelRequest(
+                parts=[
+                    RetryPromptPart(
+                        content='Wrong location, only allowed locations are London and New York',
+                        tool_name='get_location',
+                        tool_call_id='pyd_ai_d269810efcdd463183eca3e2d901036c',
+                        timestamp=datetime.datetime(2025, 4, 29, 13, 44, 47, 120076, tzinfo=datetime.timezone.utc),
+                    ),
+                    ToolReturnPart(
+                        tool_name='get_location',
+                        content='{"lat": 41, "lng": -74}',
+                        tool_call_id='pyd_ai_88ab47d2424e46efb34449166d6ceb53',
+                        timestamp=datetime.datetime(2025, 4, 29, 13, 44, 47, 120112, tzinfo=datetime.timezone.utc),
+                    ),
+                ]
+            ),
+            ModelResponse(
+                parts=[
+                    TextPart(
+                        content='Potatoland is not a valid location. The location of New York is {"lat": 41, "lng": -74}.'
+                    )
+                ],
+                model_name='gemini-2.0-flash-exp',
+                timestamp=datetime.datetime(2025, 4, 29, 13, 44, 47, 931125, tzinfo=datetime.timezone.utc),
             ),
         ]
     )

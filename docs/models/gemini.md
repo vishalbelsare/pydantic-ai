@@ -119,7 +119,7 @@ Luckily if you're running PydanticAI inside GCP, or you have the [`gcloud` CLI](
 
 To use `VertexAIModel`, with [application default credentials](https://cloud.google.com/docs/authentication/application-default-credentials) configured (e.g. with `gcloud`), you can simply use:
 
-```python
+```python {title="gemini_application_default_credentials.py" test="skip"}
 from pydantic_ai import Agent
 from pydantic_ai.models.gemini import GeminiModel
 

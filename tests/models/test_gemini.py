@@ -791,41 +791,30 @@ async def test_gemini_request_tool_call(allow_model_requests: None, gemini_api_k
         [
             ModelRequest(
                 parts=[
-                    UserPromptPart(
-                        content='What is the location of Potatoland and New York?',
-                        timestamp=datetime.datetime(2025, 4, 29, 13, 44, 45, 909123, tzinfo=datetime.timezone.utc),
-                    )
+                    UserPromptPart(content='What is the location of Potatoland and New York?', timestamp=IsDatetime())
                 ]
             ),
             ModelResponse(
                 parts=[
-                    ToolCallPart(
-                        tool_name='get_location',
-                        args={'loc_name': 'Potatoland'},
-                        tool_call_id='pyd_ai_d269810efcdd463183eca3e2d901036c',
-                    ),
-                    ToolCallPart(
-                        tool_name='get_location',
-                        args={'loc_name': 'New York'},
-                        tool_call_id='pyd_ai_88ab47d2424e46efb34449166d6ceb53',
-                    ),
+                    ToolCallPart(tool_name='get_location', args={'loc_name': 'Potatoland'}, tool_call_id=IsStr()),
+                    ToolCallPart(tool_name='get_location', args={'loc_name': 'New York'}, tool_call_id=IsStr()),
                 ],
                 model_name='gemini-2.0-flash-exp',
-                timestamp=datetime.datetime(2025, 4, 29, 13, 44, 47, 119763, tzinfo=datetime.timezone.utc),
+                timestamp=IsDatetime(),
             ),
             ModelRequest(
                 parts=[
                     RetryPromptPart(
                         content='Wrong location, only allowed locations are London and New York',
                         tool_name='get_location',
-                        tool_call_id='pyd_ai_d269810efcdd463183eca3e2d901036c',
-                        timestamp=datetime.datetime(2025, 4, 29, 13, 44, 47, 120076, tzinfo=datetime.timezone.utc),
+                        tool_call_id=IsStr(),
+                        timestamp=IsDatetime(),
                     ),
                     ToolReturnPart(
                         tool_name='get_location',
                         content='{"lat": 41, "lng": -74}',
-                        tool_call_id='pyd_ai_88ab47d2424e46efb34449166d6ceb53',
-                        timestamp=datetime.datetime(2025, 4, 29, 13, 44, 47, 120112, tzinfo=datetime.timezone.utc),
+                        tool_call_id=IsStr(),
+                        timestamp=IsDatetime(),
                     ),
                 ]
             ),
@@ -836,7 +825,7 @@ async def test_gemini_request_tool_call(allow_model_requests: None, gemini_api_k
                     )
                 ],
                 model_name='gemini-2.0-flash-exp',
-                timestamp=datetime.datetime(2025, 4, 29, 13, 44, 47, 931125, tzinfo=datetime.timezone.utc),
+                timestamp=IsDatetime(),
             ),
         ]
     )

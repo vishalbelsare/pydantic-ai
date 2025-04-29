@@ -2,15 +2,11 @@
 from __future__ import annotations as _annotations
 
 import datetime
-from collections.abc import AsyncIterator, Callable, Sequence
-from dataclasses import dataclass
 from typing import Annotated
 
-import httpx
 import pytest
 from inline_snapshot import snapshot
 from pydantic import BaseModel, Field, TypeAdapter
-from typing_extensions import Literal, TypeAlias
 
 from pydantic_ai import Agent, UnexpectedModelBehavior, UserError
 from pydantic_ai.messages import (
@@ -29,17 +25,12 @@ from pydantic_ai.models import ModelRequestParameters
 from pydantic_ai.settings import ModelSettings
 from pydantic_ai.tools import ToolDefinition
 
-from ..conftest import ClientWithHandler, IsDatetime, IsStr, TestEnv, try_import
+from ..conftest import IsDatetime, IsStr, try_import
 
 with try_import() as imports_successful:
-    from google import genai
     from google.genai.types import (
-        CandidateDict,
-        ContentDict,
-        FinishReason,
         FunctionCallingConfigMode,
         GenerateContentResponseDict,
-        GenerateContentResponseUsageMetadataDict,
         HarmBlockThreshold,
         HarmCategory,
     )
@@ -368,77 +359,6 @@ async def test_json_def_date(allow_model_requests: None):
             }
         ]
     )
-
-
-@dataclass
-class AsyncByteStreamList(httpx.AsyncByteStream):
-    data: list[bytes]
-
-    async def __aiter__(self) -> AsyncIterator[bytes]:
-        for chunk in self.data:
-            yield chunk
-
-
-ResOrList: TypeAlias = 'GenerateContentResponseDict | httpx.AsyncByteStream | Sequence[GenerateContentResponseDict | httpx.AsyncByteStream]'
-GetGeminiClient: TypeAlias = 'Callable[[ResOrList], genai.Client]'
-
-
-@pytest.fixture
-async def get_gemini_client(
-    client_with_handler: ClientWithHandler, env: TestEnv, allow_model_requests: None
-) -> GetGeminiClient:
-    env.set('GOOGLE_API_KEY', 'via-env-var')
-
-    def create_client(response_or_list: ResOrList) -> genai.Client:
-        index = 0
-
-        def handler(request: httpx.Request) -> httpx.Response:
-            nonlocal index
-
-            ua = request.headers.get('User-Agent')
-            assert isinstance(ua, str) and ua.startswith('pydantic-ai')
-
-            if isinstance(response_or_list, Sequence):
-                response = response_or_list[index]
-                index += 1
-            else:
-                response = response_or_list
-
-            if isinstance(response, httpx.AsyncByteStream):
-                content: bytes | None = None
-                stream: httpx.AsyncByteStream | None = response
-            else:
-                content = _gemini_response_ta.dump_json(response, by_alias=True)
-                stream = None
-
-            return httpx.Response(
-                200,
-                content=content,
-                stream=stream,
-                headers={'Content-Type': 'application/json'},
-            )
-
-        http_client = client_with_handler(handler)
-        client = genai.Client()
-        client._async_httpx_client = http_client  # type: ignore[reportAttributeAccess]
-        return client
-
-    return create_client
-
-
-def gemini_response(
-    content: ContentDict, finish_reason: Literal['STOP'] | None = 'STOP'
-) -> GenerateContentResponseDict:
-    candidate = CandidateDict(content=content, index=0, safety_ratings=[])
-    if finish_reason:  # pragma: no cover
-        candidate['finish_reason'] = FinishReason.STOP
-    return GenerateContentResponseDict(
-        candidates=[candidate], usage_metadata=example_usage(), model_version='gemini-1.5-flash-123'
-    )
-
-
-def example_usage() -> GenerateContentResponseUsageMetadataDict:
-    return {'prompt_token_count': 1, 'candidates_token_count': 2, 'total_token_count': 3}
 
 
 # @pytest.mark.xfail()
@@ -801,33 +721,52 @@ def example_usage() -> GenerateContentResponseUsageMetadataDict:
 #     assert tool_calls == snapshot(["foo(x='a')", "bar(y='b')"])
 
 
-# @pytest.mark.xfail()
-# async def test_stream_text_heterogeneous(get_gemini_client: GetGeminiClient):
-#     responses = [
-#         gemini_response(_content_model_response(ModelResponse(parts=[TextPart('Hello ')]))),
-#         gemini_response(
-#             ContentDict(
-#                 role='model',
-#                 parts=[
-#                     PartDict(text='foo'),
-#                     PartDict(function_call=FunctionCallDict(name='get_location', args={'loc_name': 'San Fransisco'})),
-#                 ],
-#             )
-#         ),
-#     ]
-#     json_data = _gemini_streamed_response_ta.dump_json(responses, by_alias=True)
-#     stream = AsyncByteStreamList([json_data[:100], json_data[100:200], json_data[200:]])
-#     m = GeminiModel('gemini-1.5-flash', provider=GoogleProvider(client=get_gemini_client(stream)))
-#     agent = Agent(m)
+@pytest.mark.vcr()
+async def test_gemini_stream_text_heterogeneous(allow_model_requests: None, gemini_api_key: str):
+    m = GeminiModel('gemini-2.0-flash-exp', provider=GoogleProvider(api_key=gemini_api_key))
+    agent = Agent(m)
 
-#     @agent.tool_plain()
-#     def get_location(loc_name: str) -> str:
-#         return f'Location for {loc_name}'
+    @agent.tool_plain()
+    def get_location(loc_name: str) -> str:
+        return f'Location for {loc_name}'
 
-#     async with agent.run_stream('Hello') as result:
-#         data = await result.get_output()
+    async with agent.run_stream('What is the location of San Francisco?') as result:
+        data = await result.get_output()
 
-#     assert data == 'Hello foo'
+    assert data == snapshot('The location of San Francisco is Location for San Francisco.\n')
+
+
+@pytest.mark.vcr()
+async def test_gemini_stream_responses(allow_model_requests: None, gemini_api_key: str):
+    m = GeminiModel('gemini-1.5-flash', provider=GoogleProvider(api_key=gemini_api_key))
+    agent = Agent(m)
+
+    messages: list[ModelResponse] = []
+    async with agent.iter('Hello') as run:
+        async for node in run:
+            if agent.is_model_request_node(node):
+                async with node.stream(run.ctx) as stream:
+                    async for chunk in stream.stream_responses(debounce_by=None):
+                        messages.append(chunk)
+    assert messages == snapshot(
+        [
+            ModelResponse(
+                parts=[TextPart(content='Hello')],
+                model_name='gemini-1.5-flash',
+                timestamp=IsDatetime(),
+            ),
+            ModelResponse(
+                parts=[TextPart(content='Hello')],
+                model_name='gemini-1.5-flash',
+                timestamp=IsDatetime(),
+            ),
+            ModelResponse(
+                parts=[TextPart(content='Hello there! How can I help you today?\n')],
+                model_name='gemini-1.5-flash',
+                timestamp=IsDatetime(),
+            ),
+        ]
+    )
 
 
 async def test_empty_text_ignored():

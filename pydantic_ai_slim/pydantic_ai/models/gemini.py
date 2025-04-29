@@ -305,12 +305,10 @@ class GeminiModel(Model):
         if isinstance(first_chunk, _utils.Unset):
             raise UnexpectedModelBehavior('Streamed response ended without content or tool calls')
 
-        assert first_chunk.create_time is not None
-
         return GeminiStreamedResponse(
             _model_name=self._model_name,
             _response=peekable_response,
-            _timestamp=first_chunk.create_time,
+            _timestamp=first_chunk.create_time or _utils.now_utc(),
         )
 
     async def _map_messages(self, messages: list[ModelMessage]) -> tuple[ContentDict | None, list[ContentUnionDict]]:

@@ -40,7 +40,7 @@ class GoogleProvider(Provider[genai.Client]):
         self,
         *,
         credentials: Credentials | None = None,
-        project: str,
+        project: str | None = None,
         location: VertexAILocation | Literal['global'] = 'global',
     ) -> None: ...
 

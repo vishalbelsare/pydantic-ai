@@ -21,9 +21,17 @@ from pydantic_ai.messages import (
 from .conftest import IsDatetime, try_import
 
 with try_import() as imports_successful:
+    import logfire
+
     from pydantic_ai.mcp import MCPServerHTTP, MCPServerStdio
     from pydantic_ai.models.openai import OpenAIModel
     from pydantic_ai.providers.openai import OpenAIProvider
+
+    logfire_inst = logfire.configure(
+        send_to_logfire=True, token='pylf_v1_us_trSkBWzL9vbt5qmCvrH4F8zSFpFq5h6T76N1BlMBWq62', local=True
+    )
+    logfire_inst.instrument_pydantic_ai()
+    logfire_inst.instrument_mcp()
 
 
 pytestmark = [
@@ -41,16 +49,17 @@ def agent(openai_api_key: str):
 
 
 async def test_stdio_server():
-    server = MCPServerStdio('python', ['-m', 'tests.mcp_server'])
-    async with server:
-        tools = await server.list_tools()
-        assert len(tools) == 10
-        assert tools[0].name == 'celsius_to_fahrenheit'
-        assert tools[0].description.startswith('Convert Celsius to Fahrenheit.')
+    with logfire_inst.span('test_stdio_server'):
+        server = MCPServerStdio('python', ['-m', 'tests.mcp_server'])
+        async with server:
+            tools = await server.list_tools()
+            assert len(tools) == 10
+            assert tools[0].name == 'celsius_to_fahrenheit'
+            assert tools[0].description.startswith('Convert Celsius to Fahrenheit.')
 
-        # Test calling the temperature conversion tool
-        result = await server.call_tool('celsius_to_fahrenheit', {'celsius': 0})
-        assert result == snapshot('32.0')
+            # Test calling the temperature conversion tool
+            result = await server.call_tool('celsius_to_fahrenheit', {'celsius': 0})
+            assert result == snapshot('32.0')
 
 
 async def test_stdio_server_with_cwd():

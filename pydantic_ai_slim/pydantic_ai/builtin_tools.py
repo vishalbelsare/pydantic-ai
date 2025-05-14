@@ -9,6 +9,7 @@ from typing_extensions import TypedDict
 __all__ = ('AbstractBuiltinTool', 'WebSearchTool', 'UserLocation')
 
 
+@dataclass
 class AbstractBuiltinTool(ABC):
     """A builtin tool that can be used by an agent.
 

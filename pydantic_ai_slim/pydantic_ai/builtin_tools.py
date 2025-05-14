@@ -14,6 +14,8 @@ class AbstractBuiltinTool(ABC):
     """A builtin tool that can be used by an agent.
 
     This class is abstract and cannot be instantiated directly.
+
+    The builtin tools are are passed to the model as part of the `ModelRequestParameters`.
     """
 
 
@@ -72,4 +74,11 @@ class WebSearchTool(AbstractBuiltinTool):
     Supported by:
     * Anthropic (https://docs.anthropic.com/en/docs/build-with-claude/tool-use/web-search-tool#domain-filtering)
     * Groq (https://console.groq.com/docs/agentic-tooling#search-settings)
+    """
+
+    max_uses: int | None = None
+    """If provided, the tool will stop searching the web after the given number of uses.
+
+    Supported by:
+    * Anthropic
     """

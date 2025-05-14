@@ -278,7 +278,6 @@ class OpenAIModel(Model):
             return await self.client.chat.completions.create(
                 model=self._model_name,
                 messages=openai_messages,
-                n=1,
                 parallel_tool_calls=model_settings.get('parallel_tool_calls', NOT_GIVEN),
                 tools=tools or NOT_GIVEN,
                 tool_choice=tool_choice or NOT_GIVEN,
@@ -338,13 +337,15 @@ class OpenAIModel(Model):
     def _get_web_search_options(self, model_request_parameters: ModelRequestParameters) -> WebSearchOptions | None:
         for tool in model_request_parameters.builtin_tools:
             if isinstance(tool, WebSearchTool):
-                return WebSearchOptions(
-                    search_context_size=tool.search_context_size,
-                    user_location=WebSearchOptionsUserLocation(
-                        type='approximate',
-                        approximate=WebSearchOptionsUserLocationApproximate(**tool.user_location),
-                    ),
-                )
+                if tool.user_location:
+                    return WebSearchOptions(
+                        search_context_size=tool.search_context_size,
+                        user_location=WebSearchOptionsUserLocation(
+                            type='approximate',
+                            approximate=WebSearchOptionsUserLocationApproximate(**tool.user_location),
+                        ),
+                    )
+                return WebSearchOptions(search_context_size=tool.search_context_size)
 
     async def _map_messages(self, messages: list[ModelMessage]) -> list[chat.ChatCompletionMessageParam]:
         """Just maps a `pydantic_ai.Message` to a `openai.types.ChatCompletionMessageParam`."""
@@ -677,13 +678,14 @@ class OpenAIResponsesModel(Model):
         tools: list[responses.ToolParam] = []
         for tool in model_request_parameters.builtin_tools:
             if isinstance(tool, WebSearchTool):
-                tools.append(
-                    responses.WebSearchToolParam(
-                        type='web_search_preview',
-                        search_context_size=tool.search_context_size,
-                        user_location={'type': 'approximate', **tool.user_location},
-                    )
+                web_search_tool = responses.WebSearchToolParam(
+                    type='web_search_preview', search_context_size=tool.search_context_size
                 )
+                if tool.user_location:
+                    web_search_tool['user_location'] = responses.web_search_tool_param.UserLocation(
+                        type='approximate', **tool.user_location
+                    )
+                tools.append(web_search_tool)
         return tools
 
     @staticmethod
@@ -1112,6 +1114,7 @@ def _customize_request_parameters(model_request_parameters: ModelRequestParamete
 
     return ModelRequestParameters(
         function_tools=[_customize_tool_def(tool) for tool in model_request_parameters.function_tools],
+        builtin_tools=model_request_parameters.builtin_tools,
         allow_text_output=model_request_parameters.allow_text_output,
         output_tools=[_customize_tool_def(tool) for tool in model_request_parameters.output_tools],
     )

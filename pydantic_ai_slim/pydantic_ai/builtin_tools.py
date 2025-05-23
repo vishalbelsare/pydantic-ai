@@ -1,7 +1,7 @@
 from __future__ import annotations as _annotations
 
 from abc import ABC
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Literal
 
 from typing_extensions import TypedDict
@@ -19,20 +19,6 @@ class AbstractBuiltinTool(ABC):
     """
 
 
-class UserLocation(TypedDict, total=False):
-    """Allows you to localize search results based on a user's location.
-
-    Supported by:
-    * Anthropic
-    * OpenAI
-    """
-
-    city: str
-    country: str
-    region: str
-    timezone: str
-
-
 @dataclass
 class WebSearchTool(AbstractBuiltinTool):
     """A builtin tool that allows your agent to search the web for information.
@@ -47,7 +33,7 @@ class WebSearchTool(AbstractBuiltinTool):
     * OpenAI
     """
 
-    user_location: UserLocation = field(default_factory=UserLocation)
+    user_location: UserLocation | None = None
     """The `user_location` parameter allows you to localize search results based on a user's location.
 
     Supported by:
@@ -81,4 +67,27 @@ class WebSearchTool(AbstractBuiltinTool):
 
     Supported by:
     * Anthropic
+    """
+
+
+class UserLocation(TypedDict, total=False):
+    """Allows you to localize search results based on a user's location.
+
+    Supported by:
+    * Anthropic
+    * OpenAI
+    """
+
+    city: str
+    country: str
+    region: str
+    timezone: str
+
+
+class CodeExecutionTool(AbstractBuiltinTool):
+    """A builtin tool that allows your agent to execute code.
+
+    Supported by:
+    * Anthropic
+    * OpenAI
     """

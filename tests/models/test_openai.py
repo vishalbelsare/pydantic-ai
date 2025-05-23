@@ -1619,7 +1619,7 @@ async def test_openai_web_search_tool(allow_model_requests: None, openai_api_key
     )
 
     result = await agent.run('What day is today?')
-    assert result.output == snapshot('May 14, 2025, 8:51:29\u202fAM ')
+    assert result.output == snapshot('May 14, 2025, 8:51:29 AM ')
 
 
 @pytest.mark.vcr()

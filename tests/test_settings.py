@@ -1,6 +1,7 @@
 import importlib
 
 import pytest
+from vcr import VCR
 
 from pydantic_ai import Agent
 from pydantic_ai.models import Model
@@ -40,3 +41,11 @@ async def test_stop_settings(allow_model_requests: None, model: Model) -> None:
         assert result.output.endswith('Paris')
     else:
         assert 'Paris' not in result.output
+
+
+@pytest.mark.parametrize('model', ['openai', 'anthropic', 'bedrock', 'groq'], indirect=True)
+async def test_user_id_settings(allow_model_requests: None, model: Model, cassete: VCR) -> None:
+    agent = Agent(model=model)
+    result = await agent.run('What is the capital of France?', model_settings=ModelSettings(user_id='test_user_id'))
+
+    # TODO(Marcelo): Check the user_id in the request metadata.

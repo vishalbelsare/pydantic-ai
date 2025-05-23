@@ -11,6 +11,7 @@ from typing import Any, Literal, Union, cast, overload
 
 from typing_extensions import assert_never
 
+from pydantic_ai.exceptions import UserError
 from pydantic_ai.providers import Provider, infer_provider
 
 from .. import ModelHTTPError, UnexpectedModelBehavior, _utils, usage
@@ -294,7 +295,7 @@ class OpenAIModel(Model):
                 reasoning_effort=model_settings.get('openai_reasoning_effort', NOT_GIVEN),
                 logprobs=model_settings.get('openai_logprobs', NOT_GIVEN),
                 top_logprobs=model_settings.get('openai_top_logprobs', NOT_GIVEN),
-                user=model_settings.get('openai_user', NOT_GIVEN),
+                user=self._get_user_id(model_settings),
                 extra_headers=extra_headers,
                 extra_body=model_settings.get('extra_body'),
             )
@@ -355,6 +356,15 @@ class OpenAIModel(Model):
             _response=peekable_response,
             _timestamp=datetime.fromtimestamp(first_chunk.created, tz=timezone.utc),
         )
+
+    def _get_user_id(self, model_settings: OpenAIModelSettings) -> str | NotGiven:
+        openai_user = model_settings.get('openai_user', None)
+        global_user_id = model_settings.get('user_id', None)
+        if openai_user and global_user_id:
+            raise UserError('Both openai_user and user_id are set, please use only `user_id`.')
+        elif openai_user:
+            warnings.warn('The `openai_user` setting is deprecated, please use `user_id` instead.', DeprecationWarning)
+        return openai_user or global_user_id or NOT_GIVEN
 
     def _get_tools(self, model_request_parameters: ModelRequestParameters) -> list[chat.ChatCompletionToolParam]:
         tools = [self._map_tool_definition(r) for r in model_request_parameters.function_tools]

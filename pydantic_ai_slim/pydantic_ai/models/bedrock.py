@@ -279,7 +279,7 @@ class BedrockConverseModel(Model):
         self,
         messages: list[ModelMessage],
         stream: Literal[True],
-        model_settings: BedrockModelSettings | None,
+        model_settings: BedrockModelSettings,
         model_request_parameters: ModelRequestParameters,
     ) -> EventStream[ConverseStreamOutputTypeDef]:
         pass
@@ -289,7 +289,7 @@ class BedrockConverseModel(Model):
         self,
         messages: list[ModelMessage],
         stream: Literal[False],
-        model_settings: BedrockModelSettings | None,
+        model_settings: BedrockModelSettings,
         model_request_parameters: ModelRequestParameters,
     ) -> ConverseResponseTypeDef:
         pass
@@ -298,7 +298,7 @@ class BedrockConverseModel(Model):
         self,
         messages: list[ModelMessage],
         stream: bool,
-        model_settings: BedrockModelSettings | None,
+        model_settings: BedrockModelSettings,
         model_request_parameters: ModelRequestParameters,
     ) -> ConverseResponseTypeDef | EventStream[ConverseStreamOutputTypeDef]:
         tools = self._get_tools(model_request_parameters)
@@ -327,6 +327,8 @@ class BedrockConverseModel(Model):
             if performance_configuration := model_settings.get('bedrock_performance_configuration', None):
                 params['performanceConfig'] = performance_configuration
             if request_metadata := model_settings.get('bedrock_request_metadata', None):
+                if user_id := model_settings.get('user_id', None):
+                    request_metadata['user_id'] = user_id
                 params['requestMetadata'] = request_metadata
             if additional_model_response_fields_paths := model_settings.get(
                 'bedrock_additional_model_response_fields_paths', None

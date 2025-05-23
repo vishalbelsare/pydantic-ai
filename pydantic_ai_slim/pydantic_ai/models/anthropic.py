@@ -236,7 +236,7 @@ class AnthropicModel(Model):
                 temperature=model_settings.get('temperature', NOT_GIVEN),
                 top_p=model_settings.get('top_p', NOT_GIVEN),
                 timeout=model_settings.get('timeout', NOT_GIVEN),
-                metadata=model_settings.get('anthropic_metadata', NOT_GIVEN),
+                metadata=self._get_anthropic_metadata(model_settings) or NOT_GIVEN,
                 extra_headers=extra_headers,
                 extra_body=model_settings.get('extra_body'),
             )
@@ -274,6 +274,17 @@ class AnthropicModel(Model):
         return AnthropicStreamedResponse(
             _model_name=self._model_name, _response=peekable_response, _timestamp=timestamp
         )
+
+    def _get_anthropic_metadata(self, model_settings: AnthropicModelSettings) -> MetadataParam:
+        # NOTE: For now, `anthropic_metadata` has a single field (user_id), but we are not deprecating it yet because
+        # Anthropic may add more fields to it in the future.
+        anthropic_metadata = model_settings.pop('anthropic_metadata', {})
+        anthropic_user_id = anthropic_metadata.pop('user_id', None)
+        global_user_id = model_settings.get('user_id', None)
+        if anthropic_user_id and global_user_id:
+            raise UserError("Both anthropic_metadata['user_id'] and 'user_id' are set, please use only `user_id`.")
+        anthropic_metadata['user_id'] = anthropic_user_id or global_user_id
+        return anthropic_metadata
 
     def _get_tools(self, model_request_parameters: ModelRequestParameters) -> list[ToolParam]:
         tools = [self._map_tool_definition(r) for r in model_request_parameters.function_tools]

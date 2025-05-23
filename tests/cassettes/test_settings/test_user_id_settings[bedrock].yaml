@@ -1,0 +1,57 @@
+interactions:
+- request:
+    body: '{"messages": [{"role": "user", "content": [{"text": "What is the capital of France?"}]}], "system": [], "inferenceConfig":
+      {}}'
+    headers:
+      amz-sdk-invocation-id:
+      - !!binary |
+        YjI5NDQ2YWYtYmYzOC00ZjczLTgwM2UtZjNjNjgxNmM2NWNl
+      amz-sdk-request:
+      - !!binary |
+        YXR0ZW1wdD0x
+      content-length:
+      - '126'
+      content-type:
+      - !!binary |
+        YXBwbGljYXRpb24vanNvbg==
+    method: POST
+    uri: https://bedrock-runtime.us-east-1.amazonaws.com/model/us.amazon.nova-micro-v1%3A0/converse
+  response:
+    headers:
+      connection:
+      - keep-alive
+      content-length:
+      - '1932'
+      content-type:
+      - application/json
+    parsed_body:
+      metrics:
+        latencyMs: 1796
+      output:
+        message:
+          content:
+          - text: |-
+              The capital of France is Paris. Paris, officially known as "Ville de Paris," is not only the capital city but also the most populous city in France, with a population exceeding 2.1 million people within its administrative limits. It is located in the northern central part of the country, along the Seine River.
+
+              Paris is often referred to as "The City of Light" (La Ville Lumière) due to its role during the Enlightenment period and its historical association with knowledge and enlightenment. The city is renowned for its cultural, political, economic, and social influence on the world stage.
+
+              Some of the most iconic landmarks in Paris include:
+
+              1. **The Eiffel Tower** - An iconic iron lattice tower built in 1889, it stands as a global symbol of France.
+              2. **The Louvre Museum** - One of the world's largest and most visited museums, housing thousands of works of art, including the Mona Lisa and the Venus de Milo.
+              3. **Notre-Dame Cathedral** - A masterpiece of French Gothic architecture, it has been a significant cultural and religious site for centuries.
+              4. **The Arc de Triomphe** - A historic monument that honors those who fought and died for France in the French Revolutionary and Napoleonic Wars.
+              5. **The Champs-Élysées and the Place de la Concorde** - A famous avenue known for its luxury shops and theaters, ending at the Place de la Concorde.
+              6. **The Palace of Versailles** - A former royal residence located just outside Paris, known for its opulent architecture and gardens.
+
+              Paris is also famous for its fashion industry, culinary scene, and numerous art and history museums. The city is a hub for international diplomacy, with many embassies and international organizations located within its boundaries.
+          role: assistant
+      stopReason: end_turn
+      usage:
+        inputTokens: 7
+        outputTokens: 358
+        totalTokens: 365
+    status:
+      code: 200
+      message: OK
+version: 1

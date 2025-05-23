@@ -141,6 +141,17 @@ class ModelSettings(TypedDict, total=False):
     * Cohere
     """
 
+    user_id: str
+    """A unique identifier representing the end-user.
+
+    Supported by:
+
+    * OpenAI
+    * Anthropic
+    * Bedrock
+    * Groq
+    """
+
     extra_headers: dict[str, str]
     """Extra headers to send to the model.
 

@@ -221,6 +221,7 @@ class GroqModel(Model):
                 presence_penalty=model_settings.get('presence_penalty', NOT_GIVEN),
                 frequency_penalty=model_settings.get('frequency_penalty', NOT_GIVEN),
                 logit_bias=model_settings.get('logit_bias', NOT_GIVEN),
+                user=model_settings.get('user_id', NOT_GIVEN),
                 extra_headers=extra_headers,
                 extra_body=model_settings.get('extra_body'),
             )

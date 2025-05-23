@@ -53,11 +53,11 @@ PYDANTIC_AI_HOME = Path.home() / '.pydantic-ai'
 This folder is used to store the prompt history and configuration.
 """
 
-PROMPT_HISTORY_PATH = PYDANTIC_AI_HOME / 'prompt-history.txt'
+PROMPT_HISTORY_FILENAME = 'prompt-history.txt'
 
 
 class SimpleCodeBlock(CodeBlock):
-    """Customised code blocks in markdown.
+    """Customized code blocks in markdown.
 
     This avoids a background color which messes up copy-pasting and sets the language name as dim prefix and suffix.
     """
@@ -70,7 +70,7 @@ class SimpleCodeBlock(CodeBlock):
 
 
 class LeftHeading(Heading):
-    """Customised headings in markdown to stop centering and prepend markdown style hashes."""
+    """Customized headings in markdown to stop centering and prepend markdown style hashes."""
 
     def __rich_console__(self, console: Console, options: ConsoleOptions) -> RenderResult:
         # note we use `Style(bold=True)` not `self.style_name` here to disable underlining which is ugly IMHO
@@ -102,7 +102,7 @@ def cli_exit(prog_name: str = 'pai'):  # pragma: no cover
     sys.exit(cli(prog_name=prog_name))
 
 
-def cli(args_list: Sequence[str] | None = None, *, prog_name: str = 'pai') -> int:
+def cli(args_list: Sequence[str] | None = None, *, prog_name: str = 'pai') -> int:  # noqa: C901
     """Run the CLI and return the exit code for the process."""
     parser = argparse.ArgumentParser(
         prog=prog_name,
@@ -122,7 +122,6 @@ Special prompts:
         '--model',
         nargs='?',
         help='Model to use, in format "<provider>:<model>" e.g. "openai:gpt-4o" or "anthropic:claude-3-7-sonnet-latest". Defaults to "openai:gpt-4o".',
-        default='openai:gpt-4o',
     )
     # we don't want to autocomplete or list models that don't include the provider,
     # e.g. we want to show `openai:gpt-4o` but not `gpt-4o`
@@ -153,40 +152,49 @@ Special prompts:
     args = parser.parse_args(args_list)
 
     console = Console()
-    console.print(
-        f'[green]{prog_name} - PydanticAI CLI v{__version__} using[/green] [magenta]{args.model}[/magenta]',
-        highlight=False,
-    )
+    name_version = f'[green]{prog_name} - PydanticAI CLI v{__version__}[/green]'
     if args.version:
+        console.print(name_version, highlight=False)
         return 0
     if args.list_models:
-        console.print('Available models:', style='green bold')
+        console.print(f'{name_version}\n\n[green]Available models:[/green]')
         for model in qualified_model_names:
             console.print(f'  {model}', highlight=False)
         return 0
 
     agent: Agent[None, str] = cli_agent
     if args.agent:
+        sys.path.append(os.getcwd())
         try:
-            current_path = os.getcwd()
-            sys.path.append(current_path)
-
             module_path, variable_name = args.agent.split(':')
-            module = importlib.import_module(module_path)
-            agent = getattr(module, variable_name)
-            if not isinstance(agent, Agent):
-                console.print(f'[red]Error: {args.agent} is not an Agent instance[/red]')
-                return 1
-            console.print(f'[green]Using custom agent:[/green] [magenta]{args.agent}[/magenta]', highlight=False)
         except ValueError:
             console.print('[red]Error: Agent must be specified in "module:variable" format[/red]')
             return 1
 
-    try:
-        agent.model = infer_model(args.model)
-    except UserError as e:
-        console.print(f'Error initializing [magenta]{args.model}[/magenta]:\n[red]{e}[/red]')
-        return 1
+        module = importlib.import_module(module_path)
+        agent = getattr(module, variable_name)
+        if not isinstance(agent, Agent):
+            console.print(f'[red]Error: {args.agent} is not an Agent instance[/red]')
+            return 1
+
+    model_arg_set = args.model is not None
+    if agent.model is None or model_arg_set:
+        try:
+            agent.model = infer_model(args.model or 'openai:gpt-4o')
+        except UserError as e:
+            console.print(f'Error initializing [magenta]{args.model}[/magenta]:\n[red]{e}[/red]')
+            return 1
+
+    model_name = agent.model if isinstance(agent.model, str) else f'{agent.model.system}:{agent.model.model_name}'
+    if args.agent and model_arg_set:
+        console.print(
+            f'{name_version} using custom agent [magenta]{args.agent}[/magenta] with [magenta]{model_name}[/magenta]',
+            highlight=False,
+        )
+    elif args.agent:
+        console.print(f'{name_version} using custom agent [magenta]{args.agent}[/magenta]', highlight=False)
+    else:
+        console.print(f'{name_version} with [magenta]{model_name}[/magenta]', highlight=False)
 
     stream = not args.no_stream
     if args.code_theme == 'light':
@@ -194,7 +202,7 @@ Special prompts:
     elif args.code_theme == 'dark':
         code_theme = 'monokai'
     else:
-        code_theme = args.code_theme
+        code_theme = args.code_theme  # pragma: no cover
 
     if prompt := cast(str, args.prompt):
         try:
@@ -203,27 +211,26 @@ Special prompts:
             pass
         return 0
 
-    # Ensure the history directory and file exist
-    PROMPT_HISTORY_PATH.parent.mkdir(parents=True, exist_ok=True)
-    PROMPT_HISTORY_PATH.touch(exist_ok=True)
-
-    # doing this instead of `PromptSession[Any](history=` allows mocking of PromptSession in tests
-    session: PromptSession[Any] = PromptSession(history=FileHistory(str(PROMPT_HISTORY_PATH)))
     try:
-        return asyncio.run(run_chat(session, stream, agent, console, code_theme, prog_name))
+        return asyncio.run(run_chat(stream, agent, console, code_theme, prog_name))
     except KeyboardInterrupt:  # pragma: no cover
         return 0
 
 
 async def run_chat(
-    session: PromptSession[Any],
     stream: bool,
     agent: Agent[AgentDepsT, OutputDataT],
     console: Console,
     code_theme: str,
     prog_name: str,
+    config_dir: Path | None = None,
     deps: AgentDepsT = None,
 ) -> int:
+    prompt_history_path = (config_dir or PYDANTIC_AI_HOME) / PROMPT_HISTORY_FILENAME
+    prompt_history_path.parent.mkdir(parents=True, exist_ok=True)
+    prompt_history_path.touch(exist_ok=True)
+    session: PromptSession[Any] = PromptSession(history=FileHistory(str(prompt_history_path)))
+
     multiline = False
     messages: list[ModelMessage] = []
 

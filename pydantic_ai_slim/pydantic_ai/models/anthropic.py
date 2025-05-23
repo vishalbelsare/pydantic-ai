@@ -5,7 +5,6 @@ from collections.abc import AsyncGenerator, AsyncIterable, AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from json import JSONDecodeError, loads as json_loads
 from typing import Any, Literal, Union, cast, overload
 
 from anthropic.types import ServerToolUseBlock, ToolUnionParam, WebSearchTool20250305Param, WebSearchToolResultBlock
@@ -249,7 +248,7 @@ class AnthropicModel(Model):
         except APIStatusError as e:
             if (status_code := e.status_code) >= 400:
                 raise ModelHTTPError(status_code=status_code, model_name=self.model_name, body=e.body) from e
-            raise
+            raise  # pragma: lax no cover
 
     def _process_response(self, response: AnthropicMessage) -> ModelResponse:
         """Process a non-streamed response, and prepare a message to return."""
@@ -270,13 +269,13 @@ class AnthropicModel(Model):
                     )
                 )
 
-        return ModelResponse(items, usage=_map_usage(response), model_name=response.model)
+        return ModelResponse(items, usage=_map_usage(response), model_name=response.model, vendor_id=response.id)
 
     async def _process_streamed_response(self, response: AsyncStream[RawMessageStreamEvent]) -> StreamedResponse:
         peekable_response = _utils.PeekableAsyncStream(response)
         first_chunk = await peekable_response.peek()
         if isinstance(first_chunk, _utils.Unset):
-            raise UnexpectedModelBehavior('Streamed response ended without content or tool calls')
+            raise UnexpectedModelBehavior('Streamed response ended without content or tool calls')  # pragma: no cover
 
         # Since Anthropic doesn't provide a timestamp in the message, we'll use the current time
         timestamp = datetime.now(tz=timezone.utc)
@@ -329,9 +328,10 @@ class AnthropicModel(Model):
                             is_error=False,
                         )
                         user_content_params.append(tool_result_block_param)
-                    elif isinstance(request_part, RetryPromptPart):
+                    elif isinstance(request_part, RetryPromptPart):  # pragma: no branch
                         if request_part.tool_name is None:
-                            retry_param = TextBlockParam(type='text', text=request_part.model_response())
+                            text = request_part.model_response()  # pragma: no cover
+                            retry_param = TextBlockParam(type='text', text=text)  # pragma: no cover
                         else:
                             retry_param = ToolResultBlockParam(
                                 tool_use_id=_guard_tool_call_id(t=request_part),
@@ -404,7 +404,7 @@ class AnthropicModel(Model):
                     else:  # pragma: no cover
                         raise RuntimeError(f'Unsupported media type: {item.media_type}')
                 else:
-                    raise RuntimeError(f'Unsupported content type: {type(item)}')
+                    raise RuntimeError(f'Unsupported content type: {type(item)}')  # pragma: no cover
 
     @staticmethod
     def _map_tool_definition(f: ToolDefinition) -> ToolParam:
@@ -463,7 +463,6 @@ class AnthropicStreamedResponse(StreamedResponse):
 
     async def _get_event_iterator(self) -> AsyncIterator[ModelResponseStreamEvent]:
         current_block: ContentBlock | None = None
-        current_json: str = ''
 
         async for event in self._response:
             self._usage += _map_usage(event)
@@ -471,40 +470,34 @@ class AnthropicStreamedResponse(StreamedResponse):
             if isinstance(event, RawContentBlockStartEvent):
                 current_block = event.content_block
                 if isinstance(current_block, TextBlock) and current_block.text:
-                    yield self._parts_manager.handle_text_delta(vendor_part_id='content', content=current_block.text)
-                elif isinstance(current_block, ToolUseBlock):
+                    yield self._parts_manager.handle_text_delta(  # pragma: lax no cover
+                        vendor_part_id='content', content=current_block.text
+                    )
+                elif isinstance(current_block, ToolUseBlock):  # pragma: no branch
                     maybe_event = self._parts_manager.handle_tool_call_delta(
                         vendor_part_id=current_block.id,
                         tool_name=current_block.name,
-                        args=cast(dict[str, Any], current_block.input),
+                        args=cast(dict[str, Any], current_block.input) or None,
                         tool_call_id=current_block.id,
                     )
-                    if maybe_event is not None:
+                    if maybe_event is not None:  # pragma: no branch
                         yield maybe_event
 
             elif isinstance(event, RawContentBlockDeltaEvent):
                 if isinstance(event.delta, TextDelta):
-                    yield self._parts_manager.handle_text_delta(vendor_part_id='content', content=event.delta.text)
-                elif (
+                    yield self._parts_manager.handle_text_delta(  # pragma: no cover
+                        vendor_part_id='content', content=event.delta.text
+                    )
+                elif (  # pragma: no branch
                     current_block and event.delta.type == 'input_json_delta' and isinstance(current_block, ToolUseBlock)
                 ):
-                    # Try to parse the JSON immediately, otherwise cache the value for later. This handles
-                    # cases where the JSON is not currently valid but will be valid once we stream more tokens.
-                    try:
-                        parsed_args = json_loads(current_json + event.delta.partial_json)
-                        current_json = ''
-                    except JSONDecodeError:
-                        current_json += event.delta.partial_json
-                        continue
-
-                    # For tool calls, we need to handle partial JSON updates
                     maybe_event = self._parts_manager.handle_tool_call_delta(
                         vendor_part_id=current_block.id,
                         tool_name='',
-                        args=parsed_args,
+                        args=event.delta.partial_json,
                         tool_call_id=current_block.id,
                     )
-                    if maybe_event is not None:
+                    if maybe_event is not None:  # pragma: no branch
                         yield maybe_event
 
             elif isinstance(event, (RawContentBlockStopEvent, RawMessageStopEvent)):

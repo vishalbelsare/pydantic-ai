@@ -1,5 +1,5 @@
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Annotated, Any, Callable, Literal, Union
 
 import pydantic_core
@@ -514,9 +514,55 @@ def test_init_tool_ctx():
     assert agent_infer._function_tools['ctx_tool'].takes_ctx is True
 
 
-def test_repeat_tool():
+def test_repeat_tool_by_rename():
+    """
+    1. add tool `bar`
+    2. add tool `foo` then rename it to `bar`, causing a conflict with `bar`
+    """
+
     with pytest.raises(UserError, match="Tool name conflicts with existing tool: 'ctx_tool'"):
         Agent('test', tools=[Tool(ctx_tool), ctx_tool], deps_type=int)
+
+    agent = Agent('test')
+
+    async def change_tool_name(ctx: RunContext[None], tool_def: ToolDefinition) -> Union[ToolDefinition, None]:
+        tool_def.name = 'bar'
+        return tool_def
+
+    @agent.tool_plain
+    def bar(x: int, y: str) -> str:  # pragma: no cover
+        return f'{x} {y}'
+
+    @agent.tool_plain(prepare=change_tool_name)
+    def foo(x: int, y: str) -> str:  # pragma: no cover
+        return f'{x} {y}'
+
+    with pytest.raises(UserError, match=r"Renaming tool 'foo' to 'bar' conflicts with existing tool."):
+        agent.run_sync('')
+
+
+def test_repeat_tool():
+    """
+    1. add tool `foo`, then rename it to `bar`
+    2. add tool `bar`, causing a conflict with `bar`
+    """
+
+    agent = Agent('test')
+
+    async def change_tool_name(ctx: RunContext[None], tool_def: ToolDefinition) -> Union[ToolDefinition, None]:
+        tool_def.name = 'bar'
+        return tool_def
+
+    @agent.tool_plain(prepare=change_tool_name)
+    def foo(x: int, y: str) -> str:  # pragma: no cover
+        return f'{x} {y}'
+
+    @agent.tool_plain
+    def bar(x: int, y: str) -> str:  # pragma: no cover
+        return f'{x} {y}'
+
+    with pytest.raises(UserError, match=r"Tool name conflicts with existing tool: 'bar'."):
+        agent.run_sync('')
 
 
 def test_tool_return_conflict():
@@ -668,7 +714,7 @@ def test_dynamic_tool_decorator():
 def test_plain_tool_name():
     agent = Agent(FunctionModel(get_json_schema))
 
-    def my_tool(arg: str) -> str: ...
+    def my_tool(arg: str) -> str: ...  # pragma: no branch
 
     agent.tool_plain(name='foo_tool')(my_tool)
     result = agent.run_sync('Hello')
@@ -679,7 +725,7 @@ def test_plain_tool_name():
 def test_tool_name():
     agent = Agent(FunctionModel(get_json_schema))
 
-    def my_tool(ctx: RunContext, arg: str) -> str: ...
+    def my_tool(ctx: RunContext, arg: str) -> str: ...  # pragma: no branch
 
     agent.tool(name='foo_tool')(my_tool)
     result = agent.run_sync('Hello')
@@ -783,6 +829,20 @@ def test_enforce_parameter_descriptions() -> None:
         'bar',
     ]
     assert all(err_part in error_reason for err_part in error_parts)
+
+
+def test_enforce_parameter_descriptions_noraise() -> None:
+    async def complete_parameter_descriptions_docstring(ctx: RunContext, foo: int) -> str:  # pragma: no cover
+        """Describes function ops, but missing ctx description and contains non-existent parameter description.
+
+        :param foo: The foo thing.
+        :param bar: The bar thing.
+        """
+        return f'{foo}'
+
+    agent = Agent(FunctionModel(get_json_schema))
+
+    agent.tool(require_parameter_descriptions=True)(complete_parameter_descriptions_docstring)
 
 
 def test_json_schema_required_parameters(set_event_loop: None):
@@ -932,7 +992,7 @@ def test_tool_parameters_with_attribute_docstrings():
         """The second parameter"""
 
     @agent.tool_plain
-    def get_score(data: Data) -> int: ...
+    def get_score(data: Data) -> int: ...  # pragma: no branch
 
     result = agent.run_sync('Hello')
     json_schema = json.loads(result.output)
@@ -954,3 +1014,37 @@ def test_tool_parameters_with_attribute_docstrings():
             'strict': None,
         }
     )
+
+
+def test_dynamic_tools_agent_wide():
+    async def prepare_tool_defs(
+        ctx: RunContext[int], tool_defs: list[ToolDefinition]
+    ) -> Union[list[ToolDefinition], None]:
+        if ctx.deps == 42:
+            return []
+        elif ctx.deps == 43:
+            return None
+        elif ctx.deps == 21:
+            return [replace(tool_def, strict=True) for tool_def in tool_defs]
+        return tool_defs
+
+    agent = Agent('test', deps_type=int, prepare_tools=prepare_tool_defs)
+
+    @agent.tool
+    def foobar(ctx: RunContext[int], x: int, y: str) -> str:
+        return f'{ctx.deps} {x} {y}'
+
+    result = agent.run_sync('', deps=42)
+    assert result.output == snapshot('success (no tool calls)')
+
+    result = agent.run_sync('', deps=43)
+    assert result.output == snapshot('success (no tool calls)')
+
+    with agent.override(model=FunctionModel(get_json_schema)):
+        result = agent.run_sync('', deps=21)
+        json_schema = json.loads(result.output)
+        assert agent._function_tools['foobar'].strict is None
+        assert json_schema['strict'] is True
+
+    result = agent.run_sync('', deps=1)
+    assert result.output == snapshot('{"foobar":"1 0 a"}')

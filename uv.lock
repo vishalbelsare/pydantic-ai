@@ -232,9 +232,9 @@ source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "sniffio" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/6a/da/e7908b54e0f8043725a990bf625f2041ecf6bfe8eb7b19407f1c00b630f7/asgi-lifespan-2.1.0.tar.gz", hash = "sha256:5e2effaf0bfe39829cf2d64e7ecc47c7d86d676a6599f7afba378c31f5e3a308", size = 15627 }
+sdist = { url = "https://files.pythonhosted.org/packages/6a/da/e7908b54e0f8043725a990bf625f2041ecf6bfe8eb7b19407f1c00b630f7/asgi-lifespan-2.1.0.tar.gz", hash = "sha256:5e2effaf0bfe39829cf2d64e7ecc47c7d86d676a6599f7afba378c31f5e3a308", size = 15627, upload-time = "2023-03-28T17:35:49.126Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/2f/f5/c36551e93acba41a59939ae6a0fb77ddb3f2e8e8caa716410c65f7341f72/asgi_lifespan-2.1.0-py3-none-any.whl", hash = "sha256:ed840706680e28428c01e14afb3875d7d76d3206f3d5b2f2294e059b5c23804f", size = 10895 },
+    { url = "https://files.pythonhosted.org/packages/2f/f5/c36551e93acba41a59939ae6a0fb77ddb3f2e8e8caa716410c65f7341f72/asgi_lifespan-2.1.0-py3-none-any.whl", hash = "sha256:ed840706680e28428c01e14afb3875d7d76d3206f3d5b2f2294e059b5c23804f", size = 10895, upload-time = "2023-03-28T17:35:47.772Z" },
 ]
 
 [[package]]
@@ -960,6 +960,15 @@ wheels = [
 ]
 
 [[package]]
+name = "execnet"
+version = "2.1.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/bb/ff/b4c0dc78fbe20c3e59c0c7334de0c27eb4001a2b2017999af398bf730817/execnet-2.1.1.tar.gz", hash = "sha256:5189b52c6121c24feae288166ab41b32549c7e2348652736540b9e6e7d4e72e3", size = 166524, upload-time = "2024-04-08T09:04:19.245Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/43/09/2aea36ff60d16dd8879bdb2f5b3ee0ba8d08cbbdcdfe870e695ce3784385/execnet-2.1.1-py3-none-any.whl", hash = "sha256:26dee51f1b80cebd6d0ca8e74dd8745419761d3bef34163928cbebbdc4749fdc", size = 40612, upload-time = "2024-04-08T09:04:17.414Z" },
+]
+
+[[package]]
 name = "executing"
 version = "2.2.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1178,6 +1187,24 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/c6/eb/d504ba1daf190af6b204a9d4714d457462b486043744901a6eeea711f913/google_auth-2.38.0.tar.gz", hash = "sha256:8285113607d3b80a3f1543b75962447ba8a09fe85783432a784fdeef6ac094c4", size = 270866, upload-time = "2025-01-23T01:05:29.119Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/9d/47/603554949a37bca5b7f894d51896a9c534b9eab808e2520a748e081669d0/google_auth-2.38.0-py2.py3-none-any.whl", hash = "sha256:e7dae6694313f434a2727bf2906f27ad259bae090d7aa896590d86feec3d9d4a", size = 210770, upload-time = "2025-01-23T01:05:26.572Z" },
+]
+
+[[package]]
+name = "google-genai"
+version = "1.15.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "anyio" },
+    { name = "google-auth" },
+    { name = "httpx" },
+    { name = "pydantic" },
+    { name = "requests" },
+    { name = "typing-extensions" },
+    { name = "websockets" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/f4/19/da5a085ce419c33b9e6ae308005efad9bfa1b10f59f449d075bba1f16a64/google_genai-1.15.0.tar.gz", hash = "sha256:118bb26960d6343cd64f1aeb5c2b02144a36ad06716d0d1eb1fa3e0904db51f1", size = 173452, upload-time = "2025-05-13T13:55:17.73Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/6f/e2/acc99d36fd439fb2e558c7aebd049329dbfc08a094faf17d847d393e2810/google_genai-1.15.0-py3-none-any.whl", hash = "sha256:6d7f149cc735038b680722bed495004720514c234e2a445ab2f27967955071dd", size = 171278, upload-time = "2025-05-13T13:55:16.314Z" },
 ]
 
 [[package]]
@@ -2354,9 +2381,9 @@ dependencies = [
     { name = "opentelemetry-util-http" },
     { name = "wrapt" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/b7/d5/4a3990c461ae7e55212115e0f8f3aa412b5ce6493579e85c292245ac69ea/opentelemetry_instrumentation_httpx-0.51b0.tar.gz", hash = "sha256:061d426a04bf5215a859fea46662e5074f920e5cbde7e6ad6825a0a1b595802c", size = 17700 }
+sdist = { url = "https://files.pythonhosted.org/packages/b7/d5/4a3990c461ae7e55212115e0f8f3aa412b5ce6493579e85c292245ac69ea/opentelemetry_instrumentation_httpx-0.51b0.tar.gz", hash = "sha256:061d426a04bf5215a859fea46662e5074f920e5cbde7e6ad6825a0a1b595802c", size = 17700, upload-time = "2025-02-04T18:21:31.685Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/c3/ba/23d4ab6402408c01f1c3f32e0c04ea6dae575bf19bcb9a0049c9e768c983/opentelemetry_instrumentation_httpx-0.51b0-py3-none-any.whl", hash = "sha256:2e3fdf755ba6ead6ab43031497c3d55d4c796d0368eccc0ce48d304b7ec6486a", size = 14109 },
+    { url = "https://files.pythonhosted.org/packages/c3/ba/23d4ab6402408c01f1c3f32e0c04ea6dae575bf19bcb9a0049c9e768c983/opentelemetry_instrumentation_httpx-0.51b0-py3-none-any.whl", hash = "sha256:2e3fdf755ba6ead6ab43031497c3d55d4c796d0368eccc0ce48d304b7ec6486a", size = 14109, upload-time = "2025-02-04T18:20:19.947Z" },
 ]
 
 [[package]]
@@ -2868,7 +2895,7 @@ wheels = [
 name = "pydantic-ai"
 source = { editable = "." }
 dependencies = [
-    { name = "pydantic-ai-slim", extra = ["a2a", "anthropic", "bedrock", "cli", "cohere", "evals", "groq", "mcp", "mistral", "openai", "vertexai"] },
+    { name = "pydantic-ai-slim", extra = ["a2a", "anthropic", "bedrock", "cli", "cohere", "evals", "google", "groq", "mcp", "mistral", "openai", "vertexai"] },
 ]
 
 [package.optional-dependencies]
@@ -2902,7 +2929,7 @@ lint = [
 requires-dist = [
     { name = "logfire", marker = "extra == 'logfire'", specifier = ">=3.11.0" },
     { name = "pydantic-ai-examples", marker = "extra == 'examples'", editable = "examples" },
-    { name = "pydantic-ai-slim", extras = ["a2a", "anthropic", "bedrock", "cli", "cohere", "evals", "groq", "mcp", "mistral", "openai", "vertexai"], editable = "pydantic_ai_slim" },
+    { name = "pydantic-ai-slim", extras = ["a2a", "anthropic", "bedrock", "cli", "cohere", "evals", "google", "groq", "mcp", "mistral", "openai", "vertexai"], editable = "pydantic_ai_slim" },
 ]
 provides-extras = ["examples", "logfire"]
 
@@ -2963,7 +2990,6 @@ source = { editable = "pydantic_ai_slim" }
 dependencies = [
     { name = "eval-type-backport" },
     { name = "exceptiongroup", marker = "python_full_version < '3.11'" },
-    { name = "fasta2a" },
     { name = "griffe" },
     { name = "httpx" },
     { name = "opentelemetry-api" },
@@ -2995,6 +3021,9 @@ duckduckgo = [
 ]
 evals = [
     { name = "pydantic-evals" },
+]
+google = [
+    { name = "google-genai" },
 ]
 groq = [
     { name = "groq" },
@@ -3035,6 +3064,7 @@ dev = [
     { name = "pytest-mock" },
     { name = "pytest-pretty" },
     { name = "pytest-recording" },
+    { name = "pytest-xdist" },
     { name = "strict-no-cover" },
 ]
 
@@ -3047,9 +3077,9 @@ requires-dist = [
     { name = "duckduckgo-search", marker = "extra == 'duckduckgo'", specifier = ">=7.0.0" },
     { name = "eval-type-backport", specifier = ">=0.2.0" },
     { name = "exceptiongroup", marker = "python_full_version < '3.11'" },
-    { name = "fasta2a", editable = "fasta2a" },
     { name = "fasta2a", marker = "extra == 'a2a'", editable = "fasta2a" },
     { name = "google-auth", marker = "extra == 'vertexai'", specifier = ">=2.36.0" },
+    { name = "google-genai", marker = "extra == 'google'", specifier = ">=1.15.0" },
     { name = "griffe", specifier = ">=1.3.2" },
     { name = "groq", marker = "extra == 'groq'", specifier = ">=0.15.0" },
     { name = "httpx", specifier = ">=0.27" },
@@ -3067,7 +3097,7 @@ requires-dist = [
     { name = "tavily-python", marker = "extra == 'tavily'", specifier = ">=0.5.0" },
     { name = "typing-inspection", specifier = ">=0.4.0" },
 ]
-provides-extras = ["a2a", "anthropic", "bedrock", "cli", "cohere", "duckduckgo", "evals", "groq", "logfire", "mcp", "mistral", "openai", "tavily", "vertexai"]
+provides-extras = ["a2a", "anthropic", "bedrock", "cli", "cohere", "duckduckgo", "evals", "google", "groq", "logfire", "mcp", "mistral", "openai", "tavily", "vertexai"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -3084,6 +3114,7 @@ dev = [
     { name = "pytest-mock", specifier = ">=3.14.0" },
     { name = "pytest-pretty", specifier = ">=1.2.0" },
     { name = "pytest-recording", specifier = ">=0.13.2" },
+    { name = "pytest-xdist", specifier = ">=3.6.1" },
     { name = "strict-no-cover", specifier = ">=0.1.1" },
 ]
 
@@ -3358,6 +3389,19 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/fe/2a/ea6b8036ae01979eae02d8ad5a7da14dec90d9176b613e49fb8d134c78fc/pytest_recording-0.13.2.tar.gz", hash = "sha256:000c3babbb466681457fd65b723427c1779a0c6c17d9e381c3142a701e124877", size = 25270, upload-time = "2024-07-09T10:11:07.353Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/72/52/8e67a969e9fad3fa5ec4eab9f2a7348ff04692065c7deda21d76e9112703/pytest_recording-0.13.2-py3-none-any.whl", hash = "sha256:3820fe5743d1ac46e807989e11d073cb776a60bdc544cf43ebca454051b22d13", size = 12783, upload-time = "2024-07-09T10:11:05.322Z" },
+]
+
+[[package]]
+name = "pytest-xdist"
+version = "3.6.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "execnet" },
+    { name = "pytest" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/41/c4/3c310a19bc1f1e9ef50075582652673ef2bfc8cd62afef9585683821902f/pytest_xdist-3.6.1.tar.gz", hash = "sha256:ead156a4db231eec769737f57668ef58a2084a34b2e55c4a8fa20d861107300d", size = 84060, upload-time = "2024-04-28T19:29:54.414Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/6d/82/1d96bf03ee4c0fdc3c0cbe61470070e659ca78dc0086fb88b66c185e2449/pytest_xdist-3.6.1-py3-none-any.whl", hash = "sha256:9ed4adfb68a016610848639bb7e02c9352d5d9f03d04809919e2dafc3be4cca7", size = 46108, upload-time = "2024-04-28T19:29:52.813Z" },
 ]
 
 [[package]]

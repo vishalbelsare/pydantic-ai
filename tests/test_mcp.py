@@ -1,5 +1,6 @@
 """Tests for the MCP (Model Context Protocol) server implementation."""
 
+import re
 from pathlib import Path
 
 import pytest
@@ -52,6 +53,13 @@ async def test_stdio_server():
         # Test calling the temperature conversion tool
         result = await server.call_tool('celsius_to_fahrenheit', {'celsius': 0})
         assert result == snapshot('32.0')
+
+
+async def test_stdio_server_with_tool_prefix():
+    server = MCPServerStdio('python', ['-m', 'tests.mcp_server'], tool_prefix='foo')
+    async with server:
+        tools = await server.list_tools()
+        assert all(tool.name.startswith('foo_') for tool in tools)
 
 
 async def test_stdio_server_with_cwd():
@@ -121,6 +129,7 @@ async def test_agent_with_stdio_server(allow_model_requests: None, agent: Agent)
                     ),
                     model_name='gpt-4o-2024-08-06',
                     timestamp=IsDatetime(),
+                    vendor_id='chatcmpl-BRlnvvqIPFofAtKqtQKMWZkgXhzlT',
                 ),
                 ModelRequest(
                     parts=[
@@ -149,9 +158,45 @@ async def test_agent_with_stdio_server(allow_model_requests: None, agent: Agent)
                     ),
                     model_name='gpt-4o-2024-08-06',
                     timestamp=IsDatetime(),
+                    vendor_id='chatcmpl-BRlnyjUo5wlyqvdNdM5I8vIWjo1qF',
                 ),
             ]
         )
+
+
+async def test_agent_with_conflict_tool_name(agent: Agent):
+    @agent.tool_plain
+    def get_none() -> None:  # pragma: no cover
+        """Return nothing"""
+        return None
+
+    async with agent.run_mcp_servers():
+        with pytest.raises(
+            UserError,
+            match=re.escape(
+                "MCP Server 'MCPServerStdio(command='python', args=['-m', 'tests.mcp_server'], tool_prefix=None)' defines a tool whose name conflicts with existing tool: 'get_none'. Consider using `tool_prefix` to avoid name conflicts."
+            ),
+        ):
+            await agent.run('Get me a conflict')
+
+
+async def test_agent_with_prefix_tool_name(openai_api_key: str):
+    server = MCPServerStdio('python', ['-m', 'tests.mcp_server'], tool_prefix='foo')
+    model = OpenAIModel('gpt-4o', provider=OpenAIProvider(api_key=openai_api_key))
+    agent = Agent(
+        model,
+        mcp_servers=[server],
+    )
+
+    @agent.tool_plain
+    def get_none() -> None:  # pragma: no cover
+        """Return nothing"""
+        return None
+
+    async with agent.run_mcp_servers():
+        # This means that we passed the _prepare_request_parameters check and there is no conflict in the tool name
+        with pytest.raises(RuntimeError, match='Model requests are not allowed, since ALLOW_MODEL_REQUESTS is False'):
+            await agent.run('No conflict')
 
 
 async def test_agent_with_server_not_running(openai_api_key: str):
@@ -222,6 +267,7 @@ async def test_tool_returning_str(allow_model_requests: None, agent: Agent):
                     ),
                     model_name='gpt-4o-2024-08-06',
                     timestamp=IsDatetime(),
+                    vendor_id='chatcmpl-BRlo3e1Ud2lnvkddMilmwC7LAemiy',
                 ),
                 ModelRequest(
                     parts=[
@@ -254,6 +300,7 @@ async def test_tool_returning_str(allow_model_requests: None, agent: Agent):
                     ),
                     model_name='gpt-4o-2024-08-06',
                     timestamp=IsDatetime(),
+                    vendor_id='chatcmpl-BRlo41LxqBYgGKWgGrQn67fQacOLp',
                 ),
             ]
         )
@@ -277,7 +324,9 @@ async def test_tool_returning_text_resource(allow_model_requests: None, agent: A
                 ModelResponse(
                     parts=[
                         ToolCallPart(
-                            tool_name='get_product_name', args='{}', tool_call_id='call_LaiWltzI39sdquflqeuF0EyE'
+                            tool_name='get_product_name',
+                            args='{}',
+                            tool_call_id='call_LaiWltzI39sdquflqeuF0EyE',
                         )
                     ],
                     usage=Usage(
@@ -295,6 +344,7 @@ async def test_tool_returning_text_resource(allow_model_requests: None, agent: A
                     ),
                     model_name='gpt-4o-2024-08-06',
                     timestamp=IsDatetime(),
+                    vendor_id='chatcmpl-BRmhyweJVYonarb7s9ckIMSHf2vHo',
                 ),
                 ModelRequest(
                     parts=[
@@ -323,6 +373,7 @@ async def test_tool_returning_text_resource(allow_model_requests: None, agent: A
                     ),
                     model_name='gpt-4o-2024-08-06',
                     timestamp=IsDatetime(),
+                    vendor_id='chatcmpl-BRmhzqXFObpYwSzREMpJvX9kbDikR',
                 ),
             ]
         )
@@ -348,7 +399,9 @@ async def test_tool_returning_image_resource(allow_model_requests: None, agent: 
                 ModelResponse(
                     parts=[
                         ToolCallPart(
-                            tool_name='get_image_resource', args='{}', tool_call_id='call_nFsDHYDZigO0rOHqmChZ3pmt'
+                            tool_name='get_image_resource',
+                            args='{}',
+                            tool_call_id='call_nFsDHYDZigO0rOHqmChZ3pmt',
                         )
                     ],
                     usage=Usage(
@@ -366,6 +419,7 @@ async def test_tool_returning_image_resource(allow_model_requests: None, agent: 
                     ),
                     model_name='gpt-4o-2024-08-06',
                     timestamp=IsDatetime(),
+                    vendor_id='chatcmpl-BRlo7KYJVXuNZ5lLLdYcKZDsX2CHb',
                 ),
                 ModelRequest(
                     parts=[
@@ -405,6 +459,7 @@ async def test_tool_returning_image_resource(allow_model_requests: None, agent: 
                     ),
                     model_name='gpt-4o-2024-08-06',
                     timestamp=IsDatetime(),
+                    vendor_id='chatcmpl-BRloBGHh27w3fQKwxq4fX2cPuZJa9',
                 ),
             ]
         )
@@ -427,7 +482,11 @@ async def test_tool_returning_image(allow_model_requests: None, agent: Agent, im
                 ),
                 ModelResponse(
                     parts=[
-                        ToolCallPart(tool_name='get_image', args='{}', tool_call_id='call_Q7xG8CCG0dyevVfUS0ubsDdN')
+                        ToolCallPart(
+                            tool_name='get_image',
+                            args='{}',
+                            tool_call_id='call_Q7xG8CCG0dyevVfUS0ubsDdN',
+                        )
                     ],
                     usage=Usage(
                         requests=1,
@@ -444,6 +503,7 @@ async def test_tool_returning_image(allow_model_requests: None, agent: Agent, im
                     ),
                     model_name='gpt-4o-2024-08-06',
                     timestamp=IsDatetime(),
+                    vendor_id='chatcmpl-BRloGQJWIX0Qk7gtNzF4s2Fez0O29',
                 ),
                 ModelRequest(
                     parts=[
@@ -479,6 +539,7 @@ async def test_tool_returning_image(allow_model_requests: None, agent: Agent, im
                     ),
                     model_name='gpt-4o-2024-08-06',
                     timestamp=IsDatetime(),
+                    vendor_id='chatcmpl-BRloJHR654fSD0fcvLWZxtKtn0pag',
                 ),
             ]
         )
@@ -516,6 +577,7 @@ async def test_tool_returning_dict(allow_model_requests: None, agent: Agent):
                     ),
                     model_name='gpt-4o-2024-08-06',
                     timestamp=IsDatetime(),
+                    vendor_id='chatcmpl-BRloOs7Bb2tq8wJyy9Rv7SQ7L65a7',
                 ),
                 ModelRequest(
                     parts=[
@@ -544,6 +606,7 @@ async def test_tool_returning_dict(allow_model_requests: None, agent: Agent):
                     ),
                     model_name='gpt-4o-2024-08-06',
                     timestamp=IsDatetime(),
+                    vendor_id='chatcmpl-BRloPczU1HSCWnreyo21DdNtdOM7L',
                 ),
             ]
         )
@@ -569,7 +632,9 @@ async def test_tool_returning_error(allow_model_requests: None, agent: Agent):
                 ModelResponse(
                     parts=[
                         ToolCallPart(
-                            tool_name='get_error', args='{"value":false}', tool_call_id='call_rETXZWddAGZSHyVHAxptPGgc'
+                            tool_name='get_error',
+                            args='{"value":false}',
+                            tool_call_id='call_rETXZWddAGZSHyVHAxptPGgc',
                         )
                     ],
                     usage=Usage(
@@ -587,6 +652,7 @@ async def test_tool_returning_error(allow_model_requests: None, agent: Agent):
                     ),
                     model_name='gpt-4o-2024-08-06',
                     timestamp=IsDatetime(),
+                    vendor_id='chatcmpl-BRloSNg7aGSp1rXDkhInjMIUHKd7A',
                 ),
                 ModelRequest(
                     parts=[
@@ -601,7 +667,9 @@ async def test_tool_returning_error(allow_model_requests: None, agent: Agent):
                 ModelResponse(
                     parts=[
                         ToolCallPart(
-                            tool_name='get_error', args='{"value":true}', tool_call_id='call_4xGyvdghYKHN8x19KWkRtA5N'
+                            tool_name='get_error',
+                            args='{"value":true}',
+                            tool_call_id='call_4xGyvdghYKHN8x19KWkRtA5N',
                         )
                     ],
                     usage=Usage(
@@ -619,6 +687,7 @@ async def test_tool_returning_error(allow_model_requests: None, agent: Agent):
                     ),
                     model_name='gpt-4o-2024-08-06',
                     timestamp=IsDatetime(),
+                    vendor_id='chatcmpl-BRloTvSkFeX4DZKQLqfH9KbQkWlpt',
                 ),
                 ModelRequest(
                     parts=[
@@ -651,6 +720,7 @@ async def test_tool_returning_error(allow_model_requests: None, agent: Agent):
                     ),
                     model_name='gpt-4o-2024-08-06',
                     timestamp=IsDatetime(),
+                    vendor_id='chatcmpl-BRloU3MhnqNEqujs28a3ofRbs7VPF',
                 ),
             ]
         )
@@ -688,6 +758,7 @@ async def test_tool_returning_none(allow_model_requests: None, agent: Agent):
                     ),
                     model_name='gpt-4o-2024-08-06',
                     timestamp=IsDatetime(),
+                    vendor_id='chatcmpl-BRloX2RokWc9j9PAXAuNXGR73WNqY',
                 ),
                 ModelRequest(
                     parts=[
@@ -716,6 +787,7 @@ async def test_tool_returning_none(allow_model_requests: None, agent: Agent):
                     ),
                     model_name='gpt-4o-2024-08-06',
                     timestamp=IsDatetime(),
+                    vendor_id='chatcmpl-BRloYWGujk8yE94gfVSsM1T1Ol2Ej',
                 ),
             ]
         )
@@ -741,7 +813,9 @@ async def test_tool_returning_multiple_items(allow_model_requests: None, agent: 
                 ModelResponse(
                     parts=[
                         ToolCallPart(
-                            tool_name='get_multiple_items', args='{}', tool_call_id='call_kL0TvjEVQBDGZrn1Zv7iNYOW'
+                            tool_name='get_multiple_items',
+                            args='{}',
+                            tool_call_id='call_kL0TvjEVQBDGZrn1Zv7iNYOW',
                         )
                     ],
                     usage=Usage(
@@ -759,6 +833,7 @@ async def test_tool_returning_multiple_items(allow_model_requests: None, agent: 
                     ),
                     model_name='gpt-4o-2024-08-06',
                     timestamp=IsDatetime(),
+                    vendor_id='chatcmpl-BRlobKLgm6vf79c9O8sloZaYx3coC',
                 ),
                 ModelRequest(
                     parts=[
@@ -803,6 +878,7 @@ async def test_tool_returning_multiple_items(allow_model_requests: None, agent: 
                     ),
                     model_name='gpt-4o-2024-08-06',
                     timestamp=IsDatetime(),
+                    vendor_id='chatcmpl-BRloepWR5NJpTgSqFBGTSPeM1SWm8',
                 ),
             ]
         )

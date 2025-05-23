@@ -27,7 +27,7 @@ from . import (
 )
 from .result import OutputDataT, ToolOutput
 from .settings import ModelSettings, merge_model_settings
-from .tools import RunContext, Tool, ToolDefinition
+from .tools import RunContext, Tool, ToolDefinition, ToolsPrepareFunc
 
 if TYPE_CHECKING:
     from .mcp import MCPServer
@@ -98,6 +98,8 @@ class GraphAgentDeps(Generic[DepsT, OutputDataT]):
     default_retries: int
 
     tracer: Tracer
+
+    prepare_tools: ToolsPrepareFunc[DepsT] | None = None
 
 
 class AgentNode(BaseNode[GraphAgentState, GraphAgentDeps[DepsT, Any], result.FinalResult[NodeRunEndT]]):
@@ -198,7 +200,9 @@ class UserPromptNode(AgentNode[DepsT, NodeRunEndT]):
                     for i, part in enumerate(msg.parts):
                         if isinstance(part, _messages.SystemPromptPart) and part.dynamic_ref:
                             # Look up the runner by its ref
-                            if runner := self.system_prompt_dynamic_functions.get(part.dynamic_ref):
+                            if runner := self.system_prompt_dynamic_functions.get(  # pragma: lax no cover
+                                part.dynamic_ref
+                            ):
                                 updated_part_content = await runner.run(run_context)
                                 msg.parts[i] = _messages.SystemPromptPart(
                                     updated_part_content, dynamic_ref=part.dynamic_ref
@@ -220,26 +224,44 @@ async def _prepare_request_parameters(
     ctx: GraphRunContext[GraphAgentState, GraphAgentDeps[DepsT, NodeRunEndT]],
 ) -> models.ModelRequestParameters:
     """Build tools and create an agent model."""
-    function_tool_defs: list[ToolDefinition] = []
+    function_tool_defs_map: dict[str, ToolDefinition] = {}
 
     run_context = build_run_context(ctx)
 
     async def add_tool(tool: Tool[DepsT]) -> None:
         ctx = run_context.replace_with(retry=tool.current_retry, tool_name=tool.name)
         if tool_def := await tool.prepare_tool_def(ctx):
-            function_tool_defs.append(tool_def)
+            # prepare_tool_def may change tool_def.name
+            if tool_def.name in function_tool_defs_map:
+                if tool_def.name != tool.name:
+                    # Prepare tool def may have renamed the tool
+                    raise exceptions.UserError(
+                        f"Renaming tool '{tool.name}' to '{tool_def.name}' conflicts with existing tool."
+                    )
+                else:
+                    raise exceptions.UserError(f'Tool name conflicts with existing tool: {tool.name!r}.')
+            function_tool_defs_map[tool_def.name] = tool_def
 
     async def add_mcp_server_tools(server: MCPServer) -> None:
         if not server.is_running:
             raise exceptions.UserError(f'MCP server is not running: {server}')
         tool_defs = await server.list_tools()
-        # TODO(Marcelo): We should check if the tool names are unique. If not, we should raise an error.
-        function_tool_defs.extend(tool_defs)
+        for tool_def in tool_defs:
+            if tool_def.name in function_tool_defs_map:
+                raise exceptions.UserError(
+                    f"MCP Server '{server}' defines a tool whose name conflicts with existing tool: {tool_def.name!r}. Consider using `tool_prefix` to avoid name conflicts."
+                )
+            function_tool_defs_map[tool_def.name] = tool_def
 
     await asyncio.gather(
         *map(add_tool, ctx.deps.function_tools.values()),
         *map(add_mcp_server_tools, ctx.deps.mcp_servers),
     )
+    function_tool_defs = list(function_tool_defs_map.values())
+    if ctx.deps.prepare_tools:
+        # Prepare the tools using the provided function
+        # This also acts over tool definitions pulled from MCP servers
+        function_tool_defs = await ctx.deps.prepare_tools(run_context, function_tool_defs) or []
 
     output_schema = ctx.deps.output_schema
     return models.ModelRequestParameters(
@@ -268,7 +290,7 @@ class ModelRequestNode(AgentNode[DepsT, NodeRunEndT]):
         if self._did_stream:
             # `self._result` gets set when exiting the `stream` contextmanager, so hitting this
             # means that the stream was started but not finished before `run()` was called
-            raise exceptions.AgentRunError('You must finish streaming before calling run()')
+            raise exceptions.AgentRunError('You must finish streaming before calling run()')  # pragma: no cover
 
         return await self._make_request(ctx)
 
@@ -319,7 +341,7 @@ class ModelRequestNode(AgentNode[DepsT, NodeRunEndT]):
         self, ctx: GraphRunContext[GraphAgentState, GraphAgentDeps[DepsT, NodeRunEndT]]
     ) -> CallToolsNode[DepsT, NodeRunEndT]:
         if self._result is not None:
-            return self._result
+            return self._result  # pragma: no cover
 
         model_settings, model_request_parameters = await self._prepare_request(ctx)
         model_request_parameters = ctx.deps.model.customize_request_parameters(model_request_parameters)
@@ -336,7 +358,7 @@ class ModelRequestNode(AgentNode[DepsT, NodeRunEndT]):
         ctx.state.message_history.append(self.request)
 
         # Check usage
-        if ctx.deps.usage_limits:
+        if ctx.deps.usage_limits:  # pragma: no branch
             ctx.deps.usage_limits.check_before_request(ctx.state.usage)
 
         # Increment run_step
@@ -353,7 +375,7 @@ class ModelRequestNode(AgentNode[DepsT, NodeRunEndT]):
     ) -> CallToolsNode[DepsT, NodeRunEndT]:
         # Update usage
         ctx.state.usage.incr(response.usage)
-        if ctx.deps.usage_limits:
+        if ctx.deps.usage_limits:  # pragma: no branch
             ctx.deps.usage_limits.check_tokens(ctx.state.usage)
 
         # Append the model response to state.message_history
@@ -738,7 +760,7 @@ async def _tool_from_mcp_server(
 
     for server in ctx.deps.mcp_servers:
         tools = await server.list_tools()
-        if tool_name in {tool.name for tool in tools}:
+        if tool_name in {tool.name for tool in tools}:  # pragma: no branch
             return Tool(name=tool_name, function=run_tool, takes_ctx=True, max_retries=ctx.deps.default_retries)
     return None
 

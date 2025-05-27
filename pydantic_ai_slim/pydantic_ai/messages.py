@@ -914,6 +914,29 @@ class FunctionToolResultEvent:
     __repr__ = _utils.dataclasses_no_defaults_repr
 
 
+@dataclass(repr=False)
+class ServerToolCallEvent:
+    """An event indicating the start to a call to a server tool."""
+
+    part: ServerToolCallPart
+    """The server tool call to make."""
+
+    event_kind: Literal['server_tool_call'] = 'server_tool_call'
+    """Event type identifier, used as a discriminator."""
+
+
+@dataclass(repr=False)
+class ServerToolResultEvent:
+    """An event indicating the result of a server tool call."""
+
+    result: ServerToolReturnPart
+    """The result of the call to the server tool."""
+
+    event_kind: Literal['server_tool_result'] = 'server_tool_result'
+    """Event type identifier, used as a discriminator."""
+
+
 HandleResponseEvent = Annotated[
-    Union[FunctionToolCallEvent, FunctionToolResultEvent], pydantic.Discriminator('event_kind')
+    Union[FunctionToolCallEvent, FunctionToolResultEvent, ServerToolCallEvent, ServerToolResultEvent],
+    pydantic.Discriminator('event_kind'),
 ]

@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from typing import Any, Literal, Union, cast, overload
 
 from anthropic.types.beta import (
+    BetaCodeExecutionToolResultBlock,
     BetaCodeExecutionToolResultBlockParam,
     BetaServerToolUseBlockParam,
     BetaWebSearchToolResultBlockParam,
@@ -238,6 +239,7 @@ class AnthropicModel(Model):
         try:
             extra_headers = model_settings.get('extra_headers', {})
             extra_headers.setdefault('User-Agent', get_user_agent())
+            extra_headers.setdefault('anthropic-beta', 'code-execution-2025-05-22')
             return await self.client.beta.messages.create(
                 max_tokens=model_settings.get('max_tokens', 1024),
                 system=system_prompt or NOT_GIVEN,
@@ -268,7 +270,7 @@ class AnthropicModel(Model):
             elif isinstance(item, BetaWebSearchToolResultBlock):
                 items.append(
                     ServerToolReturnPart(
-                        tool_name='web_search',
+                        tool_name=item.type,
                         content=item.content,
                         tool_call_id=item.tool_use_id,
                     )
@@ -280,6 +282,14 @@ class AnthropicModel(Model):
                         tool_name=item.name,
                         args=cast(dict[str, Any], item.input),
                         tool_call_id=item.id,
+                    )
+                )
+            elif isinstance(item, BetaCodeExecutionToolResultBlock):
+                items.append(
+                    ServerToolReturnPart(
+                        tool_name=item.type,
+                        content=item.content,
+                        tool_call_id=item.tool_use_id,
                     )
                 )
             else:
@@ -326,7 +336,7 @@ class AnthropicModel(Model):
                         user_location=user_location,
                     )
                 )
-            if isinstance(tool, CodeExecutionTool):
+            elif isinstance(tool, CodeExecutionTool):
                 tools.append(BetaCodeExecutionTool20250522Param(name='code_execution', type='code_execution_20250522'))
         return tools
 

@@ -2,7 +2,7 @@ from __future__ import annotations as _annotations
 
 from abc import ABC
 from dataclasses import dataclass
-from typing import Literal
+from typing import Any, Literal
 
 from typing_extensions import TypedDict
 
@@ -15,8 +15,10 @@ class AbstractBuiltinTool(ABC):
 
     This class is abstract and cannot be instantiated directly.
 
-    The builtin tools are are passed to the model as part of the `ModelRequestParameters`.
+    The builtin tools are passed to the model as part of the `ModelRequestParameters`.
     """
+
+    def handle_custom_tool_definition(self, model: str) -> Any: ...
 
 
 @dataclass

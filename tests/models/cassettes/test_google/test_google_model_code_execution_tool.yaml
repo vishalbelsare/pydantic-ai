@@ -1,0 +1,71 @@
+interactions:
+- request:
+    headers:
+      accept:
+      - '*/*'
+      accept-encoding:
+      - gzip, deflate
+      connection:
+      - keep-alive
+      content-length:
+      - '234'
+      content-type:
+      - application/json
+      host:
+      - generativelanguage.googleapis.com
+    method: POST
+    parsed_body:
+      contents:
+      - parts:
+        - text: What day is today in Utrecht?
+        role: user
+      generationConfig: {}
+      systemInstruction:
+        parts:
+        - text: You are a helpful chatbot.
+        role: user
+      tools:
+      - codeExecution: {}
+    uri: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent
+  response:
+    headers:
+      alt-svc:
+      - h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
+      content-length:
+      - '824'
+      content-type:
+      - application/json; charset=UTF-8
+      server-timing:
+      - gfet4t7; dur=634
+      transfer-encoding:
+      - chunked
+      vary:
+      - Origin
+      - X-Origin
+      - Referer
+    parsed_body:
+      candidates:
+      - content:
+          parts:
+          - text: |
+              To give you the exact day in Utrecht, I need to know the current date. Can you please provide the date? I can then determine the day.
+          role: model
+        finishReason: STOP
+      modelVersion: gemini-2.0-flash
+      responseId: WN42aLH_CoKZgLUP97W1wQg
+      usageMetadata:
+        candidatesTokenCount: 32
+        candidatesTokensDetails:
+        - modality: TEXT
+          tokenCount: 32
+        promptTokenCount: 13
+        promptTokensDetails:
+        - modality: TEXT
+          tokenCount: 13
+        toolUsePromptTokensDetails:
+        - modality: TEXT
+        totalTokenCount: 45
+    status:
+      code: 200
+      message: OK
+version: 1

@@ -11,6 +11,7 @@ from uuid import uuid4
 
 from typing_extensions import assert_never
 
+from pydantic_ai.builtin_tools import CodeExecutionTool, WebSearchTool
 from pydantic_ai.providers import Provider
 
 from .. import UnexpectedModelBehavior, UserError, _utils, usage
@@ -55,10 +56,12 @@ try:
         FunctionDeclarationDict,
         GenerateContentConfigDict,
         GenerateContentResponse,
+        GoogleSearchDict,
         Part,
         PartDict,
         SafetySettingDict,
         ThinkingConfigDict,
+        ToolCodeExecutionDict,
         ToolConfigDict,
         ToolDict,
         ToolListUnionDict,
@@ -192,6 +195,7 @@ class GoogleModel(Model):
 
         return ModelRequestParameters(
             function_tools=[_customize_tool_def(tool) for tool in model_request_parameters.function_tools],
+            builtin_tools=model_request_parameters.builtin_tools,
             allow_text_output=model_request_parameters.allow_text_output,
             output_tools=[_customize_tool_def(tool) for tool in model_request_parameters.output_tools],
         )
@@ -216,6 +220,13 @@ class GoogleModel(Model):
                 ToolDict(function_declarations=[_function_declaration_from_tool(t)])
                 for t in model_request_parameters.output_tools
             ]
+        for tool in model_request_parameters.builtin_tools:
+            if isinstance(tool, WebSearchTool):
+                tools.append(ToolDict(google_search=GoogleSearchDict()))
+            elif isinstance(tool, CodeExecutionTool):
+                tools.append(ToolDict(code_execution=ToolCodeExecutionDict()))
+            else:
+                raise UserError(f'Unsupported builtin tool: {tool}')
         return tools or None
 
     def _get_tool_config(

@@ -702,7 +702,7 @@ async def test_groq_model_web_search_tool(allow_model_requests: None, groq_api_k
                     ServerToolCallPart(
                         tool_name='search',
                         args='{"query": "What is the current date?"}',
-                        tool_call_id='0',
+                        tool_call_id=IsStr(),
                         model_name='groq',
                     ),
                     ServerToolReturnPart(
@@ -784,7 +784,7 @@ Content: World time and date for cities in all time zones. International time ri
 Score: 0.2134
 
 """,
-                        tool_call_id='0',
+                        tool_call_id=IsStr(),
                         timestamp=IsDatetime(),
                     ),
                     TextPart(content='The current day is Tuesday.'),

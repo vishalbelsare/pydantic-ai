@@ -26,6 +26,8 @@ from ..messages import (
     ModelResponsePart,
     ModelResponseStreamEvent,
     RetryPromptPart,
+    ServerToolCallPart,
+    ServerToolReturnPart,
     SystemPromptPart,
     TextPart,
     ToolCallPart,
@@ -466,7 +468,17 @@ def _process_response_from_parts(
 ) -> ModelResponse:
     items: list[ModelResponsePart] = []
     for part in parts:
-        if part.text:
+        if part.executable_code is not None:
+            items.append(ServerToolCallPart(args=part.executable_code.model_dump(), tool_name='code_execution'))
+        elif part.code_execution_result is not None:
+            items.append(
+                ServerToolReturnPart(
+                    tool_name='code_execution',
+                    content=part.code_execution_result.output,
+                    tool_call_id="It doesn't have.",
+                )
+            )
+        elif part.text:
             items.append(TextPart(content=part.text))
         elif part.function_call:
             assert part.function_call.name is not None

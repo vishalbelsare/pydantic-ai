@@ -628,7 +628,7 @@ print(now_utrecht.strftime("%A, %Y-%m-%d"))
 """,
                             'language': Language.PYTHON,
                         },
-                        tool_call_id='pyd_ai_8cc0806969e94245b2877a60fab8bf7e',
+                        tool_call_id=IsStr(),
                     ),
                     ServerToolReturnPart(
                         tool_name='code_execution',

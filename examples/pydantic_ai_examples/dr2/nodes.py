@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from functools import cached_property
-from typing import Any, cast, get_args, get_origin
+from typing import Any, Callable, cast, get_args, get_origin, overload
 
 from pydantic import TypeAdapter
 from pydantic_core import to_json
@@ -11,12 +11,47 @@ from pydantic_graph.v2.util import TypeExpression
 from pydantic_ai import Agent, models
 
 
-@dataclass
+@dataclass(init=False)
 class Prompt[InputT, OutputT]:
     input_type: type[InputT]
-    output_type: type[TypeExpression[OutputT]] | type[OutputT]
+    output_type: type[Any]
+    output_selector: Callable[[InputT, Any], OutputT] | None
     prompt: str
     model: models.Model | models.KnownModelName | str = 'openai:gpt-4o'
+
+    @overload
+    def __init__(
+        self,
+        *,
+        input_type: type[InputT],
+        output_type: type[TypeExpression[OutputT]] | type[OutputT],
+        prompt: str,
+        model: models.Model | models.KnownModelName | str = 'openai:gpt-4o',
+    ) -> None: ...
+    @overload
+    def __init__[IntermediateT](
+        self,
+        *,
+        input_type: type[InputT],
+        output_type: type[TypeExpression[IntermediateT]] | type[IntermediateT],
+        output_transform: Callable[[InputT, IntermediateT], OutputT],
+        prompt: str,
+        model: models.Model | models.KnownModelName | str = 'openai:gpt-4o',
+    ) -> None: ...
+    def __init__(
+        self,
+        *,
+        input_type: type[InputT],
+        output_type: type[Any],
+        output_transform: Callable[[InputT, Any], OutputT] | None = None,
+        prompt: str,
+        model: models.Model | models.KnownModelName | str = 'openai:gpt-4o',
+    ):
+        self.input_type = input_type
+        self.output_type = output_type
+        self.output_transform = output_transform
+        self.prompt = prompt
+        self.model = model
 
     @cached_property
     def agent(self) -> Agent[None, OutputT]:
@@ -43,7 +78,10 @@ class Prompt[InputT, OutputT]:
 
     async def __call__(self, ctx: StepContext[Any, Any, InputT]) -> OutputT:
         result = self.agent.run_sync(to_json(ctx.inputs, indent=2).decode())
-        return result.output
+        output = result.output
+        if self.output_transform:
+            output = self.output_transform(ctx.inputs, output)
+        return output
 
 
 @dataclass

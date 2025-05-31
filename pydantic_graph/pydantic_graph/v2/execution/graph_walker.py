@@ -44,7 +44,7 @@ class GraphWalker[StateT, DepsT, InputT, OutputT]:
     async def run(self, state: StateT, inputs: InputT) -> OutputT:
         await self.run_api.initialize_state(state)
 
-        start_task = GraphTask(node_id=START.id, context_inputs=inputs, node_inputs=inputs, fork_stack=())
+        start_task = GraphTask(node_id=START.id, inputs=inputs, fork_stack=())
         await self.request_task(start_task)
         await self.run_api.wait()
 
@@ -83,28 +83,27 @@ class GraphWalker[StateT, DepsT, InputT, OutputT]:
         if not await self.run_api.any_tasks_remain():
             await self.run_api.mark_finished()
 
-    async def _handle_start(self, walk: GraphTask) -> None:
-        # nothing to do besides start the graph
-        await self._handle_edges(walk, walk.context_inputs, walk.node_inputs)
+    async def _handle_start(self, task: GraphTask) -> None:
+        await self._handle_edges(task, task.inputs)
 
     async def _handle_step(self, step: Step[Any, Any, Any, Any], task: GraphTask):
-        step_context = StepContext[StateT, DepsT, Any](self.run_api, self.deps, task.context_inputs)
+        step_context = StepContext[StateT, DepsT, Any](self.run_api, self.deps, task.inputs)
         output = await step.call(step_context)
-        await self._handle_edges(task, output, output)
+        await self._handle_edges(task, output)
 
-    async def _handle_reduce_join(self, join: Join[Any, Any, Any, Any], walk: GraphTask) -> None:
+    async def _handle_reduce_join(self, join: Join[Any, Any, Any, Any], task: GraphTask) -> None:
         # Find the matching fork run id in the stack; this will be used to look for an active reducer
         parent_fork = self.graph.get_parent_fork(join.id)
-        matching_fork_run_id = next(iter(x[1] for x in walk.fork_stack[::-1] if x[0] == parent_fork.fork_id), None)
+        matching_fork_run_id = next(iter(x[1] for x in task.fork_stack[::-1] if x[0] == parent_fork.fork_id), None)
         if matching_fork_run_id is None:
             raise RuntimeError(
-                f'Fork {parent_fork.fork_id} not found in stack {walk.fork_stack}. This means the dominating fork is not dominating (this is a bug).'
+                f'Fork {parent_fork.fork_id} not found in stack {task.fork_stack}. This means the dominating fork is not dominating (this is a bug).'
             )
 
         # Get or create the active reducer
         reducer = await self.run_api.get_active_reducer_state(join.id, matching_fork_run_id)
         state = await self.run_api.get_immutable_state()
-        ctx = ReducerContext(state, self.deps, walk.node_inputs)
+        ctx = ReducerContext(state, self.deps, task.inputs)
 
         if reducer is None:
             reducer = join.reducer_factory(ctx)
@@ -112,47 +111,47 @@ class GraphWalker[StateT, DepsT, InputT, OutputT]:
         else:
             reducer[0](ctx)
 
-    async def _handle_spread(self, walk: GraphTask):
-        await self._handle_edges(walk, walk.context_inputs, walk.node_inputs)
+    async def _handle_spread(self, task: GraphTask):
+        await self._handle_edges(task, task.inputs)
 
-    async def _handle_decision(self, decision: Decision[StateT, DepsT, Any, Any], walk: GraphTask) -> None:
+    async def _handle_decision(self, decision: Decision[StateT, DepsT, Any, Any], task: GraphTask) -> None:
         for branch in decision.branches:
             assert not branch.spread, 'Spreads decisions should be converted into spreads as part of graph-building'
 
             match_tester = branch.matches
             if match_tester is not None:
-                inputs_match = match_tester(walk.node_inputs)
+                inputs_match = match_tester(task.inputs)
             elif branch.source in {Any, object}:
                 inputs_match = True
             elif get_origin(branch.source) is Literal:
-                inputs_match = walk.node_inputs in get_args(branch.source)
+                inputs_match = task.inputs in get_args(branch.source)
             else:
-                inputs_match = isinstance(walk.node_inputs, branch.source)
+                inputs_match = isinstance(task.inputs, branch.source)
 
             if inputs_match:
-                node_inputs = walk.node_inputs
+                inputs = task.inputs
                 for transform in branch.transforms:
                     state = await self.run_api.get_immutable_state()
-                    ctx = TransformContext(state, self.deps, walk.context_inputs, node_inputs)
-                    node_inputs = transform(ctx)
+                    ctx = TransformContext(state, self.deps, inputs)
+                    inputs = transform(ctx)
                 await self.request_task(
-                    GraphTask(branch.route_to.id, walk.context_inputs, walk.node_inputs, walk.fork_stack),
+                    GraphTask(branch.route_to.id, inputs, task.fork_stack),
                 )
                 break
 
-    async def _handle_end(self, walk: GraphTask) -> None:
-        await self.run_api.set_result(walk.node_inputs)
+    async def _handle_end(self, task: GraphTask) -> None:
+        await self.run_api.set_result(task.inputs)
 
-    async def _handle_finalize_joins(self, popped_walk: GraphTask) -> None:
-        # If the popped walk was the last item preventing one or more joins, those joins can now be finalized
-        walk_fork_run_indices = {fork_run_id: i for i, (_, fork_run_id) in enumerate(popped_walk.fork_stack)}
+    async def _handle_finalize_joins(self, popped_task: GraphTask) -> None:
+        # If the popped task was the last item preventing one or more joins, those joins can now be finalized
+        task_fork_run_indices = {fork_run_id: i for i, (_, fork_run_id) in enumerate(popped_task.fork_stack)}
 
         # Note: might be more efficient to maintain a better data structure for looking up reducers by join_id and
         # fork_run_id without iterating through every item. This only matters if there is a large number of reducers.
         for (join_id, fork_run_id), reducer in await self.run_api.get_active_reducers_with_fork_run_id(
-            list(walk_fork_run_indices)
+            list(task_fork_run_indices)
         ):
-            fork_run_index = walk_fork_run_indices.get(fork_run_id)
+            fork_run_index = task_fork_run_indices.get(fork_run_id)
             assert fork_run_index is not None  # should be filtered by the _get_reducers_with_fork_run_id method
 
             # This reducer _may_ now be ready to finalize:
@@ -160,23 +159,23 @@ class GraphWalker[StateT, DepsT, InputT, OutputT]:
                 state = await self.run_api.get_immutable_state()
                 ctx = ReducerContext(state, self.deps, None)
                 output = reducer[1](ctx)
-                new_fork_stack = popped_walk.fork_stack[:fork_run_index]
+                new_fork_stack = popped_task.fork_stack[:fork_run_index]
                 await self.run_api.complete_active_reducer(join_id, fork_run_id)
 
                 # Should _now_ traverse the edges leaving this join
-                await self._handle_edges(GraphTask(join_id, None, None, new_fork_stack), output, output)
+                await self._handle_edges(GraphTask(join_id, None, new_fork_stack), output)
 
-    async def _handle_edges(self, walk: GraphTask, context_inputs: Any, next_node_inputs: Any) -> None:
-        edges = self.graph.edges_by_source.get(walk.node_id, [])
-        node = self.graph.nodes[walk.node_id]
+    async def _handle_edges(self, task: GraphTask, inputs: Any) -> None:
+        edges = self.graph.edges_by_source.get(task.node_id, [])
+        node = self.graph.nodes[task.node_id]
 
-        fork_stack = walk.fork_stack
+        fork_stack = task.fork_stack
         if len(edges) > 1 or isinstance(node, Spread):
             # first condition is a broadcast fork; note that the way graph building works,
             # spread nodes should never be broadcast edges; even if there are multiple spreads between two nodes
             # these should result in distinct spread instances
             node_run_id = NodeRunId(str(uuid.uuid4()))
-            fork_stack += ((ForkId(walk.node_id), node_run_id),)
+            fork_stack += ((ForkId(task.node_id), node_run_id),)
 
         assert not isinstance(node, (Decision, EndNode)), 'This method should not be called for Decision, EndNode'
         if isinstance(node, (StartNode, Step, Join)):
@@ -184,17 +183,17 @@ class GraphWalker[StateT, DepsT, InputT, OutputT]:
             for edge in edges:
                 if edge.transform is not None:
                     state = await self.run_api.get_immutable_state()
-                    transform_context = TransformContext(state, self.deps, context_inputs, next_node_inputs)
-                    next_node_inputs = edge.transform(transform_context)
+                    transform_context = TransformContext(state, self.deps, inputs)
+                    inputs = edge.transform(transform_context)
 
-                await self.request_task(GraphTask(edge.destination_id, context_inputs, next_node_inputs, fork_stack))
+                await self.request_task(GraphTask(edge.destination_id, inputs, fork_stack))
         elif isinstance(node, Spread):
             for edge in edges:
-                for item in next_node_inputs:
+                for item in inputs:
                     if edge.transform is not None:
                         state = await self.run_api.get_immutable_state()
-                        transform_context = TransformContext(state, self.deps, context_inputs, item)
+                        transform_context = TransformContext(state, self.deps, item)
                         item = edge.transform(transform_context)
-                    await self.request_task(GraphTask(edge.destination_id, context_inputs, item, fork_stack))
+                    await self.request_task(GraphTask(edge.destination_id, item, fork_stack))
         else:
             assert_never(node)

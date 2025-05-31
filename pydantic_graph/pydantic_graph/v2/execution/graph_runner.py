@@ -7,7 +7,7 @@ from typing import Any
 
 from pydantic_graph.v2.execution.graph_task import GraphTask
 from pydantic_graph.v2.graph import Graph
-from pydantic_graph.v2.id_types import JoinId, NodeRunId, TaskId, GraphRunId
+from pydantic_graph.v2.id_types import JoinId, NodeRunId, TaskId
 from pydantic_graph.v2.join import Reducer
 from pydantic_graph.v2.util import Maybe
 
@@ -89,7 +89,9 @@ class GraphRunAPI[StateT, DepsT](ABC):
         raise NotImplementedError
         yield
 
+
 type GraphRunResult[StateT, OutputT] = tuple[StateT, OutputT]
+
 
 class GraphRunner[StateT, DepsT, InputT, OutputT](ABC):
     graph: Graph[StateT, DepsT, InputT, OutputT]
@@ -103,23 +105,23 @@ class GraphRunner[StateT, DepsT, InputT, OutputT](ABC):
     ) -> GraphRunResult[StateT, OutputT]:
         raise NotImplementedError
 
-    @abstractmethod
-    async def run_soon(
-        self,
-        state: StateT,
-        deps: DepsT,
-        inputs: InputT,
-    ) -> GraphRunId:
-        raise NotImplementedError
-
-    @abstractmethod
-    async def pause(self, run_id: GraphRunId) -> None:
-        raise NotImplementedError
-
-    @abstractmethod
-    async def terminate(self, run_id: GraphRunId) -> None:
-        raise NotImplementedError
-
-    @abstractmethod
-    async def get_result(self, run_id: GraphRunId, clean_up: bool = False) -> Maybe[GraphRunResult[StateT, OutputT]]:
-        raise NotImplementedError
+    # @abstractmethod
+    # async def run_soon(
+    #     self,
+    #     state: StateT,
+    #     deps: DepsT,
+    #     inputs: InputT,
+    # ) -> GraphRunId:
+    #     raise NotImplementedError
+    #
+    # @abstractmethod
+    # async def pause(self, run_id: GraphRunId) -> None:
+    #     raise NotImplementedError
+    #
+    # @abstractmethod
+    # async def terminate(self, run_id: GraphRunId) -> None:
+    #     raise NotImplementedError
+    #
+    # @abstractmethod
+    # async def get_result(self, run_id: GraphRunId, clean_up: bool = False) -> Maybe[GraphRunResult[StateT, OutputT]]:
+    #     raise NotImplementedError

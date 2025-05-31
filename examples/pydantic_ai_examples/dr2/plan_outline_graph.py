@@ -84,15 +84,31 @@ class ReviewOutlineInputs(BaseModel):
     chat: MessageHistory
     outline: Outline
 
+    def combine_with_choice(
+        self, choice: ReviseOutlineChoice | ApproveOutlineChoice
+    ) -> ReviseOutline | ApproveOutline:
+        if isinstance(choice, ReviseOutlineChoice):
+            return ReviseOutline(outline=self.outline, details=choice.details)
+        else:
+            return ApproveOutline(outline=self.outline, message=choice.message)
 
-class ReviseOutline(BaseModel):
-    choice: Literal['revise']
+
+class ReviseOutlineChoice(BaseModel):
+    choice: Literal['revise'] = 'revise'
     details: str
 
 
-class ApproveOutline(BaseModel):
-    choice: Literal['approve']
+class ReviseOutline(ReviseOutlineChoice):
+    outline: Outline
+
+
+class ApproveOutlineChoice(BaseModel):
+    choice: Literal['approve'] = 'approve'
     message: str  # message to user describing the research you are going to do
+
+
+class ApproveOutline(ApproveOutlineChoice):
+    outline: Outline
 
 
 class OutlineStageOutput(BaseModel):
@@ -109,35 +125,35 @@ class YieldToHuman:
 
 
 # Transforms
-def transform_proceed(ctx: TransformContext[State, Deps, object, object]):
+def transform_proceed(ctx: TransformContext[State, Deps, object]):
     return GenerateOutlineInputs(chat=ctx.state.chat, feedback=None)
 
 
-def transform_clarify(ctx: TransformContext[State, Deps, object, Clarify]):
+def transform_clarify(ctx: TransformContext[State, Deps, Clarify]):
     return Interruption[YieldToHuman, MessageHistory](
-        YieldToHuman(ctx.output.message), handle_user_message.id
+        YieldToHuman(ctx.inputs.message), handle_user_message.id
     )
 
 
-def transform_outline(ctx: TransformContext[State, Deps, object, Outline]):
-    return ReviewOutlineInputs(chat=ctx.state.chat, outline=ctx.output)
+def transform_outline(ctx: TransformContext[State, Deps, Outline]):
+    return ReviewOutlineInputs(chat=ctx.state.chat, outline=ctx.inputs)
 
 
 def transform_revise_outline(
-    ctx: TransformContext[State, Deps, ReviewOutlineInputs, ReviseOutline],
-):
+    ctx: TransformContext[State, Deps, ReviseOutline],
+) -> GenerateOutlineInputs:
     return GenerateOutlineInputs(
         chat=ctx.state.chat,
         feedback=ExistingOutlineFeedback(
-            outline=ctx.inputs.outline, feedback=ctx.output.details
+            outline=ctx.inputs.outline, feedback=ctx.inputs.details
         ),
     )
 
 
 def transform_approve_outline(
-    ctx: TransformContext[State, Deps, ReviewOutlineInputs, ApproveOutline],
+    ctx: TransformContext[State, Deps, ApproveOutline],
 ):
-    return OutlineStageOutput(outline=ctx.inputs.outline, message=ctx.output.message)
+    return OutlineStageOutput(outline=ctx.inputs.outline, message=ctx.inputs.message)
 
 
 # Graph builder
@@ -172,7 +188,8 @@ generate_outline = g.step(
 review_outline = g.step(
     Prompt(
         input_type=ReviewOutlineInputs,
-        output_type=TypeExpression[ReviseOutline | ApproveOutline],
+        output_type=TypeExpression[ReviseOutlineChoice | ApproveOutlineChoice],
+        output_transform=ReviewOutlineInputs.combine_with_choice,
         prompt='Review the outline',
     ),
     node_id='review_outline',

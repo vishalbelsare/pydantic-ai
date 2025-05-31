@@ -5,8 +5,6 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any, Callable, Never, cast, get_args, get_origin, overload
 
-from typing_extensions import Protocol
-
 from pydantic_graph.v2.decision import Decision, DecisionBranchBuilder
 from pydantic_graph.v2.id_types import ForkId, JoinId, NodeId
 from pydantic_graph.v2.join import Join, ReducerFactory
@@ -145,32 +143,6 @@ class Edge:
         return self.user_label
 
 
-class HandleBranchProtocol[StateT, DepsT, InputT](Protocol):
-    def __call__[SourceT](
-        self,
-        case: type[SourceT] | type[TypeExpression[SourceT]],
-        *,
-        matches: Callable[[Any], bool] | None = None,
-        label: str | None = None,
-    ) -> DecisionBranchBuilder[StateT, DepsT, SourceT, InputT, SourceT]:
-        raise NotImplementedError
-
-
-@dataclass
-class Handler[StateT, DepsT, InputT]:
-    source: Step[StateT, DepsT, InputT, Any] | Join[StateT, DepsT, InputT, Any]
-    handle: HandleBranchProtocol[StateT, DepsT, Any]
-
-    def __call__[SourceT](
-        self,
-        case: type[SourceT] | type[TypeExpression[SourceT]],
-        *,
-        matches: Callable[[Any], bool] | None = None,
-        label: str | None = None,
-    ) -> DecisionBranchBuilder[StateT, DepsT, SourceT, InputT, SourceT]:
-        return self.handle(case=case, matches=matches, label=label)
-
-
 @dataclass
 class GraphBuilder[StateT, DepsT, GraphInputT, GraphOutputT]:
     state_type: type[StateT]
@@ -185,7 +157,6 @@ class GraphBuilder[StateT, DepsT, GraphInputT, GraphOutputT]:
     _decision_index: int = field(init=False, default=1)
 
     type Source[OutputT] = Step[StateT, DepsT, Any, OutputT] | Join[StateT, DepsT, Any, OutputT]
-    type SourceWithInputs[InputT, OutputT] = Step[StateT, DepsT, InputT, OutputT] | Join[StateT, DepsT, InputT, OutputT]
     type Destination[InputT] = (
         Step[StateT, DepsT, InputT, Any]
         | Join[StateT, DepsT, InputT, Any]
@@ -282,16 +253,13 @@ class GraphBuilder[StateT, DepsT, GraphInputT, GraphOutputT]:
             index += 1
         return node_id
 
-    def get_handler[InputT](self, source: SourceWithInputs[InputT, Any]) -> Handler[StateT, DepsT, InputT]:
-        return Handler(source=source, handle=self.handle)
-
     def handle[SourceT](
         self,
         case: type[SourceT] | type[TypeExpression[SourceT]],
         *,
         matches: Callable[[Any], bool] | None = None,
         label: str | None = None,
-    ) -> DecisionBranchBuilder[StateT, DepsT, SourceT, Any, SourceT]:
+    ) -> DecisionBranchBuilder[StateT, DepsT, SourceT, Any]:
         extracted_case = cast(type[SourceT], get_args(case)[0] if get_origin(case) is TypeExpression else case)
         return DecisionBranchBuilder(extracted_case, matches, transforms=(), user_label=label)
 
@@ -311,7 +279,7 @@ class GraphBuilder[StateT, DepsT, GraphInputT, GraphOutputT]:
         self,
         destination: Destination[DestinationInputT],
         *,
-        transform: TransformFunction[StateT, DepsT, GraphInputT, GraphInputT, DestinationInputT],
+        transform: TransformFunction[StateT, DepsT, GraphInputT, DestinationInputT],
         label: str | None = None,
     ) -> None: ...
 
@@ -319,7 +287,7 @@ class GraphBuilder[StateT, DepsT, GraphInputT, GraphOutputT]:
         self,
         destination: Destination[Any],
         *,
-        transform: TransformFunction[StateT, DepsT, Any, Any, Any] | None = None,
+        transform: TransformFunction[StateT, DepsT, Any, Any] | None = None,
         label: str | None = None,
     ) -> None:
         self._add_edge_from_nodes(
@@ -343,7 +311,7 @@ class GraphBuilder[StateT, DepsT, GraphInputT, GraphOutputT]:
         self,
         node: Destination[DestinationInputT],
         *,
-        pre_spread_transform: TransformFunction[StateT, DepsT, GraphInputT, GraphInputT, Sequence[DestinationInputT]],
+        pre_spread_transform: TransformFunction[StateT, DepsT, GraphInputT, Sequence[DestinationInputT]],
         pre_spread_label: str | None = None,
         post_spread_label: str | None = None,
     ) -> None: ...
@@ -353,9 +321,7 @@ class GraphBuilder[StateT, DepsT, GraphInputT, GraphOutputT]:
         self: GraphBuilder[StateT, DepsT, Sequence[GraphInputItemT], GraphOutputT],
         node: Destination[DestinationInputT],
         *,
-        post_spread_transform: TransformFunction[
-            StateT, DepsT, Sequence[GraphInputItemT], GraphInputItemT, DestinationInputT
-        ],
+        post_spread_transform: TransformFunction[StateT, DepsT, GraphInputItemT, DestinationInputT],
         pre_spread_label: str | None = None,
         post_spread_label: str | None = None,
     ) -> None: ...
@@ -365,8 +331,8 @@ class GraphBuilder[StateT, DepsT, GraphInputT, GraphOutputT]:
         self: GraphBuilder[StateT, DepsT, GraphInputT, GraphOutputT],
         node: Destination[DestinationInputT],
         *,
-        pre_spread_transform: TransformFunction[StateT, DepsT, GraphInputT, GraphInputT, Sequence[IntermediateT]],
-        post_spread_transform: TransformFunction[StateT, DepsT, GraphInputT, IntermediateT, DestinationInputT],
+        pre_spread_transform: TransformFunction[StateT, DepsT, GraphInputT, Sequence[IntermediateT]],
+        post_spread_transform: TransformFunction[StateT, DepsT, IntermediateT, DestinationInputT],
         pre_spread_label: str | None = None,
         post_spread_label: str | None = None,
     ) -> None: ...
@@ -376,8 +342,8 @@ class GraphBuilder[StateT, DepsT, GraphInputT, GraphOutputT]:
         node: Destination[Any],
         *,
         spread_id: str | None = None,
-        pre_spread_transform: TransformFunction[StateT, DepsT, Any, Any, Sequence[Any]] | None = None,
-        post_spread_transform: TransformFunction[StateT, DepsT, Any, Any, Any] | None = None,
+        pre_spread_transform: TransformFunction[StateT, DepsT, Any, Sequence[Any]] | None = None,
+        post_spread_transform: TransformFunction[StateT, DepsT, Any, Any] | None = None,
         pre_spread_label: str | None = None,
         post_spread_label: str | None = None,
     ) -> None:
@@ -411,21 +377,21 @@ class GraphBuilder[StateT, DepsT, GraphInputT, GraphOutputT]:
     ) -> None: ...
 
     @overload
-    def add_edge[SourceInputT, SourceOutputT, DestinationInputT](
+    def add_edge[SourceOutputT, DestinationInputT](
         self,
-        source: SourceWithInputs[SourceInputT, SourceOutputT],
+        source: Source[SourceOutputT],
         destination: Destination[DestinationInputT],
         *,
-        transform: TransformFunction[StateT, DepsT, SourceInputT, SourceOutputT, DestinationInputT],
+        transform: TransformFunction[StateT, DepsT, SourceOutputT, DestinationInputT],
         label: str | None = None,
     ) -> None: ...
 
-    def add_edge(
+    def add_edge[SourceOutputT](
         self,
-        source: Source[Any],
+        source: Source[SourceOutputT],
         destination: Destination[Any],
         *,
-        transform: AnyTransformFunction | None = None,
+        transform: TransformFunction[StateT, DepsT, SourceOutputT, Any] | None = None,
         label: str | None = None,
     ) -> None:
         self._add_edge_from_nodes(
@@ -436,9 +402,9 @@ class GraphBuilder[StateT, DepsT, GraphInputT, GraphOutputT]:
         )
 
     @overload
-    def add_spreading_edge[SourceInputT, DestinationInputT](
+    def add_spreading_edge[DestinationInputT](
         self,
-        source: SourceWithInputs[SourceInputT, Sequence[DestinationInputT]],
+        source: Source[Sequence[DestinationInputT]],
         destination: Destination[DestinationInputT],
         *,
         pre_spread_label: str | None = None,
@@ -446,28 +412,25 @@ class GraphBuilder[StateT, DepsT, GraphInputT, GraphOutputT]:
     ) -> None: ...
 
     @overload
-    def add_spreading_edge[SourceInputT, SourceOutputT, DestinationInputT](
+    def add_spreading_edge[SourceOutputT, DestinationInputT](
         self,
-        source: SourceWithInputs[SourceInputT, SourceOutputT],
+        source: Source[SourceOutputT],
         destination: Destination[DestinationInputT],
         *,
-        pre_spread_transform: TransformFunction[
-            StateT, DepsT, SourceInputT, SourceOutputT, Sequence[DestinationInputT]
-        ],
+        pre_spread_transform: TransformFunction[StateT, DepsT, SourceOutputT, Sequence[DestinationInputT]],
         pre_spread_label: str | None = None,
         post_spread_label: str | None = None,
     ) -> None: ...
 
     @overload
-    def add_spreading_edge[SourceInputT, SourceOutputItemT, DestinationInputT](
+    def add_spreading_edge[SourceOutputItemT, DestinationInputT](
         self,
-        source: SourceWithInputs[SourceInputT, Sequence[SourceOutputItemT]],
+        source: Source[Sequence[SourceOutputItemT]],
         destination: Destination[DestinationInputT],
         *,
         post_spread_transform: TransformFunction[
             StateT,
             DepsT,
-            SourceInputT,
             SourceOutputItemT,
             DestinationInputT,
         ],
@@ -476,25 +439,25 @@ class GraphBuilder[StateT, DepsT, GraphInputT, GraphOutputT]:
     ) -> None: ...
 
     @overload
-    def add_spreading_edge[SourceInputT, SourceOutputT, IntermediateT, DestinationInputT](
+    def add_spreading_edge[SourceOutputT, IntermediateT, DestinationInputT](
         self,
-        source: SourceWithInputs[SourceInputT, SourceOutputT],
+        source: Source[SourceOutputT],
         destination: Destination[DestinationInputT],
         *,
-        pre_spread_transform: TransformFunction[StateT, DepsT, SourceInputT, SourceOutputT, Sequence[IntermediateT]],
-        post_spread_transform: TransformFunction[StateT, DepsT, SourceInputT, IntermediateT, DestinationInputT],
+        pre_spread_transform: TransformFunction[StateT, DepsT, SourceOutputT, Sequence[IntermediateT]],
+        post_spread_transform: TransformFunction[StateT, DepsT, IntermediateT, DestinationInputT],
         pre_spread_label: str | None = None,
         post_spread_label: str | None = None,
     ) -> None: ...
 
-    def add_spreading_edge[SourceInputT](
+    def add_spreading_edge(
         self,
-        source: SourceWithInputs[SourceInputT, Any],
+        source: Source[Any],
         destination: Destination[Any],
         *,
         spread_id: str | None = None,
-        pre_spread_transform: TransformFunction[StateT, DepsT, SourceInputT, Any, Sequence[Any]] | None = None,
-        post_spread_transform: TransformFunction[StateT, DepsT, SourceInputT, Any, Any] | None = None,
+        pre_spread_transform: TransformFunction[StateT, DepsT, Any, Sequence[Any]] | None = None,
+        post_spread_transform: TransformFunction[StateT, DepsT, Any, Any] | None = None,
         pre_spread_label: str | None = None,
         post_spread_label: str | None = None,
     ) -> None:
@@ -526,12 +489,12 @@ class GraphBuilder[StateT, DepsT, GraphInputT, GraphOutputT]:
     ) -> None: ...
 
     @overload
-    def end_from[SourceInputT, SourceOutputT](
+    def end_from[SourceOutputT](
         self,
-        source: SourceWithInputs[SourceInputT, SourceOutputT],
+        source: Source[SourceOutputT],
         *,
         label: str | None = None,
-        transform: TransformFunction[StateT, DepsT, SourceInputT, SourceOutputT, GraphOutputT],
+        transform: TransformFunction[StateT, DepsT, SourceOutputT, GraphOutputT],
     ) -> None: ...
 
     def end_from(
@@ -539,7 +502,7 @@ class GraphBuilder[StateT, DepsT, GraphInputT, GraphOutputT]:
         source: Source[Any],
         *,
         label: str | None = None,
-        transform: TransformFunction[StateT, DepsT, Any, Any, GraphOutputT] | None = None,
+        transform: TransformFunction[StateT, DepsT, Any, GraphOutputT] | None = None,
     ) -> None:
         self._add_edge_from_nodes(
             source=source,

@@ -110,18 +110,11 @@ handle_str_join = gb.join(reduce_to_none, node_id='handle_str_join')
 gb.start_with(choose_type, label='begin')
 
 gb.add_edge(
-    (h := gb.get_handler(choose_type)).source,
+    choose_type,
     gb.decision()
-    .branch(h(TypeExpression[Literal['int']]).route_to(handle_int))
-    .branch(h(TypeExpression[Literal['str']]).route_to(handle_str)),
+    .branch(gb.handle(TypeExpression[Literal['int']]).route_to(handle_int))
+    .branch(gb.handle(TypeExpression[Literal['str']]).route_to(handle_str)),
 )
-# If you don't care about type-checking the inputs, you can just use:
-# gb.add_edge(
-#     choose_type,
-#     gb.decision()
-#     .branch(gb.handle(TypeExpression[Literal['int']]).route_to(handle_int))
-#     .branch(gb.handle(TypeExpression[Literal['str']]).route_to(handle_str))
-# )
 
 
 for handle_int_field in (handle_int_1, handle_int_2, handle_int_3):

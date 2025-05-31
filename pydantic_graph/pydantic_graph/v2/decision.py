@@ -44,11 +44,11 @@ class DecisionBranch[StateT, DepsT, SourceT, EndT]:
     # TODO: Rename `matches` to `test_match` or similar
     matches: Callable[[Any], bool] | None = None
     # TODO: If we change `transforms` to a single callable, we can make SourceT the type of the inputs
-    transforms: tuple[TransformFunction[StateT, DepsT, Any, Any, Any], ...] = ()
+    transforms: tuple[TransformFunction[StateT, DepsT, Any, Any], ...] = ()
     user_label: str | None = None
     # TODO: the branch needs a node ID to use as the ID of the spread node
     spread: bool = False
-    post_spread_transform: TransformFunction[StateT, DepsT, Any, Any, Any] | None = None
+    post_spread_transform: TransformFunction[StateT, DepsT, Any, Any] | None = None
     post_spread_user_label: str | None = None
 
     @property
@@ -71,16 +71,16 @@ class DecisionBranch[StateT, DepsT, SourceT, EndT]:
 
 
 @dataclass
-class DecisionBranchBuilder[StateT, DepsT, SourceT, EdgeInputT, EdgeOutputT]:
+class DecisionBranchBuilder[StateT, DepsT, SourceT, EdgeOutputT]:
     source: type[SourceT]
     matches: Callable[[Any], bool] | None = None
-    transforms: tuple[TransformFunction[StateT, DepsT, EdgeInputT, Any, Any], ...] = ()
+    transforms: tuple[TransformFunction[StateT, DepsT, Any, Any], ...] = ()
     user_label: str | None = None
 
     def transform[T](
         self,
-        call: TransformFunction[StateT, DepsT, EdgeInputT, EdgeOutputT, T],
-    ) -> DecisionBranchBuilder[StateT, DepsT, SourceT, EdgeInputT, T]:
+        call: TransformFunction[StateT, DepsT, EdgeOutputT, T],
+    ) -> DecisionBranchBuilder[StateT, DepsT, SourceT, T]:
         new_transforms = self.transforms + (call,)
         return DecisionBranchBuilder(self.source, self.matches, new_transforms)
 
@@ -100,11 +100,11 @@ class DecisionBranchBuilder[StateT, DepsT, SourceT, EdgeInputT, EdgeOutputT]:
         )
 
     def spread_to[T](  # analogous to GraphBuilder.spreading_edge
-        self: DecisionBranchBuilder[StateT, DepsT, SourceT, EdgeInputT, Sequence[T]],
+        self: DecisionBranchBuilder[StateT, DepsT, SourceT, Sequence[T]],
         node: Step[StateT, DepsT, EdgeOutputT, Any]
         | Join[StateT, DepsT, EdgeOutputT, Any]
         | Decision[StateT, DepsT, EdgeOutputT, Any],
-        post_spread_transform: TransformFunction[StateT, DepsT, Sequence[T], Any, Any] | None = None,
+        post_spread_transform: TransformFunction[StateT, DepsT, T, Any] | None = None,
         post_spread_user_label: str | None = None,
     ) -> DecisionBranch[StateT, DepsT, SourceT, Never]:
         return DecisionBranch[StateT, DepsT, SourceT, Never](

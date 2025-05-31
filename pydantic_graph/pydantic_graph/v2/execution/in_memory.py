@@ -37,12 +37,9 @@ class _InMemoryRunState:
     lock: Lock = field(default_factory=Lock)
 
 
-# TODO: Make this an ABC, and make the current implementation a concrete subclass
 @dataclass
 class _InMemoryGraphRunAPI[StateT, DepsT](GraphRunAPI[StateT, DepsT]):
     _run_state: _InMemoryRunState
-
-    # ***** Concrete stuff that needs to be moved out of the ABC *****
 
     @property
     def _active_reducers(self):
@@ -66,19 +63,6 @@ class _InMemoryGraphRunAPI[StateT, DepsT](GraphRunAPI[StateT, DepsT]):
     def _finish_event(self):
         return self._run_state.finish_event
 
-    # ***** Non-abstract methods for the ABC *****
-    async def get_immutable_state(self) -> StateT:
-        async with self._state_lock():
-            return await self._get_state_unsynchronized()
-
-    @asynccontextmanager
-    async def get_mutable_state(self) -> AsyncIterator[StateT]:
-        async with self._state_lock():
-            state = await self._get_state_unsynchronized()
-            yield state
-            await self._set_state_unsynchronized(state)
-
-    # ***** Abstract methods for the ABC *****
     async def store_requested_task(self, task: GraphTask) -> None:
         self._requested_tasks[task.task_id] = task
 
@@ -142,6 +126,17 @@ class _InMemoryGraphRunAPI[StateT, DepsT](GraphRunAPI[StateT, DepsT]):
         async with self._state_lock():
             assert self._run_state.state is None, 'State has already been initialized for this graph run engine.'
             self._run_state.state = Some(state)
+
+    async def get_immutable_state(self) -> StateT:
+        async with self._state_lock():
+            return await self._get_state_unsynchronized()
+
+    @asynccontextmanager
+    async def get_mutable_state(self) -> AsyncIterator[StateT]:
+        async with self._state_lock():
+            state = await self._get_state_unsynchronized()
+            yield state
+            await self._set_state_unsynchronized(state)
 
     @asynccontextmanager
     async def _state_lock(self) -> AsyncIterator[None]:

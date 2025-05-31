@@ -7,23 +7,12 @@ from typing import Any
 
 from pydantic_graph.v2.execution.graph_task import GraphTask
 from pydantic_graph.v2.graph import Graph
-from pydantic_graph.v2.id_types import JoinId, NodeRunId, TaskId
+from pydantic_graph.v2.id_types import JoinId, NodeRunId, TaskId, GraphRunId
 from pydantic_graph.v2.join import Reducer
 from pydantic_graph.v2.util import Maybe
 
 
 class GraphRunAPI[StateT, DepsT](ABC):
-    async def get_immutable_state(self) -> StateT:
-        async with self._state_lock():
-            return await self._get_state_unsynchronized()
-
-    @asynccontextmanager
-    async def get_mutable_state(self) -> AsyncIterator[StateT]:
-        async with self._state_lock():
-            state = await self._get_state_unsynchronized()
-            yield state
-            await self._set_state_unsynchronized(state)
-
     @abstractmethod
     async def store_requested_task(self, task: GraphTask) -> None:
         raise NotImplementedError
@@ -91,27 +80,46 @@ class GraphRunAPI[StateT, DepsT](ABC):
         raise NotImplementedError
 
     @abstractmethod
+    async def get_immutable_state(self) -> StateT:
+        raise NotImplementedError
+
+    @abstractmethod
     @asynccontextmanager
-    async def _state_lock(self) -> AsyncIterator[None]:
+    async def get_mutable_state(self) -> AsyncIterator[StateT]:
         raise NotImplementedError
         yield
 
-    @abstractmethod
-    async def _get_state_unsynchronized(self) -> StateT:
-        raise NotImplementedError
-
-    @abstractmethod
-    async def _set_state_unsynchronized(self, state: StateT) -> None:
-        raise NotImplementedError
-
+type GraphRunResult[StateT, OutputT] = tuple[StateT, OutputT]
 
 class GraphRunner[StateT, DepsT, InputT, OutputT](ABC):
     graph: Graph[StateT, DepsT, InputT, OutputT]
 
+    @abstractmethod
     async def run(
         self,
         state: StateT,
         deps: DepsT,
         inputs: InputT,
-    ) -> tuple[StateT, OutputT]:
+    ) -> GraphRunResult[StateT, OutputT]:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def run_soon(
+        self,
+        state: StateT,
+        deps: DepsT,
+        inputs: InputT,
+    ) -> GraphRunId:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def pause(self, run_id: GraphRunId) -> None:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def terminate(self, run_id: GraphRunId) -> None:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def get_result(self, run_id: GraphRunId, clean_up: bool = False) -> Maybe[GraphRunResult[StateT, OutputT]]:
         raise NotImplementedError

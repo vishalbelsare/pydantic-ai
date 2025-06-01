@@ -23,7 +23,8 @@ class EndNode(str, Enum):
 
 
 @dataclass
-class Spread:
+class Spread[InputT, OutputT]:
+    # Note — the InputT should always be Sequence[OutputT]; we enforce this by making it hard to instantiate in any other way
     id: ForkId
 
 

@@ -156,11 +156,12 @@ class GraphBuilder[StateT, DepsT, GraphInputT, GraphOutputT]:
     _edges_by_source: dict[NodeId, list[Edge]] = field(init=False, default_factory=lambda: defaultdict(list))
     _decision_index: int = field(init=False, default=1)
 
-    type Source[OutputT] = Step[StateT, DepsT, Any, OutputT] | Join[StateT, DepsT, Any, OutputT]
+    type Source[OutputT] = Step[StateT, DepsT, Any, OutputT] | Join[StateT, DepsT, Any, OutputT] | Spread[Any, OutputT]
     type Destination[InputT] = (
         Step[StateT, DepsT, InputT, Any]
         | Join[StateT, DepsT, InputT, Any]
         | Decision[StateT, DepsT, InputT, GraphOutputT]
+        | Spread[InputT, Any]
     )
 
     def __post_init__(self):
@@ -199,6 +200,16 @@ class GraphBuilder[StateT, DepsT, GraphInputT, GraphOutputT]:
             return step(node_id=node_id, label=label)
         else:
             return step(call=call, node_id=node_id, label=label)
+
+    def spread[ItemT](
+        self,
+        item_type: TypeOrTypeExpression[ItemT],
+        *,
+        node_id: str | None = None,
+        label: str | None = None,
+    ) -> Spread[Sequence[ItemT], ItemT]:
+        # TODO: Need to get a unique spread ID
+        return Spread(id=ForkId(NodeId(node_id or 'spread')),)
 
     @overload
     def join[InputT, OutputT](
@@ -253,15 +264,15 @@ class GraphBuilder[StateT, DepsT, GraphInputT, GraphOutputT]:
             index += 1
         return node_id
 
-    def handle[SourceT](
-        self,
-        case: type[SourceT] | type[TypeExpression[SourceT]],
-        *,
-        matches: Callable[[Any], bool] | None = None,
-        label: str | None = None,
-    ) -> DecisionBranchBuilder[StateT, DepsT, SourceT, Any]:
-        extracted_case = cast(type[SourceT], get_args(case)[0] if get_origin(case) is TypeExpression else case)
-        return DecisionBranchBuilder(extracted_case, matches, transforms=(), user_label=label)
+    # def handle[SourceT](
+    #     self,
+    #     case: type[SourceT] | type[TypeExpression[SourceT]],
+    #     *,
+    #     matches: Callable[[Any], bool] | None = None,
+    #     label: str | None = None,
+    # ) -> DecisionBranchBuilder[StateT, DepsT, SourceT, Any]:
+    #     extracted_case = cast(type[SourceT], get_args(case)[0] if get_origin(case) is TypeExpression else case)
+    #     return DecisionBranchBuilder(extracted_case, matches, transforms=(), user_label=label)
 
     # Edge building
     # Node "types" to be connected into edges: 'start', 'end', Step, Decision, Join, Fork.

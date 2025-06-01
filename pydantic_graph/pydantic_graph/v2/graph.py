@@ -26,7 +26,7 @@ from pydantic_graph.v2.node_types import (
 from pydantic_graph.v2.parent_forks import ParentFork, ParentForkFinder
 from pydantic_graph.v2.step import Step, StepCallProtocol
 from pydantic_graph.v2.transform import AnyTransformFunction, TransformFunction
-from pydantic_graph.v2.util import TypeExpression, get_callable_name
+from pydantic_graph.v2.util import TypeExpression, get_callable_name, TypeOrTypeExpression
 
 
 # Node building:
@@ -145,10 +145,10 @@ class Edge:
 
 @dataclass
 class GraphBuilder[StateT, DepsT, GraphInputT, GraphOutputT]:
-    state_type: type[StateT]
-    deps_type: type[DepsT]
-    input_type: type[GraphInputT]
-    output_type: type[TypeExpression[GraphOutputT]] | type[GraphOutputT]
+    state_type: TypeOrTypeExpression[StateT]
+    deps_type: TypeOrTypeExpression[DepsT]
+    input_type: TypeOrTypeExpression[GraphInputT]
+    output_type: TypeOrTypeExpression[GraphOutputT]
 
     parallel: bool = True  # if False, allow direct state modification and don't copy state sent to steps, but disallow parallel node execution
 

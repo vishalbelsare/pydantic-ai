@@ -7,6 +7,9 @@ class TypeExpression[T]:
     pass
 
 
+type TypeOrTypeExpression[T] = type[TypeExpression[T]] | type[T]
+
+
 def get_callable_name(callable_: Any) -> str:
     # TODO: Need to improve this...
     return getattr(callable_, '__name__', str(callable_))

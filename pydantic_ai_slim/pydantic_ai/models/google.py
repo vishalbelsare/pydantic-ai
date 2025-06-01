@@ -412,7 +412,7 @@ class GeminiStreamedResponse(StreamedResponse):
                 raise UnexpectedModelBehavior('Streamed response has no content field')  # pragma: no cover
             assert candidate.content.parts is not None
             for part in candidate.content.parts:
-                if part.text:
+                if part.text is not None:
                     yield self._parts_manager.handle_text_delta(vendor_part_id='content', content=part.text)
                 elif part.function_call:
                     maybe_event = self._parts_manager.handle_tool_call_delta(
@@ -463,6 +463,7 @@ def _process_response_from_parts(
         if part.executable_code is not None:
             items.append(ServerToolCallPart(args=part.executable_code.model_dump(), tool_name='code_execution'))
         elif part.code_execution_result is not None:
+            # TODO(Marcelo): Is the idea to generate the tool_call_id on the `executable_code`, and then pass it here?
             items.append(
                 ServerToolReturnPart(
                     tool_name='code_execution',
@@ -470,7 +471,7 @@ def _process_response_from_parts(
                     tool_call_id="It doesn't have.",
                 )
             )
-        elif part.text:
+        elif part.text is not None:
             items.append(TextPart(content=part.text))
         elif part.function_call:
             assert part.function_call.name is not None

@@ -385,6 +385,10 @@ class BaseToolReturnPart:
             body={'content': self.content, 'role': 'tool', 'id': self.tool_call_id, 'name': self.tool_name},
         )
 
+    def has_content(self) -> bool:
+        """Return `True` if the tool return has content."""
+        return self.content is not None
+
     __repr__ = _utils.dataclasses_no_defaults_repr
 
 

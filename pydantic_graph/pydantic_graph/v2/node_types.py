@@ -9,9 +9,17 @@ from pydantic_graph.v2.join import Join
 from pydantic_graph.v2.node import EndNode, Spread, StartNode
 from pydantic_graph.v2.step import Step
 
-type AnyMiddleNode = Step[Any, Any, Any, Any] | Join[Any, Any, Any, Any] | Spread[Any, Any]
-type AnySourceNode = AnyMiddleNode | StartNode
-type AnyDestinationNode = AnyMiddleNode | EndNode | Decision[Any, Any, Any, Any]
+type MiddleNode[StateT, DepsT, InputT, OutputT] = (
+    Step[StateT, DepsT, InputT, OutputT] | Join[StateT, DepsT, InputT, OutputT] | Spread[InputT, OutputT]
+)
+
+type SourceNode[StateT, DepsT, OutputT] = MiddleNode[StateT, DepsT, Any, OutputT]  # | StartNode
+type DestinationNode[StateT, DepsT, InputT, GraphOutputT] = (
+    MiddleNode[StateT, DepsT, InputT, Any] | Decision[StateT, DepsT, InputT, GraphOutputT]
+)  # | EndNode
+
+type AnySourceNode = SourceNode[Any, Any, Any] | StartNode
+type AnyDestinationNode = DestinationNode[Any, Any, Any, Any] | EndNode
 type AnyNode = AnySourceNode | AnyDestinationNode
 
 

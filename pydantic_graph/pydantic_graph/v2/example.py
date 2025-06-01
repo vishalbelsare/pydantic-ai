@@ -65,13 +65,14 @@ async def handle_int_2(ctx: StepContext[MyState, object, object]) -> None:
 
 
 @gb.step
-async def handle_int_3(ctx: StepContext[MyState, object, object]) -> None:
+async def handle_int_3(ctx: StepContext[MyState, object, object]) -> list[int]:
     print('start int 3')
     await asyncio.sleep(1)
     async with ctx.get_mutable_state() as state:
         assert state.container is not None
-        state.container.field_3 = []
+        output = state.container.field_3 = [1, 2, 3]
     print('end int 3')
+    return output
 
 
 @gb.step
@@ -95,14 +96,29 @@ async def handle_str_2(ctx: StepContext[MyState, object, object]) -> None:
 
 
 @gb.step
-async def handle_str_3(ctx: StepContext[MyState, object, object]) -> None:
+async def handle_str_3(ctx: StepContext[MyState, object, object]) -> list[str]:
     print('start str 3')
     await asyncio.sleep(1)
     async with ctx.get_mutable_state() as state:
         assert state.container is not None
-        state.container.field_3 = []
+        output = state.container.field_3 = ['a', 'b', 'c']
     print('end str 3')
+    return output
 
+
+async def handle_field_3_item(ctx: StepContext[MyState, object, int | str]) -> None:
+    inputs = ctx.inputs
+    print(f'handle_field_3_item: {inputs}')
+    await asyncio.sleep(0.25)
+    async with ctx.get_mutable_state() as state:
+        assert state.container is not None
+        assert state.container.field_3 is not None
+        state.container.field_3.append(inputs * 2)
+    await asyncio.sleep(0.25)
+
+
+handle_field_3_item_int = gb.step(handle_field_3_item, node_id='handle_field_3_item_int')
+handle_field_3_item_str = gb.step(handle_field_3_item, node_id='handle_field_3_item_str')
 
 handle_int_join = gb.join(reduce_to_none, node_id='handle_int_join')
 handle_str_join = gb.join(reduce_to_none, node_id='handle_str_join')
@@ -117,14 +133,22 @@ gb.add_edge(
 )
 
 
-for handle_int_field in (handle_int_1, handle_int_2, handle_int_3):
-    gb.add_edge(handle_int, handle_int_field)
-    gb.add_edge(handle_int_field, handle_int_join)
+gb.add_edge(handle_int, handle_int_1)
+gb.add_edge(handle_int_1, handle_int_join)
+gb.add_edge(handle_int, handle_int_2)
+gb.add_edge(handle_int_2, handle_int_join)
+gb.add_edge(handle_int, handle_int_3)
+gb.add_spreading_edge(handle_int_3, handle_field_3_item_int)
+gb.add_edge(handle_field_3_item_int, handle_int_join)
 gb.end_from(handle_int_join)
 
-for handle_str_field in (handle_str_1, handle_str_2, handle_str_3):
-    gb.add_edge(handle_str, handle_str_field)
-    gb.add_edge(handle_str_field, handle_str_join)
+gb.add_edge(handle_str, handle_str_1)
+gb.add_edge(handle_str_1, handle_str_join)
+gb.add_edge(handle_str, handle_str_2)
+gb.add_edge(handle_str_2, handle_str_join)
+gb.add_edge(handle_str, handle_str_3)
+gb.add_spreading_edge(handle_str_3, handle_field_3_item_str)
+gb.add_edge(handle_field_3_item_str, handle_str_join)
 gb.end_from(handle_str_join)
 
 g = gb.build()

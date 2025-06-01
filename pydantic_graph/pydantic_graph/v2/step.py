@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator, Awaitable
 from contextlib import asynccontextmanager
-from dataclasses import dataclass
 from typing import Protocol
 
 from pydantic_graph.v2.id_types import NodeId
@@ -55,11 +54,20 @@ class StepCallProtocol[StateT, DepsT, InputT, OutputT](Protocol):
         raise NotImplementedError
 
 
-@dataclass
 class Step[StateT, DepsT, InputT, OutputT]:
-    id: NodeId
-    call: StepCallProtocol[StateT, DepsT, InputT, OutputT]
-    user_label: str | None
+    """The main reason this is not a dataclass is that we need appropriate variance in the type parameters."""
+
+    def __init__(
+        self, id: NodeId, call: StepCallProtocol[StateT, DepsT, InputT, OutputT], user_label: str | None = None
+    ):
+        self.id = id
+        self._call = call
+        self.user_label = user_label
+
+    @property
+    def call(self) -> StepCallProtocol[StateT, DepsT, InputT, OutputT]:
+        # The use of a property here is necessary to ensure that Step is covariant/contravariant as appropriate.
+        return self._call
 
     @property
     def label(self) -> str | None:

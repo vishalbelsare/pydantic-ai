@@ -20,13 +20,14 @@ from pydantic_graph.v2.node_types import (
     AnyDestinationNode,
     AnyNode,
     AnySourceNode,
+    DestinationNode,
     is_destination,
     is_source,
 )
 from pydantic_graph.v2.parent_forks import ParentFork, ParentForkFinder
 from pydantic_graph.v2.step import Step, StepCallProtocol
 from pydantic_graph.v2.transform import AnyTransformFunction, TransformFunction
-from pydantic_graph.v2.util import TypeExpression, get_callable_name, TypeOrTypeExpression
+from pydantic_graph.v2.util import TypeExpression, TypeOrTypeExpression, get_callable_name
 
 
 # Node building:
@@ -157,12 +158,7 @@ class GraphBuilder[StateT, DepsT, GraphInputT, GraphOutputT]:
     _decision_index: int = field(init=False, default=1)
 
     type Source[OutputT] = Step[StateT, DepsT, Any, OutputT] | Join[StateT, DepsT, Any, OutputT] | Spread[Any, OutputT]
-    type Destination[InputT] = (
-        Step[StateT, DepsT, InputT, Any]
-        | Join[StateT, DepsT, InputT, Any]
-        | Decision[StateT, DepsT, InputT, GraphOutputT]
-        | Spread[InputT, Any]
-    )
+    type Destination[InputT] = DestinationNode[StateT, DepsT, InputT, GraphOutputT]
 
     def __post_init__(self):
         self._nodes[START.id] = START
@@ -206,10 +202,11 @@ class GraphBuilder[StateT, DepsT, GraphInputT, GraphOutputT]:
         item_type: TypeOrTypeExpression[ItemT],
         *,
         node_id: str | None = None,
-        label: str | None = None,
+        # label: str | None = None,
     ) -> Spread[Sequence[ItemT], ItemT]:
-        # TODO: Need to get a unique spread ID
-        return Spread(id=ForkId(NodeId(node_id or 'spread')),)
+        return Spread[Sequence[ItemT], ItemT](
+            id=ForkId(NodeId(node_id or self._get_new_spread_id())),
+        )
 
     @overload
     def join[InputT, OutputT](
@@ -254,8 +251,12 @@ class GraphBuilder[StateT, DepsT, GraphInputT, GraphOutputT]:
             self._decision_index += 1
         return node_id
 
-    def _get_new_spread_id(self, from_: str, to: str) -> str:
-        prefix = f'spread_from_{from_}_to_{to}'
+    def _get_new_spread_id(self, from_: str | None = None, to: str | None = None) -> str:
+        prefix = 'spread'
+        if from_ is not None:
+            prefix += f'_from_{from_}'
+        if to is not None:
+            prefix += f'_to_{to}'
 
         node_id = prefix
         index = 2
@@ -264,15 +265,15 @@ class GraphBuilder[StateT, DepsT, GraphInputT, GraphOutputT]:
             index += 1
         return node_id
 
-    # def handle[SourceT](
-    #     self,
-    #     case: type[SourceT] | type[TypeExpression[SourceT]],
-    #     *,
-    #     matches: Callable[[Any], bool] | None = None,
-    #     label: str | None = None,
-    # ) -> DecisionBranchBuilder[StateT, DepsT, SourceT, Any]:
-    #     extracted_case = cast(type[SourceT], get_args(case)[0] if get_origin(case) is TypeExpression else case)
-    #     return DecisionBranchBuilder(extracted_case, matches, transforms=(), user_label=label)
+    def handle[SourceT](
+        self,
+        case: TypeOrTypeExpression[SourceT],
+        *,
+        matches: Callable[[Any], bool] | None = None,
+        label: str | None = None,
+    ) -> DecisionBranchBuilder[StateT, DepsT, SourceT, Any]:
+        extracted_case = cast(type[SourceT], get_args(case)[0] if get_origin(case) is TypeExpression else case)
+        return DecisionBranchBuilder(extracted_case, matches, transforms=(), user_label=label)
 
     # Edge building
     # Node "types" to be connected into edges: 'start', 'end', Step, Decision, Join, Fork.
@@ -364,7 +365,7 @@ class GraphBuilder[StateT, DepsT, GraphInputT, GraphOutputT]:
         if spread_id in self._nodes:
             raise ValueError(f'Spread ID {spread_id!r} is already used in the graph. Please specify a unique ID.')
 
-        spread = Spread(id=ForkId(NodeId(spread_id)))
+        spread = Spread[Any, Any](id=ForkId(NodeId(spread_id)))
         self._add_edge_from_nodes(
             source=START,
             transform=pre_spread_transform,
@@ -477,7 +478,7 @@ class GraphBuilder[StateT, DepsT, GraphInputT, GraphOutputT]:
         if spread_id in self._nodes:
             raise ValueError(f'Spread ID {spread_id!r} is already used in the graph. Please specify a unique ID.')
 
-        spread = Spread(id=ForkId(NodeId(spread_id)))
+        spread = Spread[Any, Any](id=ForkId(NodeId(spread_id)))
         self._add_edge_from_nodes(
             source=source,
             transform=pre_spread_transform,
@@ -550,7 +551,7 @@ class GraphBuilder[StateT, DepsT, GraphInputT, GraphOutputT]:
         assert edge.destination_id in self._nodes, f'Edge destination {edge.destination_id} not found in graph'
         self._edges_by_source[edge.source_id].append(edge)
 
-    def build(self, parallel: bool = True) -> Graph[StateT, DepsT, GraphInputT, GraphOutputT]:
+    def build(self) -> Graph[StateT, DepsT, GraphInputT, GraphOutputT]:
         # TODO: Warn/error if there is no start node / edges, or end node / edges
         # TODO: Warn/error if the graph is not connected
         # TODO: Warn/error if any non-End node is a dead end
@@ -558,7 +559,6 @@ class GraphBuilder[StateT, DepsT, GraphInputT, GraphOutputT]:
         # TODO: Allow the user to specify the parent forks; only infer them if _not_ specified
         # TODO: Verify that any user-specified parent forks are _actually_ valid parent forks, and if not, generate a helpful error message
         # TODO: Consider doing a deepcopy here to prevent modifications to the underlying nodes and edges
-        # TODO: Error if `parallel` is False but the graph has forks / spreads
         nodes = self._nodes
         edges = self._edges_by_source
         nodes, edges = _convert_decision_spreads(nodes, edges)
@@ -573,7 +573,6 @@ class GraphBuilder[StateT, DepsT, GraphInputT, GraphOutputT]:
             deps_type=self.deps_type,
             input_type=self.input_type,
             output_type=output_type,
-            parallel=parallel,
             nodes=self._nodes,
             edges_by_source=self._edges_by_source,
             parent_forks=parent_forks,
@@ -599,7 +598,7 @@ def _convert_decision_spreads(
         if isinstance(node, Decision):
             for branch in node.branches:
                 if branch.spread:
-                    spread = Spread(id=ForkId(_get_next_spread_id(to=branch.route_to.id)))
+                    spread = Spread[Any, Any](id=ForkId(_get_next_spread_id(to=branch.route_to.id)))
                     old_route_to = branch.route_to
                     nodes[spread.id] = spread
                     edges[spread.id].append(
@@ -655,16 +654,14 @@ def _collect_dominating_forks(
 
 @dataclass(repr=False)
 class Graph[StateT, DepsT, InputT, OutputT]:
-    state_type: type[StateT]
-    deps_type: type[DepsT]
-    input_type: type[InputT]
-    output_type: type[OutputT]
+    state_type: TypeOrTypeExpression[StateT]
+    deps_type: TypeOrTypeExpression[DepsT]
+    input_type: TypeOrTypeExpression[InputT]
+    output_type: TypeOrTypeExpression[OutputT]
 
     nodes: dict[NodeId, AnyNode]
     edges_by_source: dict[NodeId, list[Edge]]
     parent_forks: dict[JoinId, ParentFork[NodeId]]
-
-    parallel: bool  # if False, allow direct state modification and don't copy state sent to steps, but disallow parallel node execution
 
     def __post_init__(self):
         assert StartNode.start.id in self.nodes, 'Graph must have a start node'

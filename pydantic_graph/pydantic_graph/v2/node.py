@@ -27,6 +27,9 @@ class Spread[InputT, OutputT]:
     # Note — the InputT should always be Sequence[OutputT]; we enforce this by making it hard to instantiate in any other way
     id: ForkId
 
+    def _force_variance(self, inputs: InputT) -> OutputT:
+        raise RuntimeError('This method should never be called, it is just defined for typing purposes.')
+
 
 START = StartNode.start
 END = EndNode.end

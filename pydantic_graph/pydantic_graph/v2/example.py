@@ -126,9 +126,8 @@ handle_str_join = g.join(reduce_to_none, node_id='handle_str_join')
 g.add_edges(g.from_(g.start_node).label('begin').to(choose_type))
 g.add_decision(
     choose_type,
-    g.branch(g.match(TypeExpression[Literal['int']]).to(handle_int)).branch(
-        g.match(TypeExpression[Literal['str']]).to(handle_str)
-    ),
+    g.branch(g.match(TypeExpression[Literal['int']]).to(handle_int))
+    .branch(g.match(TypeExpression[Literal['str']]).to(handle_str)),
 )
 g.add_edges(
     # ints
@@ -139,7 +138,9 @@ g.add_edges(
     g.from_(handle_int_1, handle_int_2, handle_field_3_item_int).to(handle_int_join),
     g.from_(handle_int_join).to(g.end_node),
     # strs
-    g.from_(handle_str).fork(lambda e: [e.to(handle_str_1), e.to(handle_str_2), e.to(handle_str_3)]),  # `fork` API
+    g.from_(handle_str).fork(
+        lambda e: [e.label('abc').to(handle_str_1), e.label('def').to(handle_str_2), e.to(handle_str_3)]
+    ),  # `fork` API
     g.from_(handle_str_3).spread().to(handle_field_3_item_str),
     g.from_(handle_str_1, handle_str_2, handle_field_3_item_str).to(handle_str_join),
     g.from_(handle_str_join).to(g.end_node),

@@ -115,13 +115,13 @@ class GraphRunner[StateT, DepsT, InputT, OutputT](ABC):
     #     raise NotImplementedError
     #
     # @abstractmethod
+    # async def get_result(self, run_id: GraphRunId, clean_up: bool = False) -> Maybe[GraphRunResult[StateT, OutputT]]:
+    #     raise NotImplementedError
+    #
+    # @abstractmethod
     # async def pause(self, run_id: GraphRunId) -> None:
     #     raise NotImplementedError
     #
     # @abstractmethod
     # async def terminate(self, run_id: GraphRunId) -> None:
-    #     raise NotImplementedError
-    #
-    # @abstractmethod
-    # async def get_result(self, run_id: GraphRunId, clean_up: bool = False) -> Maybe[GraphRunResult[StateT, OutputT]]:
     #     raise NotImplementedError

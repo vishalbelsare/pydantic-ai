@@ -95,7 +95,10 @@ def reduce_to_none(
 class Join[StateT, DepsT, InputT, OutputT]:
     id: JoinId
 
-    reducer_factory: ReducerFactory[StateT, DepsT, InputT, OutputT]
+    # reducer_factory: ReducerFactory[StateT, DepsT, InputT, OutputT]
+
+    def _make_contravariant_in_input(self, inputs: InputT) -> None:
+        raise NotImplementedError
 
     # TODO: Need to implement a version of ParentForkFinder that validates the specified NodeId is valid
     joins: ForkId | None = None  # the NodeID of the node to use as the dominating fork

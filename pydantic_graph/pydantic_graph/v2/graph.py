@@ -10,7 +10,6 @@ from pydantic_graph.v2.id_types import ForkId, JoinId, NodeId
 from pydantic_graph.v2.join import Join, ReducerFactory
 from pydantic_graph.v2.mermaid import StateDiagramDirection, generate_code
 from pydantic_graph.v2.node import (
-    END,
     START,
     EndNode,
     Spread,
@@ -21,12 +20,14 @@ from pydantic_graph.v2.node_types import (
     AnyNode,
     AnySourceNode,
     DestinationNode,
+    SourceNode,
     is_destination,
     is_source,
 )
 from pydantic_graph.v2.parent_forks import ParentFork, ParentForkFinder
+from pydantic_graph.v2.paths import EdgePath, EdgePathBuilder, PathBuilder
 from pydantic_graph.v2.step import Step, StepCallProtocol
-from pydantic_graph.v2.transform import AnyTransformFunction, TransformFunction
+from pydantic_graph.v2.transform import AnyTransformFunction
 from pydantic_graph.v2.util import TypeExpression, TypeOrTypeExpression, get_callable_name
 
 
@@ -157,12 +158,25 @@ class GraphBuilder[StateT, DepsT, GraphInputT, GraphOutputT]:
     _edges_by_source: dict[NodeId, list[Edge]] = field(init=False, default_factory=lambda: defaultdict(list))
     _decision_index: int = field(init=False, default=1)
 
-    type Source[OutputT] = Step[StateT, DepsT, Any, OutputT] | Join[StateT, DepsT, Any, OutputT] | Spread[Any, OutputT]
-    type Destination[InputT] = DestinationNode[StateT, DepsT, InputT, GraphOutputT]
+    type Source[OutputT] = (
+        Step[StateT, DepsT, Any, OutputT]
+        | Join[StateT, DepsT, Any, OutputT]
+        | Spread[Any, OutputT]
+        | StartNode[OutputT]
+    )
+    type Destination[InputT] = DestinationNode[StateT, DepsT, InputT]
 
-    def __post_init__(self):
-        self._nodes[START.id] = START
-        self._nodes[END.id] = END
+    # def __post_init__(self):
+    #     self._nodes[START.id] = START
+    #     self._nodes[END.id] = END
+
+    @property
+    def start_node(self) -> StartNode[GraphInputT]:
+        raise NotImplementedError
+
+    @property
+    def end_node(self) -> EndNode[GraphOutputT]:
+        raise NotImplementedError
 
     # Node building:
     @overload
@@ -265,263 +279,29 @@ class GraphBuilder[StateT, DepsT, GraphInputT, GraphOutputT]:
             index += 1
         return node_id
 
-    def handle[SourceT](
+    # Edge building
+    def add_edges(self, *edges: EdgePath[StateT, DepsT]) -> None:
+        raise NotImplementedError
+
+    def add_decision[T](
+        self, source: SourceNode[StateT, DepsT, T], decision: Decision[StateT, DepsT, T], note: str | None = None
+    ) -> None:
+        decision.note = note
+        raise NotImplementedError
+
+    def from_[SourceOutputT](self, *sources: Source[SourceOutputT]) -> EdgePathBuilder[StateT, DepsT, SourceOutputT]:
+        return EdgePathBuilder[StateT, DepsT, SourceOutputT](
+            sources=sources, path_builder=PathBuilder(working_items=[])
+        )
+
+    def branch[SourceT](
         self,
-        case: TypeOrTypeExpression[SourceT],
+        source: TypeOrTypeExpression[SourceT],
         *,
         matches: Callable[[Any], bool] | None = None,
-        label: str | None = None,
-    ) -> DecisionBranchBuilder[StateT, DepsT, SourceT, Any]:
-        extracted_case = cast(type[SourceT], get_args(case)[0] if get_origin(case) is TypeExpression else case)
-        return DecisionBranchBuilder(extracted_case, matches, transforms=(), user_label=label)
-
-    # Edge building
-    # Node "types" to be connected into edges: 'start', 'end', Step, Decision, Join, Fork.
-    # You typically don't manually create forks — they are inferred from multiple edges coming out of a single node.
-    @overload
-    def start_with(
-        self,
-        destination: Destination[GraphInputT],
-        *,
-        label: str | None = None,
-    ) -> None: ...
-
-    @overload
-    def start_with[DestinationInputT](
-        self,
-        destination: Destination[DestinationInputT],
-        *,
-        transform: TransformFunction[StateT, DepsT, GraphInputT, DestinationInputT],
-        label: str | None = None,
-    ) -> None: ...
-
-    def start_with(
-        self,
-        destination: Destination[Any],
-        *,
-        transform: TransformFunction[StateT, DepsT, Any, Any] | None = None,
-        label: str | None = None,
-    ) -> None:
-        self._add_edge_from_nodes(
-            source=START,
-            transform=transform,
-            destination=destination,
-            label=label,
-        )
-
-    @overload
-    def start_with_spread[GraphInputItemT](
-        self: GraphBuilder[StateT, DepsT, Sequence[GraphInputItemT], GraphOutputT],
-        node: Destination[GraphInputItemT],
-        *,
-        pre_spread_label: str | None = None,
-        post_spread_label: str | None = None,
-    ) -> None: ...
-
-    @overload
-    def start_with_spread[DestinationInputT](
-        self,
-        node: Destination[DestinationInputT],
-        *,
-        pre_spread_transform: TransformFunction[StateT, DepsT, GraphInputT, Sequence[DestinationInputT]],
-        pre_spread_label: str | None = None,
-        post_spread_label: str | None = None,
-    ) -> None: ...
-
-    @overload
-    def start_with_spread[GraphInputItemT, DestinationInputT](
-        self: GraphBuilder[StateT, DepsT, Sequence[GraphInputItemT], GraphOutputT],
-        node: Destination[DestinationInputT],
-        *,
-        post_spread_transform: TransformFunction[StateT, DepsT, GraphInputItemT, DestinationInputT],
-        pre_spread_label: str | None = None,
-        post_spread_label: str | None = None,
-    ) -> None: ...
-
-    @overload
-    def start_with_spread[IntermediateT, DestinationInputT](
-        self: GraphBuilder[StateT, DepsT, GraphInputT, GraphOutputT],
-        node: Destination[DestinationInputT],
-        *,
-        pre_spread_transform: TransformFunction[StateT, DepsT, GraphInputT, Sequence[IntermediateT]],
-        post_spread_transform: TransformFunction[StateT, DepsT, IntermediateT, DestinationInputT],
-        pre_spread_label: str | None = None,
-        post_spread_label: str | None = None,
-    ) -> None: ...
-
-    def start_with_spread(
-        self,
-        node: Destination[Any],
-        *,
-        spread_id: str | None = None,
-        pre_spread_transform: TransformFunction[StateT, DepsT, Any, Sequence[Any]] | None = None,
-        post_spread_transform: TransformFunction[StateT, DepsT, Any, Any] | None = None,
-        pre_spread_label: str | None = None,
-        post_spread_label: str | None = None,
-    ) -> None:
-        # TODO: Need to allow specifying the id manually to prevent conflicts if there are multiple spreads between the same two nodes
-        if spread_id is None:
-            spread_id = self._get_new_spread_id(from_='start', to=node.id)
-        if spread_id in self._nodes:
-            raise ValueError(f'Spread ID {spread_id!r} is already used in the graph. Please specify a unique ID.')
-
-        spread = Spread[Any, Any](id=ForkId(NodeId(spread_id)))
-        self._add_edge_from_nodes(
-            source=START,
-            transform=pre_spread_transform,
-            destination=spread,
-            label=pre_spread_label,
-        )
-        self._add_edge_from_nodes(
-            source=spread,
-            transform=post_spread_transform,
-            destination=node,
-            label=post_spread_label,
-        )
-
-    @overload
-    def add_edge[SourceOutputT](
-        self,
-        source: Source[SourceOutputT],
-        destination: Destination[SourceOutputT],
-        *,
-        label: str | None = None,
-    ) -> None: ...
-
-    @overload
-    def add_edge[SourceOutputT, DestinationInputT](
-        self,
-        source: Source[SourceOutputT],
-        destination: Destination[DestinationInputT],
-        *,
-        transform: TransformFunction[StateT, DepsT, SourceOutputT, DestinationInputT],
-        label: str | None = None,
-    ) -> None: ...
-
-    def add_edge[SourceOutputT](
-        self,
-        source: Source[SourceOutputT],
-        destination: Destination[Any],
-        *,
-        transform: TransformFunction[StateT, DepsT, SourceOutputT, Any] | None = None,
-        label: str | None = None,
-    ) -> None:
-        self._add_edge_from_nodes(
-            source=source,
-            transform=transform,
-            destination=destination,
-            label=label,
-        )
-
-    @overload
-    def add_spreading_edge[DestinationInputT](
-        self,
-        source: Source[Sequence[DestinationInputT]],
-        destination: Destination[DestinationInputT],
-        *,
-        pre_spread_label: str | None = None,
-        post_spread_label: str | None = None,
-    ) -> None: ...
-
-    @overload
-    def add_spreading_edge[SourceOutputT, DestinationInputT](
-        self,
-        source: Source[SourceOutputT],
-        destination: Destination[DestinationInputT],
-        *,
-        pre_spread_transform: TransformFunction[StateT, DepsT, SourceOutputT, Sequence[DestinationInputT]],
-        pre_spread_label: str | None = None,
-        post_spread_label: str | None = None,
-    ) -> None: ...
-
-    @overload
-    def add_spreading_edge[SourceOutputItemT, DestinationInputT](
-        self,
-        source: Source[Sequence[SourceOutputItemT]],
-        destination: Destination[DestinationInputT],
-        *,
-        post_spread_transform: TransformFunction[
-            StateT,
-            DepsT,
-            SourceOutputItemT,
-            DestinationInputT,
-        ],
-        pre_spread_label: str | None = None,
-        post_spread_label: str | None = None,
-    ) -> None: ...
-
-    @overload
-    def add_spreading_edge[SourceOutputT, IntermediateT, DestinationInputT](
-        self,
-        source: Source[SourceOutputT],
-        destination: Destination[DestinationInputT],
-        *,
-        pre_spread_transform: TransformFunction[StateT, DepsT, SourceOutputT, Sequence[IntermediateT]],
-        post_spread_transform: TransformFunction[StateT, DepsT, IntermediateT, DestinationInputT],
-        pre_spread_label: str | None = None,
-        post_spread_label: str | None = None,
-    ) -> None: ...
-
-    def add_spreading_edge(
-        self,
-        source: Source[Any],
-        destination: Destination[Any],
-        *,
-        spread_id: str | None = None,
-        pre_spread_transform: TransformFunction[StateT, DepsT, Any, Sequence[Any]] | None = None,
-        post_spread_transform: TransformFunction[StateT, DepsT, Any, Any] | None = None,
-        pre_spread_label: str | None = None,
-        post_spread_label: str | None = None,
-    ) -> None:
-        if spread_id is None:
-            spread_id = self._get_new_spread_id(from_=source.id, to=destination.id)
-        if spread_id in self._nodes:
-            raise ValueError(f'Spread ID {spread_id!r} is already used in the graph. Please specify a unique ID.')
-
-        spread = Spread[Any, Any](id=ForkId(NodeId(spread_id)))
-        self._add_edge_from_nodes(
-            source=source,
-            transform=pre_spread_transform,
-            destination=spread,
-            label=pre_spread_label,
-        )
-        self._add_edge_from_nodes(
-            source=spread,
-            transform=post_spread_transform,
-            destination=destination,
-            label=post_spread_label,
-        )
-
-    @overload
-    def end_from(
-        self,
-        source: Source[GraphOutputT],
-        *,
-        label: str | None = None,
-    ) -> None: ...
-
-    @overload
-    def end_from[SourceOutputT](
-        self,
-        source: Source[SourceOutputT],
-        *,
-        label: str | None = None,
-        transform: TransformFunction[StateT, DepsT, SourceOutputT, GraphOutputT],
-    ) -> None: ...
-
-    def end_from(
-        self,
-        source: Source[Any],
-        *,
-        label: str | None = None,
-        transform: TransformFunction[StateT, DepsT, Any, GraphOutputT] | None = None,
-    ) -> None:
-        self._add_edge_from_nodes(
-            source=source,
-            transform=transform,
-            destination=END,
-            label=label,
-        )
+    ) -> DecisionBranchBuilder[StateT, DepsT, SourceT, SourceT, Never]:
+        node_id = NodeId(self._get_new_decision_id())
+        return Decision[StateT, DepsT, Never](node_id, branches=[], note=None).branch(source, matches=matches)
 
     def _add_edge_from_nodes(
         self,

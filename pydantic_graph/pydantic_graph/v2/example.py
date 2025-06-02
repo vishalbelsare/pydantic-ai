@@ -123,33 +123,26 @@ handle_field_3_item_str = gb.step(handle_field_3_item, node_id='handle_field_3_i
 handle_int_join = gb.join(reduce_to_none, node_id='handle_int_join')
 handle_str_join = gb.join(reduce_to_none, node_id='handle_str_join')
 
-gb.start_with(choose_type, label='begin')
-
-gb.add_edge(
+gb.add_edges(gb.from_(gb.start_node).label('begin').to(choose_type))
+gb.add_decision(
     choose_type,
-    gb.decision()
-    .branch(gb.handle(TypeExpression[Literal['int']]).route_to(handle_int))
-    .branch(gb.handle(TypeExpression[Literal['str']]).route_to(handle_str)),
+    gb.branch(TypeExpression[Literal['int']]).to(handle_int).branch(TypeExpression[Literal['str']]).to(handle_str),
 )
-
-
-gb.add_edge(handle_int, handle_int_1)
-gb.add_edge(handle_int_1, handle_int_join)
-gb.add_edge(handle_int, handle_int_2)
-gb.add_edge(handle_int_2, handle_int_join)
-gb.add_edge(handle_int, handle_int_3)
-gb.add_spreading_edge(handle_int_3, handle_field_3_item_int)
-gb.add_edge(handle_field_3_item_int, handle_int_join)
-gb.end_from(handle_int_join)
-
-gb.add_edge(handle_str, handle_str_1)
-gb.add_edge(handle_str_1, handle_str_join)
-gb.add_edge(handle_str, handle_str_2)
-gb.add_edge(handle_str_2, handle_str_join)
-gb.add_edge(handle_str, handle_str_3)
-gb.add_spreading_edge(handle_str_3, handle_field_3_item_str)
-gb.add_edge(handle_field_3_item_str, handle_str_join)
-gb.end_from(handle_str_join)
+gb.add_edges(
+    # ints
+    gb.from_(handle_int).to(handle_int_1, handle_int_2, handle_int_3),
+    # gb.from_(handle_int).fork(
+    #     lambda e: [e.to(handle_int_1), e.to(handle_int_2), e.to(handle_int_3)]
+    # ),
+    gb.from_(handle_int_3).spread().to(handle_field_3_item_int),
+    gb.from_(handle_int_1, handle_int_2, handle_field_3_item_int).to(handle_int_join),
+    gb.from_(handle_int_join).to(gb.end_node),
+    # strs
+    gb.from_(handle_str).fork(lambda e: [e.to(handle_str_1), e.to(handle_str_2), e.to(handle_str_3)]),
+    gb.from_(handle_str_3).spread().to(handle_field_3_item_str),
+    gb.from_(handle_str_1, handle_str_2, handle_field_3_item_str).to(handle_str_join),
+    gb.from_(handle_str_join).to(gb.end_node),
+)
 
 g = gb.build()
 print(g)

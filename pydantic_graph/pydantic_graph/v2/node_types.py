@@ -13,13 +13,11 @@ type MiddleNode[StateT, DepsT, InputT, OutputT] = (
     Step[StateT, DepsT, InputT, OutputT] | Join[StateT, DepsT, InputT, OutputT] | Spread[InputT, OutputT]
 )
 
-type SourceNode[StateT, DepsT, OutputT] = MiddleNode[StateT, DepsT, Any, OutputT]  # | StartNode
-type DestinationNode[StateT, DepsT, InputT, GraphOutputT] = (
-    MiddleNode[StateT, DepsT, InputT, Any] | Decision[StateT, DepsT, InputT, GraphOutputT]
-)  # | EndNode
+type SourceNode[StateT, DepsT, OutputT] = MiddleNode[StateT, DepsT, Any, OutputT] | StartNode[OutputT]
+type DestinationNode[StateT, DepsT, InputT] = MiddleNode[StateT, DepsT, InputT, Any] | EndNode[InputT]
 
-type AnySourceNode = SourceNode[Any, Any, Any] | StartNode
-type AnyDestinationNode = DestinationNode[Any, Any, Any, Any] | EndNode
+type AnySourceNode = SourceNode[Any, Any, Any] | StartNode[Any]
+type AnyDestinationNode = DestinationNode[Any, Any, Any] | EndNode[Any]
 type AnyNode = AnySourceNode | AnyDestinationNode
 
 

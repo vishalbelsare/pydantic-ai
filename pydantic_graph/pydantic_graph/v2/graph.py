@@ -5,12 +5,11 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any, Callable, Never, cast, get_args, get_origin, overload
 
-from pydantic_graph.v2.decision import Decision, DecisionBranchBuilder
+from pydantic_graph.v2.decision import Decision, DecisionBranch, DecisionBranchBuilder
 from pydantic_graph.v2.id_types import ForkId, JoinId, NodeId
 from pydantic_graph.v2.join import Join, ReducerFactory
 from pydantic_graph.v2.mermaid import StateDiagramDirection, generate_code
 from pydantic_graph.v2.node import (
-    START,
     EndNode,
     Spread,
     StartNode,
@@ -110,10 +109,6 @@ def join[StateT, DepsT](
         id=JoinId(NodeId(node_id)),
         reducer_factory=reducer_factory,
     )
-
-
-def decision(*, node_id: str, note: str | None = None) -> Decision[Any, Any, Never, Never]:
-    return Decision[Any, Any, Never, Never](id=NodeId(node_id), branches=[], note=note)
 
 
 @dataclass
@@ -251,12 +246,6 @@ class GraphBuilder[StateT, DepsT, GraphInputT, GraphOutputT]:
         else:
             return join(reducer_factory=reducer_factory, node_id=node_id)
 
-    def decision(self, *, node_id: str | None = None, note: str | None = None) -> Decision[StateT, DepsT, Never, Never]:
-        if node_id is None:
-            node_id = self._get_new_decision_id()
-
-        return decision(node_id=node_id, note=note)
-
     def _get_new_decision_id(self) -> str:
         node_id = f'decision_{self._decision_index}'
         self._decision_index += 1
@@ -294,14 +283,19 @@ class GraphBuilder[StateT, DepsT, GraphInputT, GraphOutputT]:
             sources=sources, path_builder=PathBuilder(working_items=[])
         )
 
-    def branch[SourceT](
+    def branch[SourceT](self, branch: DecisionBranch[SourceT]) -> Decision[StateT, DepsT, SourceT]:
+        return Decision(id=NodeId(self._get_new_decision_id()), branches=[branch], note=None)
+
+    def match[SourceT](
         self,
         source: TypeOrTypeExpression[SourceT],
         *,
         matches: Callable[[Any], bool] | None = None,
     ) -> DecisionBranchBuilder[StateT, DepsT, SourceT, SourceT, Never]:
         node_id = NodeId(self._get_new_decision_id())
-        return Decision[StateT, DepsT, Never](node_id, branches=[], note=None).branch(source, matches=matches)
+        decision = Decision[StateT, DepsT, Never](node_id, branches=[], note=None)
+        new_path_builder = PathBuilder[StateT, DepsT, SourceT](working_items=[])
+        return DecisionBranchBuilder(decision=decision, source=source, matches=matches, path_builder=new_path_builder)
 
     def _add_edge_from_nodes(
         self,
@@ -359,6 +353,7 @@ class GraphBuilder[StateT, DepsT, GraphInputT, GraphOutputT]:
         )
 
 
+# TODO: Is this function still needed?
 def _convert_decision_spreads(
     graph_nodes: dict[NodeId, AnyNode], graph_edges_by_source: dict[NodeId, list[Edge]]
 ) -> tuple[dict[NodeId, AnyNode], dict[NodeId, list[Edge]]]:
@@ -377,21 +372,22 @@ def _convert_decision_spreads(
     for node in list(nodes.values()):
         if isinstance(node, Decision):
             for branch in node.branches:
-                if branch.spread:
-                    spread = Spread[Any, Any](id=ForkId(_get_next_spread_id(to=branch.route_to.id)))
-                    old_route_to = branch.route_to
-                    nodes[spread.id] = spread
-                    edges[spread.id].append(
-                        Edge(
-                            source_id=spread.id,
-                            transform=branch.post_spread_transform,
-                            destination_id=old_route_to.id,
-                            user_label=branch.post_spread_user_label,
-                        )
-                    )
-                    branch.route_to = spread
-                    branch.spread = False
-                    branch.post_spread_transform = None
+                raise NotImplementedError
+                # if branch.spread:
+                #     spread = Spread[Any, Any](id=ForkId(_get_next_spread_id(to=branch.route_to.id)))
+                #     old_route_to = branch.route_to
+                #     nodes[spread.id] = spread
+                #     edges[spread.id].append(
+                #         Edge(
+                #             source_id=spread.id,
+                #             transform=branch.post_spread_transform,
+                #             destination_id=old_route_to.id,
+                #             user_label=branch.post_spread_user_label,
+                #         )
+                #     )
+                #     branch.route_to = spread
+                #     branch.spread = False
+                #     branch.post_spread_transform = None
     return nodes, edges
 
 
@@ -399,15 +395,16 @@ def _collect_dominating_forks(
     graph_nodes: dict[NodeId, AnyNode], graph_edges_by_source: dict[NodeId, list[Edge]]
 ) -> dict[JoinId, ParentFork[NodeId]]:
     nodes = set(graph_nodes)
-    start_ids = {StartNode.start.id}
+    start_ids = {StartNode.id}
     edges = {source_id: [e.destination_id for e in graph_edges_by_source[source_id]] for source_id in nodes}
     for node_id, node in graph_nodes.items():
         if isinstance(node, Decision):
             # For decisions, we need to add edges for the branches
             for branch in node.branches:
+                raise NotImplementedError  # Need to rework how this gets handled..
                 # If any branches have a spread, it's a bug in graph building
-                assert not branch.spread, 'Decision branches should not be spreads at this point'
-                edges[node_id].append(branch.route_to.id)
+                # assert not branch.spread, 'Decision branches should not be spreads at this point'
+                # edges[node_id].append(branch.route_to.id)
 
     fork_ids = {
         node_id for node_id, node in graph_nodes.items() if isinstance(node, Spread) or len(edges.get(node_id, [])) > 1
@@ -443,12 +440,9 @@ class Graph[StateT, DepsT, InputT, OutputT]:
     edges_by_source: dict[NodeId, list[Edge]]
     parent_forks: dict[JoinId, ParentFork[NodeId]]
 
-    def __post_init__(self):
-        assert StartNode.start.id in self.nodes, 'Graph must have a start node'
-
     @property
     def start_edges(self) -> list[Edge]:
-        return self.edges_by_source.get(START.id, [])
+        return self.edges_by_source.get(StartNode.id, [])
 
     def get_parent_fork(self, join_id: JoinId) -> ParentFork[NodeId]:
         result = self.parent_forks.get(join_id)

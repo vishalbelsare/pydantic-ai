@@ -1,12 +1,10 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Any, Callable
 
 from pydantic_graph.v2.id_types import ForkId, JoinId
 
 
-# TODO: Merge this with StepContext?
 class ReducerContext[StateT, DepsT, InputT]:
     """The main reason this is not a dataclass is that we need it to be covariant in its type parameters."""
 
@@ -91,14 +89,15 @@ def reduce_to_none(
     return reduce, finalize
 
 
-@dataclass
 class Join[StateT, DepsT, InputT, OutputT]:
-    id: JoinId
+    def __init__(
+        self, id: JoinId, reducer_factory: ReducerFactory[StateT, DepsT, InputT, OutputT], joins: ForkId | None = None
+    ) -> None:
+        self.id = id
+        self._reducer_factory = reducer_factory
+        self.joins = joins
 
-    # reducer_factory: ReducerFactory[StateT, DepsT, InputT, OutputT]
-
-    def _make_contravariant_in_input(self, inputs: InputT) -> None:
-        raise NotImplementedError
-
-    # TODO: Need to implement a version of ParentForkFinder that validates the specified NodeId is valid
-    joins: ForkId | None = None  # the NodeID of the node to use as the dominating fork
+    @property
+    def reducer_factory(self) -> ReducerFactory[StateT, DepsT, InputT, OutputT]:
+        # reducer_factory cannot be editable due to variance issues; needs to be ReadOnly if in a dataclass
+        return self._reducer_factory

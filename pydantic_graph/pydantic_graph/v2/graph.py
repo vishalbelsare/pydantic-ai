@@ -4,7 +4,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Any, Callable, Never, cast, get_args, get_origin, overload
 
-from pydantic_graph.v2.decision import Decision, DecisionBranch, DecisionBranchBuilder
+from pydantic_graph.v2.decision import Decision, DecisionBranchBuilder
 from pydantic_graph.v2.id_types import ForkId, JoinId, NodeId
 from pydantic_graph.v2.join import Join, ReducerFactory
 from pydantic_graph.v2.mermaid import StateDiagramDirection, build_mermaid_graph
@@ -24,8 +24,10 @@ from pydantic_graph.v2.paths import (
     DestinationMarker,
     EdgePath,
     EdgePathBuilder,
+    LabelMarker,
     Path,
     PathBuilder,
+    PathItem,
     SpreadMarker,
 )
 from pydantic_graph.v2.step import Step, StepCallProtocol
@@ -68,8 +70,7 @@ def step[StateT, DepsT, InputT, OutputT](
 
         return decorator
 
-    if node_id is None:
-        node_id = get_callable_name(call)
+    node_id = node_id or get_callable_name(call)
 
     return Step[StateT, DepsT, InputT, OutputT](id=NodeId(node_id), call=call, user_label=label)
 
@@ -103,9 +104,8 @@ def join[StateT, DepsT](
 
         return decorator
 
-    if node_id is None:
-        # TODO: Ideally we'd be able to infer this from the parent frame variable assignment or similar
-        node_id = get_callable_name(reducer_factory)
+    # TODO: Ideally we'd be able to infer this from the parent frame variable assignment or similar
+    node_id = node_id or get_callable_name(reducer_factory)
 
     return Join[StateT, DepsT, Any, Any](
         id=JoinId(NodeId(node_id)),
@@ -226,13 +226,20 @@ class GraphBuilder[StateT, DepsT, GraphInputT, GraphOutputT]:
             _handle_path(edge_path.path)
 
     def add_decision[T](
-        self, source: SourceNode[StateT, DepsT, T], decision: Decision[StateT, DepsT, T], note: str | None = None
+        self,
+        source: SourceNode[StateT, DepsT, T],
+        decision: Decision[StateT, DepsT, T],
+        *,
+        label: str | None = None,
     ) -> None:
-        decision.note = note  # TODO: Is this the right place to set the note for a decision?
-
         self._insert_node(source)
         self._insert_node(decision)
-        self._edges_by_source[source.id].append(Path(items=[DestinationMarker(decision)]))
+
+        path_items: list[PathItem] = []
+        if label is not None:
+            path_items.append(LabelMarker(label=label))
+        path_items.append(DestinationMarker(decision))
+        self._edges_by_source[source.id].append(Path(items=path_items))
 
         def _handle_path(p: Path):
             for item in p.items:
@@ -258,8 +265,8 @@ class GraphBuilder[StateT, DepsT, GraphInputT, GraphOutputT]:
             sources=sources, path_builder=PathBuilder(working_items=[])
         )
 
-    def branch[SourceT](self, branch: DecisionBranch[SourceT]) -> Decision[StateT, DepsT, SourceT]:
-        return Decision(id=NodeId(self._get_new_decision_id()), branches=[branch], note=None)
+    def decision[SourceT](self, *, note: str | None = None) -> Decision[StateT, DepsT, Never]:
+        return Decision(id=NodeId(self._get_new_decision_id()), branches=[], note=note)
 
     def match[SourceT](
         self,

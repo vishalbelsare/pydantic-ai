@@ -4,15 +4,21 @@ from typing import Any
 
 
 class TypeExpression[T]:
+    """This is a workaround for the lack of TypeForm.
+
+    This is used in places that require an argument of type `type[T]` when you want to use a `T` that type checkers
+    don't allow in this position, such as `Any`, `Union[...]`, or `Literal[...]`. In that case, you can just use e.g.
+    `output_type=TypeExpression[Union[...]]` instead of `output_type=Union[...]`.
+    """
+
     pass
 
 
 type TypeOrTypeExpression[T] = type[TypeExpression[T]] | type[T]
+"""This is used to allow types directly when compatible with typecheckers, but also allow TypeExpression[T] to be used.
 
-
-def get_callable_name(callable_: Any) -> str:
-    # TODO: Need to improve this...
-    return getattr(callable_, '__name__', str(callable_))
+The correct type should get inferred either way.
+"""
 
 
 @dataclass
@@ -21,6 +27,11 @@ class Some[T]:
 
 
 type Maybe[T] = Some[T] | None  # like optional, but you can tell the difference between "no value" and "value is None"
+
+
+def get_callable_name(callable_: Any) -> str:
+    # TODO: Do we need to extend this logic?
+    return getattr(callable_, '__name__', str(callable_))
 
 
 # TODO: Need to use or remove this

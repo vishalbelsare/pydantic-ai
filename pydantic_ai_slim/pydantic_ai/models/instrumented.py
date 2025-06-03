@@ -13,6 +13,7 @@ from opentelemetry._events import (
     EventLoggerProvider,  # pyright: ignore[reportPrivateImportUsage]
     get_event_logger_provider,  # pyright: ignore[reportPrivateImportUsage]
 )
+from opentelemetry.metrics import MeterProvider, get_meter_provider
 from opentelemetry.trace import Span, Tracer, TracerProvider, get_tracer_provider
 from opentelemetry.util.types import AttributeValue
 from pydantic import TypeAdapter
@@ -49,6 +50,8 @@ MODEL_SETTING_ATTRIBUTES: tuple[
 
 ANY_ADAPTER = TypeAdapter[Any](Any)
 
+TOKEN_HISTOGRAM_BOUNDARIES = (1, 4, 16, 64, 256, 1024, 4096, 16384, 65536, 262144, 1048576, 4194304, 16777216, 67108864)
+
 
 def instrument_model(model: Model, instrument: InstrumentationSettings | bool) -> Model:
     """Instrument a model with OpenTelemetry/logfire."""
@@ -84,6 +87,7 @@ class InstrumentationSettings:
         *,
         event_mode: Literal['attributes', 'logs'] = 'attributes',
         tracer_provider: TracerProvider | None = None,
+        meter_provider: MeterProvider | None = None,
         event_logger_provider: EventLoggerProvider | None = None,
         include_binary_content: bool = True,
     ):
@@ -95,6 +99,9 @@ class InstrumentationSettings:
             tracer_provider: The OpenTelemetry tracer provider to use.
                 If not provided, the global tracer provider is used.
                 Calling `logfire.configure()` sets the global tracer provider, so most users don't need this.
+            meter_provider: The OpenTelemetry meter provider to use.
+                If not provided, the global meter provider is used.
+                Calling `logfire.configure()` sets the global meter provider, so most users don't need this.
             event_logger_provider: The OpenTelemetry event logger provider to use.
                 If not provided, the global event logger provider is used.
                 Calling `logfire.configure()` sets the global event logger provider, so most users don't need this.
@@ -104,11 +111,19 @@ class InstrumentationSettings:
         from pydantic_ai import __version__
 
         tracer_provider = tracer_provider or get_tracer_provider()
+        meter_provider = meter_provider or get_meter_provider()
         event_logger_provider = event_logger_provider or get_event_logger_provider()
         self.tracer = tracer_provider.get_tracer('pydantic-ai', __version__)
+        self.meter = meter_provider.get_meter('pydantic-ai', __version__)
         self.event_logger = event_logger_provider.get_event_logger('pydantic-ai', __version__)
         self.event_mode = event_mode
         self.include_binary_content = include_binary_content
+        self.tokens_histogram = self.meter.create_histogram(
+            'gen_ai.client.token.usage',
+            unit='{token}',
+            description='Measures number of input and output tokens used',
+            explicit_bucket_boundaries_advisory=TOKEN_HISTOGRAM_BOUNDARIES,
+        )
 
     def messages_to_otel_events(self, messages: list[ModelMessage]) -> list[Event]:
         """Convert a list of model messages to OpenTelemetry events.
@@ -227,6 +242,27 @@ class InstrumentedModel(WrapperModel):
         with self.settings.tracer.start_as_current_span(span_name, attributes=attributes) as span:
 
             def finish(response: ModelResponse):
+                attributes.update(getattr(span, 'attributes', {}))
+                request_model = attributes[GEN_AI_REQUEST_MODEL_ATTRIBUTE]
+                response_model = response.model_name or request_model
+
+                metric_attributes = {
+                    GEN_AI_SYSTEM_ATTRIBUTE: attributes[GEN_AI_SYSTEM_ATTRIBUTE],
+                    'gen_ai.operation.name': operation,
+                    'gen_ai.request.model': request_model,
+                    'gen_ai.response.model': response_model,
+                }
+                if response.usage.request_tokens:
+                    self.settings.tokens_histogram.record(
+                        response.usage.request_tokens,
+                        {**metric_attributes, 'gen_ai.token.type': 'input'},
+                    )
+                if response.usage.response_tokens:
+                    self.settings.tokens_histogram.record(
+                        response.usage.response_tokens,
+                        {**metric_attributes, 'gen_ai.token.type': 'output'},
+                    )
+
                 if not span.is_recording():
                     return
 
@@ -243,9 +279,7 @@ class InstrumentedModel(WrapperModel):
                         )
                     )
                 new_attributes: dict[str, AttributeValue] = response.usage.opentelemetry_attributes()  # pyright: ignore[reportAssignmentType]
-                attributes.update(getattr(span, 'attributes', {}))
-                request_model = attributes[GEN_AI_REQUEST_MODEL_ATTRIBUTE]
-                new_attributes['gen_ai.response.model'] = response.model_name or request_model
+                new_attributes['gen_ai.response.model'] = response_model
                 span.set_attributes(new_attributes)
                 span.update_name(f'{operation} {request_model}')
                 for event in events:

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Callable, Self
 
@@ -14,22 +14,17 @@ if TYPE_CHECKING:
 
 
 @dataclass
-class Decision[StateT, DepsT, HandledT, InputT]:
+class Decision[StateT, DepsT, HandledT]:
     id: NodeId
     branches: list[DecisionBranch[Any]]
     # TODO: Add a field for the label for the input edge
     note: str | None  # TODO: Add a way to set this in the graph.add_decision method(?)
 
-    def branch[S](self, branch: DecisionBranch[S]) -> Decision[StateT, DepsT, HandledT | S, InputT]:
+    def branch[S](self, branch: DecisionBranch[S]) -> Decision[StateT, DepsT, HandledT | S]:
+        # TODO: Add an overload that skips the need for `match`, and is just less flexible about the building
         return Decision(id=self.id, branches=self.branches + [branch], note=self.note)
 
-    def end[T](self: Decision[StateT, DepsT, T, T]) -> Decision[StateT, DepsT, T, T]:
-        return self
-
-    def _force_handled_invariant(self, source: HandledT) -> HandledT:
-        raise RuntimeError('This method should never be called, it is just defined for typing purposes.')
-
-    def _force_input_invariant(self, source: InputT) -> InputT:
+    def _force_handled_contravariant(self, inputs: HandledT) -> None:
         raise RuntimeError('This method should never be called, it is just defined for typing purposes.')
 
 
@@ -41,8 +36,8 @@ class DecisionBranch[SourceT]:
 
 
 @dataclass
-class DecisionBranchBuilder[StateT, DepsT, OutputT, BranchSourceT, DecisionSourceT]:
-    decision: Decision[StateT, DepsT, DecisionSourceT]
+class DecisionBranchBuilder[StateT, DepsT, OutputT, BranchSourceT, DecisionHandledT]:
+    decision: Decision[StateT, DepsT, DecisionHandledT]
     source: TypeOrTypeExpression[BranchSourceT]
     matches: Callable[[Any], bool] | None
     path_builder: PathBuilder[StateT, DepsT, OutputT]
@@ -65,7 +60,9 @@ class DecisionBranchBuilder[StateT, DepsT, OutputT, BranchSourceT, DecisionSourc
         )
 
     def fork(
-        self, get_forks: Callable[[Self], Sequence[Decision[StateT, DepsT, DecisionSourceT | BranchSourceT]]], /
+        self,
+        get_forks: Callable[[Self], Sequence[Decision[StateT, DepsT, DecisionHandledT | BranchSourceT]]],
+        /,
     ) -> DecisionBranch[BranchSourceT]:
         n_initial_branches = len(self.decision.branches)
         fork_decisions = get_forks(self)
@@ -74,7 +71,7 @@ class DecisionBranchBuilder[StateT, DepsT, OutputT, BranchSourceT, DecisionSourc
 
     def transform[NewOutputT](
         self, func: TransformFunction[StateT, DepsT, OutputT, NewOutputT], /
-    ) -> DecisionBranchBuilder[StateT, DepsT, NewOutputT, BranchSourceT, DecisionSourceT]:
+    ) -> DecisionBranchBuilder[StateT, DepsT, NewOutputT, BranchSourceT, DecisionHandledT]:
         return DecisionBranchBuilder(
             decision=self.decision,
             source=self.source,
@@ -83,13 +80,13 @@ class DecisionBranchBuilder[StateT, DepsT, OutputT, BranchSourceT, DecisionSourc
         )
 
     def spread[T](
-        self: DecisionBranchBuilder[StateT, DepsT, Sequence[T], BranchSourceT, DecisionSourceT],
-    ) -> DecisionBranchBuilder[StateT, DepsT, T, BranchSourceT, DecisionSourceT]:
+        self: DecisionBranchBuilder[StateT, DepsT, Iterable[T], BranchSourceT, DecisionHandledT],
+    ) -> DecisionBranchBuilder[StateT, DepsT, T, BranchSourceT, DecisionHandledT]:
         return DecisionBranchBuilder(
             decision=self.decision, source=self.source, matches=self.matches, path_builder=self.path_builder.spread()
         )
 
-    def label(self, label: str) -> DecisionBranchBuilder[StateT, DepsT, OutputT, BranchSourceT, DecisionSourceT]:
+    def label(self, label: str) -> DecisionBranchBuilder[StateT, DepsT, OutputT, BranchSourceT, DecisionHandledT]:
         return DecisionBranchBuilder(
             decision=self.decision,
             source=self.source,

@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import secrets
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Callable, Self
+from typing import TYPE_CHECKING, Any, Callable, Self, overload
 
 from pydantic_graph.v2.id_types import ForkId, NodeId
 from pydantic_graph.v2.transform import TransformFunction
@@ -100,7 +100,7 @@ class PathBuilder[StateT, DepsT, OutputT]:
         return PathBuilder[StateT, DepsT, NewOutputT](working_items=[*self.working_items, next_item])
 
     def spread[T](
-        self: PathBuilder[StateT, DepsT, Sequence[T]], *, fork_id: str | None = None
+        self: PathBuilder[StateT, DepsT, Iterable[T]], *, fork_id: str | None = None
     ) -> PathBuilder[StateT, DepsT, T]:
         next_item = SpreadMarker(fork_id=ForkId(NodeId(fork_id or 'spread_' + secrets.token_hex(8))))
         return PathBuilder[StateT, DepsT, T](working_items=[*self.working_items, next_item])
@@ -138,34 +138,42 @@ class EdgePathBuilder[StateT, DepsT, OutputT]:
         return last_fork.fork_id
 
     # TODO: does `to` make things invariant? If so, how can this be fixed?
+    @overload
+    def to(
+        self, get_forks: Callable[[Self], Sequence[EdgePath[StateT, DepsT]]], /, *, fork_id: str | None = None
+    ) -> EdgePath[StateT, DepsT]: ...
+
+    @overload
+    def to(
+        self, /, *destinations: DestinationNode[StateT, DepsT, OutputT], fork_id: str | None = None
+    ) -> EdgePath[StateT, DepsT]: ...
+
     def to(
         self,
-        destination: DestinationNode[StateT, DepsT, OutputT],
+        first_item: DestinationNode[StateT, DepsT, OutputT] | Callable[[Self], Sequence[EdgePath[StateT, DepsT]]],
         /,
         *extra_destinations: DestinationNode[StateT, DepsT, OutputT],
         fork_id: str | None = None,
     ) -> EdgePath[StateT, DepsT]:
+        if callable(first_item):
+            return EdgePath(
+                sources=self.sources,
+                path=self.path_builder.fork([Path(x.path.items) for x in first_item(self)], fork_id=fork_id),
+            )
+
         return EdgePath(
-            sources=self.sources, path=self.path_builder.to(destination, *extra_destinations, fork_id=fork_id)
+            sources=self.sources, path=self.path_builder.to(first_item, *extra_destinations, fork_id=fork_id)
         )
 
-    def fork(
-        self, get_forks: Callable[[Self], Sequence[EdgePath[StateT, DepsT]]], /, fork_id: str | None = None
-    ) -> EdgePath[StateT, DepsT]:
-        return EdgePath(
-            sources=self.sources,
-            path=self.path_builder.fork([Path(x.path.items) for x in get_forks(self)], fork_id=fork_id),
-        )
+    def spread[T](
+        self: EdgePathBuilder[StateT, DepsT, Iterable[T]], fork_id: str | None = None
+    ) -> EdgePathBuilder[StateT, DepsT, Any]:
+        return EdgePathBuilder(sources=self.sources, path_builder=self.path_builder.spread(fork_id=fork_id))
 
     def transform[NewOutputT](
         self, func: TransformFunction[StateT, DepsT, OutputT, NewOutputT], /
     ) -> EdgePathBuilder[StateT, DepsT, NewOutputT]:
         return EdgePathBuilder(sources=self.sources, path_builder=self.path_builder.transform(func))
-
-    def spread[T](
-        self: EdgePathBuilder[StateT, DepsT, Sequence[T]], fork_id: str | None = None
-    ) -> EdgePathBuilder[StateT, DepsT, T]:
-        return EdgePathBuilder(sources=self.sources, path_builder=self.path_builder.spread(fork_id=fork_id))
 
     def label(self, label: str) -> EdgePathBuilder[StateT, DepsT, OutputT]:
         return EdgePathBuilder(sources=self.sources, path_builder=self.path_builder.label(label))

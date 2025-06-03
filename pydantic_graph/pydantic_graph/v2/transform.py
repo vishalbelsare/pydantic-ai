@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Any, Protocol
+from collections.abc import Sequence
+from typing import Any, Protocol, cast
 
 
 class TransformContext[StateT, DepsT, InputT]:
@@ -33,3 +34,10 @@ class TransformFunction[StateT, DepsT, InputT, OutputT](Protocol):
 
 
 type AnyTransformFunction = TransformFunction[Any, Any, Any, Any]
+
+
+def f(x: TransformFunction[Any, Any, list[int], Any]):
+    pass
+
+
+f(cast(TransformFunction[Any, Any, Sequence[int], Any], None))

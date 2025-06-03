@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Any, Callable, Never, cast, get_args, get_origin, overload
 
@@ -202,10 +203,7 @@ class GraphBuilder[StateT, DepsT, GraphInputT, GraphOutputT]:
             return join(reducer_factory=reducer_factory, node_id=node_id)
 
     # Edge building
-    def add_edge[T](self, edge: EdgePath[StateT, DepsT] | Decision[StateT, DepsT, T, T]) -> None:
-        raise NotImplementedError
-
-    def add_edges(self, *edges: EdgePath[StateT, DepsT]) -> None:
+    def add(self, *edges: EdgePath[StateT, DepsT]) -> None:
         def _handle_path(p: Path):
             for item in p.items:
                 if isinstance(item, BroadcastMarker):
@@ -219,56 +217,46 @@ class GraphBuilder[StateT, DepsT, GraphInputT, GraphOutputT]:
                 elif isinstance(item, DestinationMarker):
                     self._insert_node(item.destination)
 
-        for edge_path in edges:
-            for source_node in edge_path.sources:
+        for edge in edges:
+            for source_node in edge.sources:
                 self._insert_node(source_node)
-                self._edges_by_source[source_node.id].append(edge_path.path)
+                self._edges_by_source[source_node.id].append(edge.path)
 
-            _handle_path(edge_path.path)
+            _handle_path(edge.path)
 
-    def add_decision[T](
+    def add_edge[T](self, source: Source[T], destination: Destination[T], *, label: str | None = None) -> None:
+        builder = self.edge_from(source)
+        if label is not None:
+            builder = builder.label(label)
+        self.add(builder.to(destination))
+
+    def add_spreading_edge[T](
         self,
-        decision: Decision[StateT, DepsT, T, T],
+        source: Source[Iterable[T]],
+        spread_to: Destination[T],
         *,
-        label: str | None = None,
+        pre_spread_label: str | None = None,
+        post_spread_label: str | None = None,
     ) -> None:
-        raise NotImplementedError
-        # self._insert_node(source)
-        # self._insert_node(decision)
-        #
-        # path_items: list[PathItem] = []
-        # if label is not None:
-        #     path_items.append(LabelMarker(label=label))
-        # path_items.append(DestinationMarker(decision))
-        # self._edges_by_source[source.id].append(Path(items=path_items))
-        #
-        # def _handle_path(p: Path):
-        #     for item in p.items:
-        #         if isinstance(item, BroadcastMarker):
-        #             new_node = Fork[Any, Any](id=item.fork_id, is_spread=False)
-        #             self._insert_node(new_node)
-        #             for path in item.paths:
-        #                 _handle_path(Path(items=[*path.items]))
-        #         elif isinstance(item, SpreadMarker):
-        #             new_node = Fork[Any, Any](id=item.fork_id, is_spread=True)
-        #             self._insert_node(new_node)
-        #         elif isinstance(item, DestinationMarker):
-        #             self._insert_node(item.destination)
-        #
-        # for branch in decision.branches:
-        #     _handle_path(branch.path)
+        builder = self.edge_from(source)
+        if pre_spread_label is not None:
+            builder = builder.label(pre_spread_label)
+        builder = builder.spread()
+        if post_spread_label is not None:
+            builder = builder.label(post_spread_label)
+        self.add(builder.to(spread_to))
 
     # TODO: Support adding subgraphs ... not sure exactly what that looks like yet..
     #  probably similar to a step, but with some tweaks
 
-    def from_[SourceOutputT](self, *sources: Source[SourceOutputT]) -> EdgePathBuilder[StateT, DepsT, SourceOutputT]:
+    def edge_from[SourceOutputT](
+        self, *sources: Source[SourceOutputT]
+    ) -> EdgePathBuilder[StateT, DepsT, SourceOutputT]:
         return EdgePathBuilder[StateT, DepsT, SourceOutputT](
             sources=sources, path_builder=PathBuilder(working_items=[])
         )
 
-    def decision[SourceT](
-        self, source: Source[SourceT], *, note: str | None = None
-    ) -> Decision[StateT, DepsT, Never, SourceT]:
+    def decision(self, *, note: str | None = None) -> Decision[StateT, DepsT, Never]:
         return Decision(id=NodeId(self._get_new_decision_id()), branches=[], note=note)
 
     def match[SourceT](
@@ -399,7 +387,7 @@ def _collect_dominating_forks(
     graph_nodes: dict[NodeId, AnyNode], graph_edges_by_source: dict[NodeId, list[Path]]
 ) -> dict[JoinId, ParentFork[NodeId]]:
     nodes = set(graph_nodes)
-    start_ids = {StartNode.id}
+    start_ids: set[NodeId] = {StartNode.id}
     edges: dict[NodeId, list[NodeId]] = defaultdict(list)
 
     fork_ids: set[NodeId] = set(start_ids)

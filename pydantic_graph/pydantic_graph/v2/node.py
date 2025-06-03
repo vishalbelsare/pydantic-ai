@@ -15,6 +15,9 @@ class EndNode[InputT]:
     def _force_variance(self, inputs: InputT) -> None:
         raise RuntimeError('This method should never be called, it is just defined for typing purposes.')
 
+    # def _force_variance(self) -> InputT:
+    #     raise RuntimeError('This method should never be called, it is just defined for typing purposes.')
+
 
 @dataclass
 class Fork[InputT, OutputT]:

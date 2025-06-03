@@ -1,6 +1,6 @@
 import asyncio
 import random
-from collections.abc import Sequence
+from collections.abc import Iterable
 from dataclasses import dataclass
 from types import NoneType
 from typing import Any, Literal
@@ -69,7 +69,7 @@ async def handle_int_2(ctx: StepContext[MyState, object, object]) -> None:
 @g.step
 async def handle_int_3(
     ctx: StepContext[MyState, object, object],
-) -> Sequence[int]:  # TODO: Make it so this works with list[int] as the return type
+) -> list[int]:
     print('start int 3')
     await asyncio.sleep(1)
     async with ctx.get_mutable_state() as state:
@@ -102,7 +102,7 @@ async def handle_str_2(ctx: StepContext[MyState, object, object]) -> None:
 @g.step
 async def handle_str_3(
     ctx: StepContext[MyState, object, object],
-) -> Sequence[str]:  # TODO: Make it so this works with list[str] as the return type
+) -> Iterable[str]:
     print('start str 3')
     await asyncio.sleep(1)
     async with ctx.get_mutable_state() as state:
@@ -128,19 +128,22 @@ handle_field_3_item = g.step(handle_field_3_item_, node_id='handle_field_3_item_
 
 handle_join = g.join(reduce_to_none, node_id='handle_join')
 
-g.add_edge(g.from_(g.start_node).label('begin').to(choose_type))
-g.add_edge(
-    g.decision(choose_type)
-    .branch(g.match(TypeExpression[Literal['str']]).to(handle_str))
-    .branch(g.match(TypeExpression[Literal['int']]).to(handle_int))
-)
-g.add_edge(g.from_(handle_int).to(handle_int_1, handle_int_2, handle_int_3))
-g.add_edge(
-    g.from_(handle_str).fork(
+g.add(
+    g.edge_from(g.start_node).label('begin').to(choose_type),
+    g.edge_from(choose_type).to(
+        g.decision()
+        .branch(g.match(TypeExpression[Literal['str']]).to(handle_str))
+        .branch(g.match(TypeExpression[Literal['int']]).to(handle_int))
+    ),
+    g.edge_from(handle_int).to(handle_int_1, handle_int_2, handle_int_3),
+    g.edge_from(handle_str).to(
         lambda e: [e.label('abc').to(handle_str_1), e.label('def').to(handle_str_2), e.to(handle_str_3)]
-    )
+    ),
+    g.edge_from(handle_int_3).spread().to(handle_field_3_item),
+    g.edge_from(handle_str_3).spread().to(handle_field_3_item),
+    g.edge_from(handle_int_1, handle_int_2, handle_str_1, handle_str_2, handle_field_3_item).to(handle_join),
+    g.edge_from(handle_join).to(g.end_node),
 )
-g.add_edge(g.from_(handle_int_3).spread().to(handle_field_3_item))
 
 graph = g.build()
 print(graph)

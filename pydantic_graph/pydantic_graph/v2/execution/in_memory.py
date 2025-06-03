@@ -110,7 +110,7 @@ class _InMemoryGraphRunAPI[StateT, DepsT](GraphRunAPI[StateT, DepsT]):
 
     async def set_result(self, result: Any) -> None:
         if self._run_state.result is not None:
-            raise RuntimeError('Result has already been set for this graph run.')
+            raise RuntimeError(f'Result has already been set for this graph run: result={self._run_state.result.value} state={self._state}')
         self._run_state.result = Some(result)
 
     async def get_result(self) -> Maybe[Any]:

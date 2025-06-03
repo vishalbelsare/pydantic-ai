@@ -48,7 +48,8 @@ class GraphWalker[StateT, DepsT, InputT, OutputT]:
     async def run(self, state: StateT, inputs: InputT) -> OutputT:
         await self.run_api.initialize_state(state)
 
-        start_task = GraphTask(node_id=StartNode.id, inputs=inputs, fork_stack=())
+        initial_fork_stack = ((StartNode.id, NodeRunId(str(uuid.uuid4()))),)
+        start_task = GraphTask(node_id=StartNode.id, inputs=inputs, fork_stack=initial_fork_stack)
         await self._request_task(start_task)
         await self.run_api.wait()
 

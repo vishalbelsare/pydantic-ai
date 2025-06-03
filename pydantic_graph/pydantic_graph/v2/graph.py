@@ -399,7 +399,7 @@ def _collect_dominating_forks(
     start_ids = {StartNode.id}
     edges: dict[NodeId, list[NodeId]] = defaultdict(list)
 
-    fork_ids: set[NodeId] = set()
+    fork_ids: set[NodeId] = set(start_ids)
     for source_id in nodes:
         working_source_id = source_id
         node = graph_nodes.get(source_id)

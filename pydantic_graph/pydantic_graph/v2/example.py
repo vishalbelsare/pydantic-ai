@@ -112,7 +112,7 @@ async def handle_str_3(
     return output
 
 
-async def handle_field_3_item(ctx: StepContext[MyState, object, int | str]) -> None:
+async def handle_field_3_item_(ctx: StepContext[MyState, object, int | str]) -> None:
     inputs = ctx.inputs
     print(f'handle_field_3_item: {inputs}')
     await asyncio.sleep(0.25)
@@ -123,11 +123,10 @@ async def handle_field_3_item(ctx: StepContext[MyState, object, int | str]) -> N
     await asyncio.sleep(0.25)
 
 
-handle_field_3_item_int = g.step(handle_field_3_item, node_id='handle_field_3_item_int')
-handle_field_3_item_str = g.step(handle_field_3_item, node_id='handle_field_3_item_str')
+handle_field_3_item = g.step(handle_field_3_item_, node_id='handle_field_3_item_int')
+# handle_field_3_item_str = g.step(handle_field_3_item, node_id='handle_field_3_item_str')
 
-handle_int_join = g.join(reduce_to_none, node_id='handle_int_join')
-handle_str_join = g.join(reduce_to_none, node_id='handle_str_join')
+handle_join = g.join(reduce_to_none, node_id='handle_join')
 
 g.add_edges(g.from_(g.start_node).label('begin').to(choose_type))
 g.add_decision(
@@ -141,16 +140,13 @@ g.add_edges(
     g.from_(handle_int).to(
         handle_int_1, handle_int_2, handle_int_3
     ),  # `to` with multiple destinations; TODO: Should we drop multi-destination `to` and require the use of `fork`?
-    g.from_(handle_int_3).spread().to(handle_field_3_item_int),
-    g.from_(handle_int_1, handle_int_2, handle_field_3_item_int).to(handle_int_join),
-    g.from_(handle_int_join).to(g.end_node),
-    # strs
     g.from_(handle_str).fork(
         lambda e: [e.label('abc').to(handle_str_1), e.label('def').to(handle_str_2), e.to(handle_str_3)]
     ),  # `fork` API
-    g.from_(handle_str_3).spread().to(handle_field_3_item_str),
-    g.from_(handle_str_1, handle_str_2, handle_field_3_item_str).to(handle_str_join),
-    g.from_(handle_str_join).to(g.end_node),
+    g.from_(handle_int_3).spread().to(handle_field_3_item),
+    g.from_(handle_str_3).spread().to(handle_field_3_item),
+    g.from_(handle_int_1, handle_int_2, handle_str_1, handle_str_2, handle_field_3_item).to(handle_join),
+    g.from_(handle_join).to(g.end_node),
 )
 
 graph = g.build()

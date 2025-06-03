@@ -6,7 +6,7 @@ from pydantic_graph.v2.id_types import ForkId, NodeId
 
 
 class StartNode[OutputT]:
-    id = NodeId('__start__')
+    id = ForkId(NodeId('__start__'))
 
 
 class EndNode[InputT]:

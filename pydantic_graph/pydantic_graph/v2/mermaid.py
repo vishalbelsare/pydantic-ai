@@ -54,12 +54,10 @@ def build_mermaid_graph(graph: Graph[Any, Any, Any, Any]) -> MermaidGraph:
         for item in path.items:
             if isinstance(item, SpreadMarker):
                 edges_by_source[last_source_id].append(MermaidEdge(last_source_id, item.fork_id, working_label))
-                last_source_id = item.fork_id
+                return  # spread markers correspond to nodes already in the graph; downstream gets handled separately
             elif isinstance(item, BroadcastMarker):
                 edges_by_source[last_source_id].append(MermaidEdge(last_source_id, item.fork_id, working_label))
-                last_source_id = item.fork_id
-                for fork in item.paths:
-                    _collect_edges(Path([*fork.items]), item.fork_id)
+                return  # broadcast markers correspond to nodes already in the graph; downstream gets handled separately
             elif isinstance(item, LabelMarker):
                 working_label = item.label
             elif isinstance(item, DestinationMarker):
@@ -90,8 +88,18 @@ def build_mermaid_graph(graph: Graph[Any, Any, Any, Any]) -> MermaidGraph:
         nodes.append(source_node)
 
     for source_id, paths in graph.edges_by_source.items():
+        print(source_id)
         for path in paths:
+            print(path)
+            print('')
+            print('  *** before ***', edges_by_source.get(source_id, []))
             _collect_edges(path, source_id)
+            print('')
+            print('  *** after ***', edges_by_source.get(source_id, []))
+            print('')
+            print('==========')
+
+
     for node in graph.nodes.values():
         if isinstance(node, Decision):
             for branch in node.branches:

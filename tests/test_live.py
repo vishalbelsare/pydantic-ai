@@ -113,6 +113,7 @@ async def test_text(http_client: httpx.AsyncClient, tmp_path: Path, get_model: G
     print('Text usage:', result.usage())
     usage = result.usage()
     assert usage.total_tokens is not None and usage.total_tokens > 0
+    print(agent.model, result.all_messages()[-1].model_name)
 
 
 stream_params = [p for p in params if p.id != 'cohere']

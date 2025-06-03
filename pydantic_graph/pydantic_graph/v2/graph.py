@@ -24,10 +24,8 @@ from pydantic_graph.v2.paths import (
     DestinationMarker,
     EdgePath,
     EdgePathBuilder,
-    LabelMarker,
     Path,
     PathBuilder,
-    PathItem,
     SpreadMarker,
 )
 from pydantic_graph.v2.step import Step, StepCallProtocol
@@ -204,6 +202,9 @@ class GraphBuilder[StateT, DepsT, GraphInputT, GraphOutputT]:
             return join(reducer_factory=reducer_factory, node_id=node_id)
 
     # Edge building
+    def add_edge[T](self, edge: EdgePath[StateT, DepsT] | Decision[StateT, DepsT, T, T]) -> None:
+        raise NotImplementedError
+
     def add_edges(self, *edges: EdgePath[StateT, DepsT]) -> None:
         def _handle_path(p: Path):
             for item in p.items:
@@ -227,35 +228,35 @@ class GraphBuilder[StateT, DepsT, GraphInputT, GraphOutputT]:
 
     def add_decision[T](
         self,
-        source: SourceNode[StateT, DepsT, T],
-        decision: Decision[StateT, DepsT, T],
+        decision: Decision[StateT, DepsT, T, T],
         *,
         label: str | None = None,
     ) -> None:
-        self._insert_node(source)
-        self._insert_node(decision)
-
-        path_items: list[PathItem] = []
-        if label is not None:
-            path_items.append(LabelMarker(label=label))
-        path_items.append(DestinationMarker(decision))
-        self._edges_by_source[source.id].append(Path(items=path_items))
-
-        def _handle_path(p: Path):
-            for item in p.items:
-                if isinstance(item, BroadcastMarker):
-                    new_node = Fork[Any, Any](id=item.fork_id, is_spread=False)
-                    self._insert_node(new_node)
-                    for path in item.paths:
-                        _handle_path(Path(items=[*path.items]))
-                elif isinstance(item, SpreadMarker):
-                    new_node = Fork[Any, Any](id=item.fork_id, is_spread=True)
-                    self._insert_node(new_node)
-                elif isinstance(item, DestinationMarker):
-                    self._insert_node(item.destination)
-
-        for branch in decision.branches:
-            _handle_path(branch.path)
+        raise NotImplementedError
+        # self._insert_node(source)
+        # self._insert_node(decision)
+        #
+        # path_items: list[PathItem] = []
+        # if label is not None:
+        #     path_items.append(LabelMarker(label=label))
+        # path_items.append(DestinationMarker(decision))
+        # self._edges_by_source[source.id].append(Path(items=path_items))
+        #
+        # def _handle_path(p: Path):
+        #     for item in p.items:
+        #         if isinstance(item, BroadcastMarker):
+        #             new_node = Fork[Any, Any](id=item.fork_id, is_spread=False)
+        #             self._insert_node(new_node)
+        #             for path in item.paths:
+        #                 _handle_path(Path(items=[*path.items]))
+        #         elif isinstance(item, SpreadMarker):
+        #             new_node = Fork[Any, Any](id=item.fork_id, is_spread=True)
+        #             self._insert_node(new_node)
+        #         elif isinstance(item, DestinationMarker):
+        #             self._insert_node(item.destination)
+        #
+        # for branch in decision.branches:
+        #     _handle_path(branch.path)
 
     # TODO: Support adding subgraphs ... not sure exactly what that looks like yet..
     #  probably similar to a step, but with some tweaks
@@ -265,7 +266,9 @@ class GraphBuilder[StateT, DepsT, GraphInputT, GraphOutputT]:
             sources=sources, path_builder=PathBuilder(working_items=[])
         )
 
-    def decision[SourceT](self, *, note: str | None = None) -> Decision[StateT, DepsT, Never]:
+    def decision[SourceT](
+        self, source: Source[SourceT], *, note: str | None = None
+    ) -> Decision[StateT, DepsT, Never, SourceT]:
         return Decision(id=NodeId(self._get_new_decision_id()), branches=[], note=note)
 
     def match[SourceT](

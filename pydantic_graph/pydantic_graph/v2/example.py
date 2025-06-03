@@ -128,26 +128,19 @@ handle_field_3_item = g.step(handle_field_3_item_, node_id='handle_field_3_item_
 
 handle_join = g.join(reduce_to_none, node_id='handle_join')
 
-g.add_edges(g.from_(g.start_node).label('begin').to(choose_type))
-g.add_decision(
-    choose_type,
-    g.decision()
+g.add_edge(g.from_(g.start_node).label('begin').to(choose_type))
+g.add_edge(
+    g.decision(choose_type)
+    .branch(g.match(TypeExpression[Literal['str']]).to(handle_str))
     .branch(g.match(TypeExpression[Literal['int']]).to(handle_int))
-    .branch(g.match(TypeExpression[Literal['str']]).to(handle_str)),
 )
-g.add_edges(
-    # ints
-    g.from_(handle_int).to(
-        handle_int_1, handle_int_2, handle_int_3
-    ),  # `to` with multiple destinations; TODO: Should we drop multi-destination `to` and require the use of `fork`?
+g.add_edge(g.from_(handle_int).to(handle_int_1, handle_int_2, handle_int_3))
+g.add_edge(
     g.from_(handle_str).fork(
         lambda e: [e.label('abc').to(handle_str_1), e.label('def').to(handle_str_2), e.to(handle_str_3)]
-    ),  # `fork` API
-    g.from_(handle_int_3).spread().to(handle_field_3_item),
-    g.from_(handle_str_3).spread().to(handle_field_3_item),
-    g.from_(handle_int_1, handle_int_2, handle_str_1, handle_str_2, handle_field_3_item).to(handle_join),
-    g.from_(handle_join).to(g.end_node),
+    )
 )
+g.add_edge(g.from_(handle_int_3).spread().to(handle_field_3_item))
 
 graph = g.build()
 print(graph)

@@ -14,16 +14,22 @@ if TYPE_CHECKING:
 
 
 @dataclass
-class Decision[StateT, DepsT, SourceT]:
+class Decision[StateT, DepsT, HandledT, InputT]:
     id: NodeId
     branches: list[DecisionBranch[Any]]
     # TODO: Add a field for the label for the input edge
     note: str | None  # TODO: Add a way to set this in the graph.add_decision method(?)
 
-    def branch[S](self, branch: DecisionBranch[S]) -> Decision[StateT, DepsT, SourceT | S]:
+    def branch[S](self, branch: DecisionBranch[S]) -> Decision[StateT, DepsT, HandledT | S, InputT]:
         return Decision(id=self.id, branches=self.branches + [branch], note=self.note)
 
-    def _force_source_invariant(self, source: SourceT) -> SourceT:
+    def end[T](self: Decision[StateT, DepsT, T, T]) -> Decision[StateT, DepsT, T, T]:
+        return self
+
+    def _force_handled_invariant(self, source: HandledT) -> HandledT:
+        raise RuntimeError('This method should never be called, it is just defined for typing purposes.')
+
+    def _force_input_invariant(self, source: InputT) -> InputT:
         raise RuntimeError('This method should never be called, it is just defined for typing purposes.')
 
 

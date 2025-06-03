@@ -15,7 +15,7 @@ type MiddleNode[StateT, DepsT, InputT, OutputT] = (
 
 type SourceNode[StateT, DepsT, OutputT] = MiddleNode[StateT, DepsT, Any, OutputT] | StartNode[OutputT]
 type DestinationNode[StateT, DepsT, InputT] = (
-    MiddleNode[StateT, DepsT, InputT, Any] | Decision[StateT, DepsT, InputT] | EndNode[InputT]
+    MiddleNode[StateT, DepsT, InputT, Any] | Decision[StateT, DepsT, InputT, Any] | EndNode[InputT]
 )
 
 type AnySourceNode = SourceNode[Any, Any, Any] | StartNode[Any]

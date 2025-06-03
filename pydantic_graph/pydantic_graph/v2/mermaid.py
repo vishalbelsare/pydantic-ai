@@ -99,7 +99,6 @@ def build_mermaid_graph(graph: Graph[Any, Any, Any, Any]) -> MermaidGraph:
             print('')
             print('==========')
 
-
     for node in graph.nodes.values():
         if isinstance(node, Decision):
             for branch in node.branches:

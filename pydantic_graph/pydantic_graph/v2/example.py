@@ -112,7 +112,8 @@ async def handle_str_3(
     return output
 
 
-async def handle_field_3_item_(ctx: StepContext[MyState, object, int | str]) -> None:
+@g.step(node_id='handle_field_3_item')
+async def handle_field_3_item(ctx: StepContext[MyState, object, int | str]) -> None:
     inputs = ctx.inputs
     print(f'handle_field_3_item: {inputs}')
     await asyncio.sleep(0.25)
@@ -122,9 +123,6 @@ async def handle_field_3_item_(ctx: StepContext[MyState, object, int | str]) -> 
         state.container.field_3.append(inputs * 2)
     await asyncio.sleep(0.25)
 
-
-handle_field_3_item = g.step(handle_field_3_item_, node_id='handle_field_3_item_int')
-# handle_field_3_item_str = g.step(handle_field_3_item, node_id='handle_field_3_item_str')
 
 handle_join = g.join(reduce_to_none, node_id='handle_join')
 

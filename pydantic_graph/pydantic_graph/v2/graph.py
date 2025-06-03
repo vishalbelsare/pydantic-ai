@@ -1,32 +1,34 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any, Callable, Never, cast, get_args, get_origin, overload
 
 from pydantic_graph.v2.decision import Decision, DecisionBranch, DecisionBranchBuilder
 from pydantic_graph.v2.id_types import ForkId, JoinId, NodeId
 from pydantic_graph.v2.join import Join, ReducerFactory
-from pydantic_graph.v2.mermaid import StateDiagramDirection, generate_code
+from pydantic_graph.v2.mermaid import StateDiagramDirection, build_mermaid_graph
 from pydantic_graph.v2.node import (
     EndNode,
-    Spread,
+    Fork,
     StartNode,
 )
 from pydantic_graph.v2.node_types import (
-    AnyDestinationNode,
     AnyNode,
-    AnySourceNode,
     DestinationNode,
     SourceNode,
-    is_destination,
-    is_source,
 )
 from pydantic_graph.v2.parent_forks import ParentFork, ParentForkFinder
-from pydantic_graph.v2.paths import EdgePath, EdgePathBuilder, PathBuilder
+from pydantic_graph.v2.paths import (
+    BroadcastMarker,
+    DestinationMarker,
+    EdgePath,
+    EdgePathBuilder,
+    Path,
+    PathBuilder,
+    SpreadMarker,
+)
 from pydantic_graph.v2.step import Step, StepCallProtocol
-from pydantic_graph.v2.transform import AnyTransformFunction
 from pydantic_graph.v2.util import TypeExpression, TypeOrTypeExpression, get_callable_name
 
 
@@ -112,35 +114,6 @@ def join[StateT, DepsT](
 
 
 @dataclass
-class Edge:
-    source_id: NodeId
-    transform: AnyTransformFunction | None
-    destination_id: NodeId
-    user_label: str | None
-
-    def source(self, nodes: dict[NodeId, AnyNode]) -> AnySourceNode:
-        node = nodes.get(self.source_id)
-        if node is None:
-            raise ValueError(f'Node {self.source_id} not found in graph')
-        if not is_source(node):
-            raise ValueError(f'Node {self.source_id} is not a source node: {node}')
-        return node
-
-    def destination(self, nodes: dict[NodeId, AnyNode]) -> AnyDestinationNode:
-        node = nodes.get(self.destination_id)
-        if node is None:
-            raise ValueError(f'Node {self.destination_id} not found in graph')
-        if not is_destination(node):
-            raise ValueError(f'Node {self.destination_id} is not a source node: {node}')
-        return node
-
-    @property
-    def label(self) -> str | None:
-        # TODO: Add some default behavior?
-        return self.user_label
-
-
-@dataclass
 class GraphBuilder[StateT, DepsT, GraphInputT, GraphOutputT]:
     state_type: TypeOrTypeExpression[StateT]
     deps_type: TypeOrTypeExpression[DepsT]
@@ -150,30 +123,25 @@ class GraphBuilder[StateT, DepsT, GraphInputT, GraphOutputT]:
     parallel: bool = True  # if False, allow direct state modification and don't copy state sent to steps, but disallow parallel node execution
 
     _nodes: dict[NodeId, AnyNode] = field(init=False, default_factory=dict)
-    _edges_by_source: dict[NodeId, list[Edge]] = field(init=False, default_factory=lambda: defaultdict(list))
+    _edges_by_source: dict[NodeId, list[Path]] = field(init=False, default_factory=lambda: defaultdict(list))
     _decision_index: int = field(init=False, default=1)
 
-    type Source[OutputT] = (
-        Step[StateT, DepsT, Any, OutputT]
-        | Join[StateT, DepsT, Any, OutputT]
-        | Spread[Any, OutputT]
-        | StartNode[OutputT]
-    )
+    type Source[OutputT] = SourceNode[StateT, DepsT, OutputT]
     type Destination[InputT] = DestinationNode[StateT, DepsT, InputT]
 
-    # def __post_init__(self):
-    #     self._nodes[START.id] = START
-    #     self._nodes[END.id] = END
+    def __post_init__(self):
+        self._start_node = StartNode[GraphInputT]()
+        self._end_node = EndNode[GraphOutputT]()
 
+    # Node building
     @property
     def start_node(self) -> StartNode[GraphInputT]:
-        raise NotImplementedError
+        return self._start_node
 
     @property
     def end_node(self) -> EndNode[GraphOutputT]:
-        raise NotImplementedError
+        return self._end_node
 
-    # Node building:
     @overload
     def step[InputT, OutputT](
         self,
@@ -206,17 +174,6 @@ class GraphBuilder[StateT, DepsT, GraphInputT, GraphOutputT]:
         else:
             return step(call=call, node_id=node_id, label=label)
 
-    def spread[ItemT](
-        self,
-        item_type: TypeOrTypeExpression[ItemT],
-        *,
-        node_id: str | None = None,
-        # label: str | None = None,
-    ) -> Spread[Sequence[ItemT], ItemT]:
-        return Spread[Sequence[ItemT], ItemT](
-            id=ForkId(NodeId(node_id or self._get_new_spread_id())),
-        )
-
     @overload
     def join[InputT, OutputT](
         self,
@@ -246,37 +203,55 @@ class GraphBuilder[StateT, DepsT, GraphInputT, GraphOutputT]:
         else:
             return join(reducer_factory=reducer_factory, node_id=node_id)
 
-    def _get_new_decision_id(self) -> str:
-        node_id = f'decision_{self._decision_index}'
-        self._decision_index += 1
-        while node_id in self._nodes:
-            node_id = f'decision_{self._decision_index}'
-            self._decision_index += 1
-        return node_id
-
-    def _get_new_spread_id(self, from_: str | None = None, to: str | None = None) -> str:
-        prefix = 'spread'
-        if from_ is not None:
-            prefix += f'_from_{from_}'
-        if to is not None:
-            prefix += f'_to_{to}'
-
-        node_id = prefix
-        index = 2
-        while node_id in self._nodes:
-            node_id = f'{prefix}_{index}'
-            index += 1
-        return node_id
-
     # Edge building
     def add_edges(self, *edges: EdgePath[StateT, DepsT]) -> None:
-        raise NotImplementedError
+        def _handle_path(p: Path):
+            for item in p.items:
+                if isinstance(item, BroadcastMarker):
+                    new_node = Fork[Any, Any](id=item.fork_id, is_spread=False)
+                    self._insert_node(new_node)
+                    for path in item.paths:
+                        _handle_path(Path(items=[*path.items]))
+                elif isinstance(item, SpreadMarker):
+                    new_node = Fork[Any, Any](id=item.fork_id, is_spread=True)
+                    self._insert_node(new_node)
+                elif isinstance(item, DestinationMarker):
+                    self._insert_node(item.destination)
+
+        for edge_path in edges:
+            for source_node in edge_path.sources:
+                self._insert_node(source_node)
+                self._edges_by_source[source_node.id].append(edge_path.path)
+
+            _handle_path(edge_path.path)
 
     def add_decision[T](
         self, source: SourceNode[StateT, DepsT, T], decision: Decision[StateT, DepsT, T], note: str | None = None
     ) -> None:
-        decision.note = note
-        raise NotImplementedError
+        decision.note = note  # TODO: Is this the right place to set the note for a decision?
+
+        self._insert_node(source)
+        self._insert_node(decision)
+        self._edges_by_source[source.id].append(Path(items=[DestinationMarker(decision)]))
+
+        def _handle_path(p: Path):
+            for item in p.items:
+                if isinstance(item, BroadcastMarker):
+                    new_node = Fork[Any, Any](id=item.fork_id, is_spread=False)
+                    self._insert_node(new_node)
+                    for path in item.paths:
+                        _handle_path(Path(items=[*path.items]))
+                elif isinstance(item, SpreadMarker):
+                    new_node = Fork[Any, Any](id=item.fork_id, is_spread=True)
+                    self._insert_node(new_node)
+                elif isinstance(item, DestinationMarker):
+                    self._insert_node(item.destination)
+
+        for branch in decision.branches:
+            _handle_path(branch.path)
+
+    # TODO: Support adding subgraphs ... not sure exactly what that looks like yet..
+    #  probably similar to a step, but with some tweaks
 
     def from_[SourceOutputT](self, *sources: Source[SourceOutputT]) -> EdgePathBuilder[StateT, DepsT, SourceOutputT]:
         return EdgePathBuilder[StateT, DepsT, SourceOutputT](
@@ -297,34 +272,49 @@ class GraphBuilder[StateT, DepsT, GraphInputT, GraphOutputT]:
         new_path_builder = PathBuilder[StateT, DepsT, SourceT](working_items=[])
         return DecisionBranchBuilder(decision=decision, source=source, matches=matches, path_builder=new_path_builder)
 
-    def _add_edge_from_nodes(
-        self,
-        *,
-        source: AnySourceNode,
-        transform: AnyTransformFunction | None,
-        destination: AnyDestinationNode,
-        label: str | None = None,
-    ) -> None:
-        self._insert_node(source)
-        self._insert_node(destination)
-
-        edge = Edge(source_id=source.id, transform=transform, destination_id=destination.id, user_label=label)
-        self._insert_edge(edge)
-
+    # Helpers
     def _insert_node(self, node: AnyNode) -> None:
         existing = self._nodes.get(node.id)
         if existing is None:
             self._nodes[node.id] = node
-        elif isinstance(existing, (StartNode, EndNode)):
-            pass  # it's not a problem to have non-unique instances of StartNode and EndNode
         elif existing is not node:
             raise ValueError(f'All nodes must have unique node IDs. {node.id!r} was the ID for {existing} and {node}')
 
-    def _insert_edge(self, edge: Edge) -> None:
-        assert edge.source_id in self._nodes, f'Edge source {edge.source_id} not found in graph'
-        assert edge.destination_id in self._nodes, f'Edge destination {edge.destination_id} not found in graph'
-        self._edges_by_source[edge.source_id].append(edge)
+    def _get_new_decision_id(self) -> str:
+        node_id = f'decision_{self._decision_index}'
+        self._decision_index += 1
+        while node_id in self._nodes:
+            node_id = f'decision_{self._decision_index}'
+            self._decision_index += 1
+        return node_id
 
+    def _get_new_broadcast_id(self, from_: str | None = None) -> str:
+        prefix = 'broadcast'
+        if from_ is not None:
+            prefix += f'_from_{from_}'
+
+        node_id = prefix
+        index = 2
+        while node_id in self._nodes:
+            node_id = f'{prefix}_{index}'
+            index += 1
+        return node_id
+
+    def _get_new_spread_id(self, from_: str | None = None, to: str | None = None) -> str:
+        prefix = 'spread'
+        if from_ is not None:
+            prefix += f'_from_{from_}'
+        if to is not None:
+            prefix += f'_to_{to}'
+
+        node_id = prefix
+        index = 2
+        while node_id in self._nodes:
+            node_id = f'{prefix}_{index}'
+            index += 1
+        return node_id
+
+    # Graph building
     def build(self) -> Graph[StateT, DepsT, GraphInputT, GraphOutputT]:
         # TODO: Warn/error if there is no start node / edges, or end node / edges
         # TODO: Warn/error if the graph is not connected
@@ -334,9 +324,9 @@ class GraphBuilder[StateT, DepsT, GraphInputT, GraphOutputT]:
         # TODO: Verify that any user-specified parent forks are _actually_ valid parent forks, and if not, generate a helpful error message
         # TODO: Consider doing a deepcopy here to prevent modifications to the underlying nodes and edges
         nodes = self._nodes
-        edges = self._edges_by_source
-        nodes, edges = _convert_decision_spreads(nodes, edges)
-        parent_forks = _collect_dominating_forks(nodes, edges)
+        edges_by_source = self._edges_by_source
+        nodes, edges_by_source = _normalize_forks(nodes, edges_by_source)
+        parent_forks = _collect_dominating_forks(nodes, edges_by_source)
 
         output_type = cast(type[GraphOutputT], self.output_type)
         if get_origin(output_type) is TypeExpression:
@@ -347,69 +337,96 @@ class GraphBuilder[StateT, DepsT, GraphInputT, GraphOutputT]:
             deps_type=self.deps_type,
             input_type=self.input_type,
             output_type=output_type,
-            nodes=self._nodes,
-            edges_by_source=self._edges_by_source,
+            nodes=nodes,
+            edges_by_source=edges_by_source,
             parent_forks=parent_forks,
         )
 
 
-# TODO: Is this function still needed?
-def _convert_decision_spreads(
-    graph_nodes: dict[NodeId, AnyNode], graph_edges_by_source: dict[NodeId, list[Edge]]
-) -> tuple[dict[NodeId, AnyNode], dict[NodeId, list[Edge]]]:
-    def _get_next_spread_id(to: str) -> NodeId:
-        prefix = f'spread_to_{to}'
-        node_id = prefix
-        index = 2
-        while node_id in graph_nodes:
-            node_id = f'{prefix}_{index}'
-            index += 1
-        return NodeId(node_id)
+def _normalize_forks(
+    nodes: dict[NodeId, AnyNode], edges: dict[NodeId, list[Path]]
+) -> tuple[dict[NodeId, AnyNode], dict[NodeId, list[Path]]]:
+    """Rework the nodes/edges so that the _only_ nodes with multiple edges coming out are broadcast forks
+    Also, add forks to edges
+    """
+    new_nodes = nodes.copy()
+    new_edges: dict[NodeId, list[Path]] = {}
 
-    nodes = graph_nodes
-    edges = graph_edges_by_source
+    paths_to_handle: list[Path] = []
 
-    for node in list(nodes.values()):
-        if isinstance(node, Decision):
-            for branch in node.branches:
-                raise NotImplementedError
-                # if branch.spread:
-                #     spread = Spread[Any, Any](id=ForkId(_get_next_spread_id(to=branch.route_to.id)))
-                #     old_route_to = branch.route_to
-                #     nodes[spread.id] = spread
-                #     edges[spread.id].append(
-                #         Edge(
-                #             source_id=spread.id,
-                #             transform=branch.post_spread_transform,
-                #             destination_id=old_route_to.id,
-                #             user_label=branch.post_spread_user_label,
-                #         )
-                #     )
-                #     branch.route_to = spread
-                #     branch.spread = False
-                #     branch.post_spread_transform = None
-    return nodes, edges
+    for source_id, edges_from_source in edges.items():
+        paths_to_handle.extend(edges_from_source)
+
+        node = nodes[source_id]
+        if isinstance(node, Fork) and not node.is_spread:
+            new_edges[source_id] = edges_from_source
+            continue  # broadcast fork; nothing to do
+        if len(edges_from_source) == 1:
+            new_edges[source_id] = edges_from_source
+            continue
+        new_fork = Fork[Any, Any](id=ForkId(NodeId(f'{node.id}_broadcast_fork')), is_spread=False)
+        new_nodes[new_fork.id] = new_fork
+        new_edges[source_id] = [Path(items=[BroadcastMarker(fork_id=new_fork.id, paths=edges_from_source)])]
+        new_edges[new_fork.id] = edges_from_source
+
+    while paths_to_handle:
+        path = paths_to_handle.pop()
+        for item in path.items:
+            if isinstance(item, SpreadMarker):
+                assert item.fork_id in new_nodes
+                new_edges[item.fork_id] = [path.next_path]
+            if isinstance(item, BroadcastMarker):
+                assert item.fork_id in new_nodes
+                # if item.fork_id not in new_nodes:
+                #     new_nodes[new_fork.id] = Fork[Any, Any](id=item.fork_id, is_spread=False)
+                new_edges[item.fork_id] = [*item.paths]
+                paths_to_handle.extend(item.paths)
+
+    return new_nodes, new_edges
 
 
 def _collect_dominating_forks(
-    graph_nodes: dict[NodeId, AnyNode], graph_edges_by_source: dict[NodeId, list[Edge]]
+    graph_nodes: dict[NodeId, AnyNode], graph_edges_by_source: dict[NodeId, list[Path]]
 ) -> dict[JoinId, ParentFork[NodeId]]:
     nodes = set(graph_nodes)
     start_ids = {StartNode.id}
-    edges = {source_id: [e.destination_id for e in graph_edges_by_source[source_id]] for source_id in nodes}
-    for node_id, node in graph_nodes.items():
+    edges: dict[NodeId, list[NodeId]] = defaultdict(list)
+
+    fork_ids: set[NodeId] = set()
+    for source_id in nodes:
+        working_source_id = source_id
+        node = graph_nodes.get(source_id)
+
+        if isinstance(node, Fork):
+            fork_ids.add(node.id)
+            continue
+
+        def _handle_path(path: Path, last_source_id: NodeId):
+            for item in path.items:
+                if isinstance(item, SpreadMarker):
+                    fork_ids.add(item.fork_id)
+                    edges[last_source_id].append(item.fork_id)
+                    last_source_id = item.fork_id
+                elif isinstance(item, BroadcastMarker):
+                    fork_ids.add(item.fork_id)
+                    edges[last_source_id].append(item.fork_id)
+                    for fork in item.paths:
+                        _handle_path(Path([*fork.items]), item.fork_id)
+                    # Broadcasts should only ever occur as the last item in the list, so no need to update the working_source_id
+                elif isinstance(item, DestinationMarker):
+                    edges[last_source_id].append(item.destination.id)
+                    # Destinations should only ever occur as the last item in the list, so no need to update the working_source_id
+
         if isinstance(node, Decision):
-            # For decisions, we need to add edges for the branches
             for branch in node.branches:
-                raise NotImplementedError  # Need to rework how this gets handled..
-                # If any branches have a spread, it's a bug in graph building
-                # assert not branch.spread, 'Decision branches should not be spreads at this point'
-                # edges[node_id].append(branch.route_to.id)
+                _handle_path(branch.path, working_source_id)
+        else:
+            for path in graph_edges_by_source.get(source_id, []):
+                _handle_path(path, source_id)
 
-    fork_ids = {
-        node_id for node_id, node in graph_nodes.items() if isinstance(node, Spread) or len(edges.get(node_id, [])) > 1
-    }
-
+    print(sorted(nodes))
+    for k, v in edges.items():
+        print(f'{k}: {v}')
     finder = ParentForkFinder(
         nodes=nodes,
         start_ids=start_ids,
@@ -437,12 +454,12 @@ class Graph[StateT, DepsT, InputT, OutputT]:
     output_type: TypeOrTypeExpression[OutputT]
 
     nodes: dict[NodeId, AnyNode]
-    edges_by_source: dict[NodeId, list[Edge]]
+    edges_by_source: dict[NodeId, list[Path]]
     parent_forks: dict[JoinId, ParentFork[NodeId]]
 
-    @property
-    def start_edges(self) -> list[Edge]:
-        return self.edges_by_source.get(StartNode.id, [])
+    # @property
+    # def start_edges(self) -> list[EdgeDestination]:
+    #     return self.edges_by_source.get(StartNode.id, [])
 
     def get_parent_fork(self, join_id: JoinId) -> ParentFork[NodeId]:
         result = self.parent_forks.get(join_id)
@@ -451,7 +468,7 @@ class Graph[StateT, DepsT, InputT, OutputT]:
         return result
 
     def render(self, *, title: str | None = None, direction: StateDiagramDirection | None = None) -> str:
-        return generate_code(self, title=title, direction=direction)
+        return build_mermaid_graph(self).render(title=title, direction=direction)
 
     # TODO: Should we re-add a `run` method that just uses a default global GraphRunner?
 

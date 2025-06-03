@@ -34,6 +34,8 @@ class ReducerContext[StateT, DepsT, InputT]:
 
 type ReduceFunction[StateT, DepsT, InputT] = Callable[[ReducerContext[StateT, DepsT, InputT]], None]
 type FinalizeFunction[StateT, DepsT, OutputT] = Callable[[ReducerContext[StateT, DepsT, None]], OutputT]
+# TODO: Need to rework joins so that they are dataclass instances and can be serialized/deserialized.
+#  The Join then retains a reference to the reducer type for serialization/deserialization purposes.
 type Reducer[StateT, DepsT, InputT, OutputT] = tuple[
     ReduceFunction[StateT, DepsT, InputT], FinalizeFunction[StateT, DepsT, OutputT]
 ]

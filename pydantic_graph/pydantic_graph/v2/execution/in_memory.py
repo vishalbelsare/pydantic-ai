@@ -174,8 +174,8 @@ class InMemoryGraphRunner[StateT, DepsT, InputT, OutputT](GraphRunner[StateT, De
                 async def process_tasks(receive_stream: MemoryObjectReceiveStream[GraphTask]) -> None:
                     async def handle_task(t: GraphTask):
                         engine_ = _InMemoryGraphRunAPI[StateT, DepsT](run)
-                        logic_ = GraphWalker(self.graph, engine_, deps)
-                        await logic_.handle_task(t)
+                        walker = GraphWalker(self.graph, engine_, deps)
+                        await walker.handle_task(t)
 
                     async with receive_stream:
                         async for task in receive_stream:
@@ -184,8 +184,7 @@ class InMemoryGraphRunner[StateT, DepsT, InputT, OutputT](GraphRunner[StateT, De
                 tg.start_soon(process_tasks, receive_task_stream)
                 async with send_task_stream:
                     engine = _InMemoryGraphRunAPI[StateT, DepsT](run)
-                    logic = GraphWalker(self.graph, engine, deps)
-                    result = await logic.run(state, inputs)
+                    result = await GraphWalker(self.graph, engine, deps).run(state, inputs)
                     state = await engine.get_immutable_state()
                     tg.cancel_scope.cancel()
 

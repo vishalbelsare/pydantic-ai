@@ -17,9 +17,10 @@ class EndNode[InputT]:
 
 
 @dataclass
-class Spread[InputT, OutputT]:
-    # Note — the InputT should always be Sequence[OutputT]; we enforce this by making it hard to instantiate in any other way
+class Fork[InputT, OutputT]:
     id: ForkId
+
+    is_spread: bool  # if is_spread is True, InputT must be Sequence[OutputT]; otherwise InputT must be OutputT
 
     def _force_variance(self, inputs: InputT) -> OutputT:
         raise RuntimeError('This method should never be called, it is just defined for typing purposes.')

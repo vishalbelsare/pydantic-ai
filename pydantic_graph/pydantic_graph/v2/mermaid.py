@@ -1,21 +1,19 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Literal
+from collections import defaultdict
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, Literal, assert_never
 
 from pydantic_graph.v2.decision import Decision
 from pydantic_graph.v2.id_types import NodeId
 from pydantic_graph.v2.join import Join
-from pydantic_graph.v2.node import EndNode, Spread, StartNode
+from pydantic_graph.v2.node import EndNode, Fork, StartNode
+from pydantic_graph.v2.paths import BroadcastMarker, DestinationMarker, LabelMarker, Path, SpreadMarker
 from pydantic_graph.v2.step import Step
 
 if TYPE_CHECKING:
     from pydantic_graph.v2.graph import Graph
 
-__all__ = (
-    'DEFAULT_HIGHLIGHT_CSS',
-    'generate_code',
-    'StateDiagramDirection',
-)
 DEFAULT_HIGHLIGHT_CSS = 'fill:#fdff32'
 """The default CSS to use for highlighting nodes."""
 
@@ -29,103 +27,131 @@ StateDiagramDirection = Literal['TB', 'LR', 'RL', 'BT']
 - `'BT'`: Bottom to top
 """
 
-
-def generate_code(
-    graph: Graph[Any, Any, Any, Any],
-    /,
-    *,
-    # highlight_css: str = DEFAULT_HIGHLIGHT_CSS,
-    edge_labels: bool = True,
-    title: str | None = None,
-    direction: StateDiagramDirection | None = None,
-) -> str:
-    """Generate [Mermaid state diagram](https://mermaid.js.org/syntax/stateDiagram.html) code for a graph.
-
-    Args:
-        graph: The graph to generate the image for.
-        start_node: Identifiers of nodes that start the graph.
-        highlighted_nodes: Identifiers of nodes to highlight.
-        highlight_css: CSS to use for highlighting nodes.
-        title: The title of the diagram.
-        edge_labels: Whether to include edge labels in the diagram.
-        notes: Whether to include notes in the diagram.
-        direction: The direction of flow.
+NodeKind = Literal['broadcast', 'spread', 'join', 'start', 'end', 'step', 'decision']
 
 
-    Returns:
-        The Mermaid code for the graph.
-    """
-    # graph.start_edges
-    # start_node_ids = set(_node_ids(start_node or ()))
-    # for node_id in start_node_ids:
-    #     if node_id not in graph.node_defs:
-    #         raise LookupError(f'Start node "{node_id}" is not in the graph.')
+@dataclass
+class MermaidNode:
+    id: str
+    kind: NodeKind
+    label: str | None
+    note: str | None
 
-    lines: list[str] = []
-    if title:
-        lines = ['---', f'title: {title}', '---']
-    lines.append('stateDiagram-v2')
-    if direction is not None:
-        lines.append(f'  direction {direction}')
 
-    broadcast_forks = dict[NodeId, NodeId]()
-    for node in graph.nodes.values():
-        # List all nodes in order they were created
-        node_lines: list[str] = []
-        if isinstance(node, (StartNode, EndNode)):
-            pass
+@dataclass
+class MermaidEdge:
+    start_id: str
+    end_id: str
+    label: str | None
+
+
+def build_mermaid_graph(graph: Graph[Any, Any, Any, Any]) -> MermaidGraph:
+    nodes: list[MermaidNode] = []
+    edges_by_source: dict[str, list[MermaidEdge]] = defaultdict(list)
+
+    def _collect_edges(path: Path, last_source_id: NodeId) -> None:
+        working_label: str | None = None
+        for item in path.items:
+            if isinstance(item, SpreadMarker):
+                edges_by_source[last_source_id].append(MermaidEdge(last_source_id, item.fork_id, working_label))
+                last_source_id = item.fork_id
+            elif isinstance(item, BroadcastMarker):
+                edges_by_source[last_source_id].append(MermaidEdge(last_source_id, item.fork_id, working_label))
+                last_source_id = item.fork_id
+                for fork in item.paths:
+                    _collect_edges(Path([*fork.items]), item.fork_id)
+            elif isinstance(item, LabelMarker):
+                working_label = item.label
+            elif isinstance(item, DestinationMarker):
+                edges_by_source[last_source_id].append(MermaidEdge(last_source_id, item.destination.id, working_label))
+
+    for node_id, node in graph.nodes.items():
+        kind: NodeKind
+        label: str | None = None
+        note: str | None = None
+        if isinstance(node, StartNode):
+            kind = 'start'
+        elif isinstance(node, EndNode):
+            kind = 'end'
         elif isinstance(node, Step):
-            line = f'  {node.id}'
-            if node.label:
-                line += f': {node.label}'
-            node_lines.append(line)
+            kind = 'step'
+            label = node.user_label
         elif isinstance(node, Join):
-            node_lines = [f'  state {node.id} <<join>>']
-        elif isinstance(node, Spread):
-            node_lines = [f'  state {node.id} <<fork>>']
+            kind = 'join'
+        elif isinstance(node, Fork):
+            kind = 'spread' if node.is_spread else 'broadcast'
         elif isinstance(node, Decision):
-            node_lines = [f'  state {node.id} <<choice>>']
-            if node.note:
-                node_lines.append(f'  note right of {node.id}\n    {node.note}\n  end note')
-        is_broadcast_fork = len(graph.edges_by_source.get(node.id, [])) > 1
-        if is_broadcast_fork:
-            broadcast_forks[node.id] = NodeId(node.id + '_fork')  # TODO: Need to guarantee this is unique
-            node_lines.append(f'  state {broadcast_forks[node.id]} <<fork>>')
-        lines.extend(node_lines)
+            kind = 'decision'
+            note = node.note
+        else:
+            assert_never(node)
 
-    lines.append('')
+        source_node = MermaidNode(id=node_id, kind=kind, label=label, note=note)
+        nodes.append(source_node)
 
-    for source_id, node in graph.nodes.items():
-        render_source_id = source_id
-
-        if source_id == StartNode.start.id:
-            render_source_id = '[*]'  # Mermaid uses [*] to denote the start state
-
-        if source_id in broadcast_forks:
-            lines.append(f'  {render_source_id} --> {broadcast_forks[source_id]}')
-            render_source_id = broadcast_forks[source_id]
-
-        for edge in graph.edges_by_source[source_id]:
-            destination_id = edge.destination_id
-            if destination_id == EndNode.end.id:
-                destination_id = '[*]'  # Mermaid uses [*] to denote the end state
-            lines.append(f'  {render_source_id} --> {destination_id}')
-
-            # TODO: Support node notes/highlighting
-            # TODO: Support edge labels (probably derive from the transform, etc.):
-            # if edge.label:
-            #     lines.append(f'  {source_id} --> {edge.destination_id}: {edge.label}')
-
+    for source_id, paths in graph.edges_by_source.items():
+        for path in paths:
+            _collect_edges(path, source_id)
+    for node in graph.nodes.values():
         if isinstance(node, Decision):
             for branch in node.branches:
-                # Render the decision branches
-                destination_id = branch.route_to.id
-                if destination_id == EndNode.end.id:
-                    destination_id = '[*]'  # Mermaid uses [*] to denote the end state
-                line = f'  {render_source_id} --> {destination_id}'
-                if edge_labels:
-                    line += f': {branch.label}'
-                lines.append(line)
-                # TODO: Support node notes/highlighting
+                _collect_edges(branch.path, node.id)
 
-    return '\n'.join(lines)
+    # Add edges in the same order that we added nodes
+    edges: list[MermaidEdge] = sum([edges_by_source.get(node.id, []) for node in nodes], list[MermaidEdge]())
+    return MermaidGraph(nodes, edges)
+
+
+@dataclass
+class MermaidGraph:
+    nodes: list[MermaidNode]
+    edges: list[MermaidEdge]
+
+    title: str | None = None
+    direction: StateDiagramDirection | None = None
+
+    def render(
+        self,
+        direction: StateDiagramDirection | None = None,
+        title: str | None = None,
+        edge_labels: bool = True,
+    ):
+        lines: list[str] = []
+        if title:
+            lines = ['---', f'title: {title}', '---']
+        lines.append('stateDiagram-v2')
+        if direction is not None:
+            lines.append(f'  direction {direction}')
+
+        for node in self.nodes:
+            # List all nodes in order they were created
+            node_lines: list[str] = []
+            if node.kind == 'start' or node.kind == 'end':
+                pass
+            elif node.kind == 'step':
+                line = f'  {node.id}'
+                if node.label:
+                    line += f': {node.label}'
+                node_lines.append(line)
+            elif node.kind == 'join':
+                node_lines = [f'  state {node.id} <<join>>']
+            elif node.kind == 'broadcast' or node.kind == 'spread':
+                node_lines = [f'  state {node.id} <<fork>>']
+            elif node.kind == 'decision':
+                node_lines = [f'  state {node.id} <<choice>>']
+                if node.note:
+                    node_lines.append(f'  note right of {node.id}\n    {node.note}\n  end note')
+            lines.extend(node_lines)
+
+        lines.append('')
+
+        for edge in self.edges:
+            render_start_id = '[*]' if edge.start_id == StartNode.id else edge.start_id
+            render_end_id = '[*]' if edge.end_id == EndNode.id else edge.end_id
+            edge_line = f'  {render_start_id} --> {render_end_id}'
+            if edge.label:
+                edge_line += f': {edge.label}'
+            lines.append(edge_line)
+            # TODO: Support node notes/highlighting
+
+        return '\n'.join(lines)

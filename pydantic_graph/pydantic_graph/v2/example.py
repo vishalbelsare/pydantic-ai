@@ -1,4 +1,6 @@
+import asyncio
 import random
+from collections.abc import Sequence
 from dataclasses import dataclass
 from types import NoneType
 from typing import Any, Literal
@@ -65,7 +67,9 @@ async def handle_int_2(ctx: StepContext[MyState, object, object]) -> None:
 
 
 @g.step
-async def handle_int_3(ctx: StepContext[MyState, object, object]) -> list[int]:
+async def handle_int_3(
+    ctx: StepContext[MyState, object, object],
+) -> Sequence[int]:  # TODO: Make it so this works with list[int] as the return type
     print('start int 3')
     await asyncio.sleep(1)
     async with ctx.get_mutable_state() as state:
@@ -96,7 +100,9 @@ async def handle_str_2(ctx: StepContext[MyState, object, object]) -> None:
 
 
 @g.step
-async def handle_str_3(ctx: StepContext[MyState, object, object]) -> list[str]:
+async def handle_str_3(
+    ctx: StepContext[MyState, object, object],
+) -> Sequence[str]:  # TODO: Make it so this works with list[str] as the return type
     print('start str 3')
     await asyncio.sleep(1)
     async with ctx.get_mutable_state() as state:
@@ -126,8 +132,9 @@ handle_str_join = g.join(reduce_to_none, node_id='handle_str_join')
 g.add_edges(g.from_(g.start_node).label('begin').to(choose_type))
 g.add_decision(
     choose_type,
-    g.branch(g.match(TypeExpression[Literal['int']]).to(handle_int))
-    .branch(g.match(TypeExpression[Literal['str']]).to(handle_str)),
+    g.branch(g.match(TypeExpression[Literal['int']]).to(handle_int)).branch(
+        g.match(TypeExpression[Literal['str']]).to(handle_str)
+    ),
 )
 g.add_edges(
     # ints
@@ -148,7 +155,7 @@ g.add_edges(
 
 graph = g.build()
 print(graph)
-print('-')
+print('----------')
 
 
 async def main():
@@ -161,6 +168,4 @@ async def main():
 
 
 if __name__ == '__main__':
-    import asyncio
-
     asyncio.run(main())

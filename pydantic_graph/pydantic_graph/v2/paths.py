@@ -3,72 +3,73 @@ from __future__ import annotations
 import secrets
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any, Callable, Self
+from typing import TYPE_CHECKING, Any, Callable, Self
 
 from pydantic_graph.v2.id_types import ForkId, NodeId
-from pydantic_graph.v2.node_types import DestinationNode, SourceNode
 from pydantic_graph.v2.transform import TransformFunction
+
+if TYPE_CHECKING:
+    from pydantic_graph.v2.node_types import DestinationNode, SourceNode
 
 
 @dataclass
-class _TransformMarker:
+class TransformMarker:
     transform: TransformFunction[Any, Any, Any, Any]
 
 
 @dataclass
-class _SpreadMarker:
-    fork_id: ForkId
+class SpreadMarker:
+    fork_id: ForkId  # TODO: Change this to holding an actual `Fork` node to be more like DestinationMarker
 
 
 @dataclass
-class _ForkMarker:
-    forks: Sequence[_PartialPath]
-    fork_id: ForkId
+class BroadcastMarker:
+    paths: Sequence[Path]
+    fork_id: ForkId  # TODO: Change this to holding an actual `Fork` node to be more like DestinationMarker
 
 
 @dataclass
-class _LabelMarker:
+class LabelMarker:
     label: str
 
 
 @dataclass
-class _DestinationMarker:
+class DestinationMarker:
     destination: DestinationNode[Any, Any, Any]
 
 
-type _PathItem = _TransformMarker | _SpreadMarker | _ForkMarker | _LabelMarker | _DestinationMarker
+type PathItem = TransformMarker | SpreadMarker | BroadcastMarker | LabelMarker | DestinationMarker
 
 
 @dataclass
-class _PartialPath:
-    items: Sequence[_PathItem]
-
-
-@dataclass
-class Path(_PartialPath):
-    items: Sequence[_PathItem]
+class Path:
+    items: Sequence[PathItem]
 
     @property
-    def last_fork(self) -> _ForkMarker | _SpreadMarker | None:
+    def last_fork(self) -> BroadcastMarker | SpreadMarker | None:
         """Returns the last fork or spread marker in the path, if any."""
         for item in reversed(self.items):
-            if isinstance(item, (_ForkMarker, _SpreadMarker)):
+            if isinstance(item, (BroadcastMarker, SpreadMarker)):
                 return item
         return None
+
+    @property
+    def next_path(self) -> Path:
+        return Path(self.items[1:])
 
 
 # @dataclass  # TODO: Change this back to a dataclass if we can do so without variance issues
 class PathBuilder[StateT, DepsT, OutputT]:
-    working_items: Sequence[_PathItem]
+    working_items: Sequence[PathItem]
 
-    def __init__(self, working_items: Sequence[_PathItem]):
+    def __init__(self, working_items: Sequence[PathItem]):
         self.working_items = working_items
 
     @property
-    def last_fork(self) -> _ForkMarker | _SpreadMarker | None:
+    def last_fork(self) -> BroadcastMarker | SpreadMarker | None:
         """Returns the last fork or spread marker in the path, if any."""
         for item in reversed(self.working_items):
-            if isinstance(item, (_ForkMarker, _SpreadMarker)):
+            if isinstance(item, (BroadcastMarker, SpreadMarker)):
                 return item
         return None
 
@@ -80,32 +81,32 @@ class PathBuilder[StateT, DepsT, OutputT]:
         fork_id: str | None = None,
     ) -> Path:
         if extra_destinations:
-            next_item = _ForkMarker(
-                forks=[_PartialPath(items=[_DestinationMarker(d)]) for d in (destination,) + extra_destinations],
-                fork_id=ForkId(NodeId(fork_id or secrets.token_hex(8))),
+            next_item = BroadcastMarker(
+                paths=[Path(items=[DestinationMarker(d)]) for d in (destination,) + extra_destinations],
+                fork_id=ForkId(NodeId(fork_id or 'extra_broadcast_' + secrets.token_hex(8))),
             )
         else:
-            next_item = _DestinationMarker(destination=destination)
+            next_item = DestinationMarker(destination=destination)
         return Path(items=[*self.working_items, next_item])
 
     def fork(self, forks: Sequence[Path], /, *, fork_id: str | None = None) -> Path:
-        next_item = _ForkMarker(forks=forks, fork_id=ForkId(NodeId(fork_id or secrets.token_hex(8))))
+        next_item = BroadcastMarker(paths=forks, fork_id=ForkId(NodeId(fork_id or 'broadcast_' + secrets.token_hex(8))))
         return Path(items=[*self.working_items, next_item])
 
     def transform[NewOutputT](
         self, func: TransformFunction[StateT, DepsT, OutputT, NewOutputT], /
     ) -> PathBuilder[StateT, DepsT, NewOutputT]:
-        next_item = _TransformMarker(func)
+        next_item = TransformMarker(func)
         return PathBuilder[StateT, DepsT, NewOutputT](working_items=[*self.working_items, next_item])
 
     def spread[T](
         self: PathBuilder[StateT, DepsT, Sequence[T]], *, fork_id: str | None = None
     ) -> PathBuilder[StateT, DepsT, T]:
-        next_item = _SpreadMarker(fork_id=ForkId(NodeId(fork_id or secrets.token_hex(8))))
+        next_item = SpreadMarker(fork_id=ForkId(NodeId(fork_id or 'spread_' + secrets.token_hex(8))))
         return PathBuilder[StateT, DepsT, T](working_items=[*self.working_items, next_item])
 
     def label(self, label: str, /) -> PathBuilder[StateT, DepsT, OutputT]:
-        next_item = _LabelMarker(label)
+        next_item = LabelMarker(label)
         return PathBuilder[StateT, DepsT, OutputT](working_items=[*self.working_items, next_item])
 
 

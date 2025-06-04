@@ -7,7 +7,7 @@ from typing import Any, Literal
 
 from pydantic_graph.v2.execution.in_memory import InMemoryGraphRunner
 from pydantic_graph.v2.graph import GraphBuilder, TypeExpression
-from pydantic_graph.v2.join import reduce_to_none
+from pydantic_graph.v2.join import NullReducer
 from pydantic_graph.v2.step import StepContext
 
 
@@ -124,7 +124,7 @@ async def handle_field_3_item(ctx: StepContext[MyState, object, int | str]) -> N
     await asyncio.sleep(0.25)
 
 
-handle_join = g.join(reduce_to_none, node_id='handle_join')
+handle_join = g.join(NullReducer, node_id='handle_join')
 
 g.add(
     g.edge_from(g.start_node).label('begin').to(choose_type),

@@ -101,10 +101,10 @@ class GraphWalker[StateT, DepsT, InputT, OutputT]:
 
         # TODO: Need to store reductions in the database and have a way to ensure executions are idempotent
         if reducer is None:
-            reducer = join.reducer_factory(ctx)
+            reducer = join.create_reducer(ctx)
             await self.run_api.set_active_reducer_state(join.id, matching_fork_run_id, reducer)
         else:
-            reducer[0](ctx)
+            reducer.reduce(ctx)
 
     async def _handle_decision(
         self, decision: Decision[StateT, DepsT, Any], inputs: Any, fork_stack: ForkStack
@@ -192,7 +192,7 @@ class GraphWalker[StateT, DepsT, InputT, OutputT]:
             if await self.run_api.is_fork_run_completed(fork_run_id):
                 state = await self.run_api.get_immutable_state()
                 ctx = ReducerContext(state, self.deps, None)
-                output = reducer[1](ctx)
+                output = reducer.finalize(ctx)
                 new_fork_stack = popped_task_fork_stack[:fork_run_index]
                 await self.run_api.complete_active_reducer(join_id, fork_run_id)
 

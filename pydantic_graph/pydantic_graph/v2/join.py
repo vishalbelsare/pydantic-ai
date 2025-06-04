@@ -1,6 +1,11 @@
 from __future__ import annotations
 
-from typing import Any, Callable
+from abc import ABC
+from dataclasses import dataclass, field
+from typing import Any
+
+from pydantic import TypeAdapter
+from pydantic_core import to_json
 
 from pydantic_graph.v2.id_types import ForkId, JoinId
 
@@ -32,74 +37,67 @@ class ReducerContext[StateT, DepsT, InputT]:
         return f'{self.__class__.__name__}(state={self.state}, deps={self.deps}, inputs={self.inputs})'
 
 
-type ReduceFunction[StateT, DepsT, InputT] = Callable[[ReducerContext[StateT, DepsT, InputT]], None]
-type FinalizeFunction[StateT, DepsT, OutputT] = Callable[[ReducerContext[StateT, DepsT, None]], OutputT]
-# TODO: Need to rework joins so that they are dataclass instances and can be serialized/deserialized.
-#  The Join then retains a reference to the reducer type for serialization/deserialization purposes.
-type Reducer[StateT, DepsT, InputT, OutputT] = tuple[
-    ReduceFunction[StateT, DepsT, InputT], FinalizeFunction[StateT, DepsT, OutputT]
-]
-type ReducerFactory[StateT, DepsT, InputT, OutputT] = Callable[
-    [ReducerContext[StateT, DepsT, InputT]], Reducer[StateT, DepsT, InputT, OutputT]
-]
+@dataclass(init=False)
+class Reducer[StateT, DepsT, InputT, OutputT](ABC):
+    def __init__(self, ctx: ReducerContext[StateT, DepsT, InputT]) -> None:
+        self.reduce(ctx)
 
-
-def reduce_to_list[T](item_type: type[T]) -> ReducerFactory[object, object, T, list[T]]:
-    def reducer_factory(
-        ctx: ReducerContext[object, object, T],
-    ) -> Reducer[object, object, T, list[T]]:
-        state: list[T] = [ctx.inputs]
-
-        def reduce(_ctx: ReducerContext[object, object, T]) -> None:
-            state.append(_ctx.inputs)
-
-        def finalize(_ctx: ReducerContext[object, object, None]) -> list[T]:
-            return state
-
-        return reduce, finalize
-
-    return reducer_factory
-
-
-def reduce_to_dict[T: dict[Any, Any]](dict_type: type[T]) -> ReducerFactory[object, object, T, T]:
-    def reducer_factory(
-        ctx: ReducerContext[object, object, T],
-    ) -> Reducer[object, object, T, T]:
-        state: T = dict_type()
-        state.update(ctx.inputs)
-
-        def reduce(_ctx: ReducerContext[object, object, T]) -> None:
-            state.update(_ctx.inputs)
-
-        def finalize(_ctx: ReducerContext[object, object, None]) -> T:
-            return state
-
-        return reduce, finalize
-
-    return reducer_factory
-
-
-def reduce_to_none(
-    ctx: ReducerContext[object, object, Any],
-) -> tuple[ReduceFunction[object, object, Any], FinalizeFunction[object, object, None]]:
-    def reduce(_ctx: ReducerContext[object, object, Any]) -> None:
+    def reduce(self, ctx: ReducerContext[StateT, DepsT, InputT]) -> None:
+        """Reduce the input data into the instance state."""
         pass
 
-    def finalize(_ctx: ReducerContext[object, object, None]) -> None:
-        pass
+    def finalize(self, ctx: ReducerContext[StateT, DepsT, None]) -> OutputT:
+        """Finalize the reduction and return the output."""
+        raise NotImplementedError('Finalize method must be implemented in subclasses.')
 
-    return reduce, finalize
+
+@dataclass(init=False)
+class NullReducer(Reducer[object, object, object, None]):
+    def finalize(self, ctx: ReducerContext[object, object, None]) -> None:
+        return None
+
+
+@dataclass(init=False)
+class ListReducer[T](Reducer[object, object, T, list[T]]):
+    items: list[T] = field(default_factory=list)
+
+    def reduce(self, ctx: ReducerContext[object, object, T]) -> None:
+        self.items.append(ctx.inputs)
+
+    def finalize(self, ctx: ReducerContext[object, object, None]) -> list[T]:
+        return self.items
+
+
+@dataclass(init=False)
+class DictReducer[K, V](Reducer[object, object, dict[K, V], dict[K, V]]):
+    data: dict[K, V] = field(default_factory=dict[K, V])
+
+    def reduce(self, ctx: ReducerContext[object, object, dict[K, V]]) -> None:
+        self.data.update(ctx.inputs)
+
+    def finalize(self, ctx: ReducerContext[object, object, None]) -> dict[K, V]:
+        return self.data
 
 
 class Join[StateT, DepsT, InputT, OutputT]:
     def __init__(
-        self, id: JoinId, reducer_factory: ReducerFactory[StateT, DepsT, InputT, OutputT], joins: ForkId | None = None
+        self, id: JoinId, reducer_type: type[Reducer[StateT, DepsT, InputT, OutputT]], joins: ForkId | None = None
     ) -> None:
         self.id = id
-        self._reducer_factory = reducer_factory
+        self._reducer_type = reducer_type
         self.joins = joins
 
-    @property
-    def reducer_factory(self) -> ReducerFactory[StateT, DepsT, InputT, OutputT]:
-        # reducer_factory cannot be editable due to variance issues; needs to be ReadOnly if in a dataclass
-        return self._reducer_factory
+        self._type_adapter: TypeAdapter[Any] = TypeAdapter(reducer_type)  # needs to be annotated this way for variance
+
+    def _force_covariant(self, inputs: InputT) -> OutputT:
+        raise NotImplementedError
+
+    def create_reducer(self, ctx: ReducerContext[StateT, DepsT, InputT]) -> Reducer[StateT, DepsT, InputT, OutputT]:
+        """Create a reducer instance using the provided context."""
+        return self._reducer_type(ctx)
+
+    def serialize_reducer(self, instance: Reducer[Any, Any, Any, Any]) -> bytes:
+        return to_json(instance)
+
+    def deserialize_reducer(self, serialized: bytes) -> Reducer[StateT, DepsT, InputT, OutputT]:
+        return self._type_adapter.validate_json(serialized)

@@ -4,7 +4,7 @@ from typing import Any
 import logfire
 from pydantic_evals.dataset import Dataset
 from pydantic_evals.evaluators import Evaluator
-from pydantic_evals.evaluators.common import IsInstance, LlmJudge
+from pydantic_evals.evaluators.common import IsInstance, LLMJudge
 from pydantic_evals.evaluators.context import EvaluatorContext
 from pydantic_evals.evaluators.llm_as_a_judge import GradingOutput, judge_input_output
 
@@ -40,7 +40,7 @@ async def judge_time_range_case(
 async def main():
     dataset = Dataset[TimeRangeInputs, TimeRangeResponse, dict[str, Any]].from_file(
         Path(__file__).parent / "retrieved_test_cases.yaml",
-        custom_evaluator_types=[LlmJudge, IsInstance],
+        custom_evaluator_types=[LLMJudge, IsInstance],
     )
 
     class MyEvaluator(Evaluator[TimeRangeInputs, TimeRangeResponse, Any]):

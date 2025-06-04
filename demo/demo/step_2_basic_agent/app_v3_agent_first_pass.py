@@ -63,7 +63,7 @@ app = FastAPI()
 async def infer_time_range(prompt: str) -> TimeRangeResponse:
     logfire.info(f"Handling {prompt=}")
     agent_run_result = await time_range_agent.run(prompt, deps=TimeRangeDeps())
-    return agent_run_result.data
+    return agent_run_result.output
 
 
 if __name__ == "__main__":

@@ -5,7 +5,7 @@ from typing import Any
 from logfire.experimental.query_client import AsyncLogfireQueryClient
 from pydantic import TypeAdapter
 from pydantic_evals.dataset import Case, Dataset
-from pydantic_evals.evaluators.common import LlmJudge, IsInstance
+from pydantic_evals.evaluators.common import LLMJudge, IsInstance
 
 from demo.step_4_evaluate.app_v4_agent_updated import TimeRangeInputs, TimeRangeResponse
 from demo.util.tokens import get_app_read_token
@@ -61,27 +61,21 @@ class TimeRangeDataset(Dataset[TimeRangeInputs, TimeRangeResponse, dict[str, Any
 
 
 async def main():
-    # client: AsyncLogfireQueryClient
-    # async with AsyncLogfireQueryClient(
-    #     read_token=read_token, base_url="http://localhost:8000"
-    # ) as client:
-    #     successes = await client.query_json_rows(successes_query)
-    #     success_rows = get_cases("success", successes["rows"])
-    # 
-    #     errors = await client.query_json_rows(errors_query)
-    #     error_rows = get_cases("error", errors["rows"])
+    client: AsyncLogfireQueryClient
+    async with AsyncLogfireQueryClient(
+        read_token=read_token, base_url="http://localhost:8000"
+    ) as client:
+        successes = await client.query_json_rows(successes_query)
+        success_rows = get_cases("success", successes["rows"])
 
-    dataset = TimeRangeDataset(cases=[], evaluators=[])
+        errors = await client.query_json_rows(errors_query)
+        error_rows = get_cases("error", errors["rows"])
+    # dataset = TimeRangeDataset(cases=[], evaluators=[])
+    dataset = TimeRangeDataset(cases=success_rows + error_rows, evaluators=[])
     dataset_path = Path(__file__).parent / "retrieved_test_cases.yaml"
     dataset.to_file(
-        dataset_path, custom_evaluator_types=[LlmJudge, IsInstance]
+        dataset_path, custom_evaluator_types=[LLMJudge, IsInstance]
     )
 
 
 asyncio.run(main())
-
-"""
-  evaluators:
-    - call: llm_judge
-      rubric: output should use offset -07:00
-"""

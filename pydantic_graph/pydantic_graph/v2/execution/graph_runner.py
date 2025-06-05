@@ -13,6 +13,7 @@ from pydantic_graph.v2.util import Maybe
 
 
 class GraphRunAPI[StateT, DepsT](ABC):
+    # Tasks
     @abstractmethod
     async def start_task_soon(self, task: GraphTask) -> None:
         """Request a task to be run. This is typically called by the graph runner when it needs to execute a step."""
@@ -38,7 +39,7 @@ class GraphRunAPI[StateT, DepsT](ABC):
         """
         raise NotImplementedError
 
-    # State management stuff
+    # State
     @abstractmethod
     async def initialize_state(self, state: StateT) -> None:
         """Initialize the state for the graph run. This is typically called at the start of a graph run."""
@@ -54,6 +55,7 @@ class GraphRunAPI[StateT, DepsT](ABC):
         raise NotImplementedError
         yield
 
+    # Reducers
     @abstractmethod
     @asynccontextmanager
     async def get_reducer(
@@ -76,7 +78,7 @@ class GraphRunAPI[StateT, DepsT](ABC):
         """
         raise NotImplementedError
 
-    # Graph run result stuff
+    # Graph run results
     @abstractmethod
     async def set_run_result(self, result: Any) -> None:
         raise NotImplementedError

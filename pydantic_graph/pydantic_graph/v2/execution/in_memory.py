@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import uuid
 from collections import defaultdict
 from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
@@ -16,7 +15,7 @@ from pydantic_graph.v2.execution.graph_runner import GraphRunAPI, GraphRunner
 from pydantic_graph.v2.execution.graph_task import GraphTask
 from pydantic_graph.v2.execution.graph_walker import GraphWalker
 from pydantic_graph.v2.graph import Graph
-from pydantic_graph.v2.id_types import GraphRunId, JoinId, NodeRunId, TaskId
+from pydantic_graph.v2.id_types import JoinId, NodeRunId, TaskId
 from pydantic_graph.v2.join import Reducer, ReducerContext
 from pydantic_graph.v2.util import Maybe, Some
 
@@ -173,40 +172,36 @@ class _InMemoryGraphRunAPI[StateT, DepsT](GraphRunAPI[StateT, DepsT]):
 class InMemoryGraphRunner[StateT, DepsT, InputT, OutputT](GraphRunner[StateT, DepsT, InputT, OutputT]):
     graph: Graph[StateT, DepsT, InputT, OutputT]
 
-    def __post_init__(self):
-        self._runs: dict[GraphRunId, _InMemoryRunState] = {}
-
     async def run(
         self,
         state: StateT,
         deps: DepsT,
         inputs: InputT,
     ) -> tuple[StateT, OutputT]:
-        run_id = GraphRunId(str(uuid.uuid4()))
+        async with self.worker(deps) as run_state:
+            run_api = _InMemoryGraphRunAPI[StateT, DepsT](run_state)
+            result = await GraphWalker(self.graph, run_api, deps).run(state, inputs)
+            state = await run_api.get_immutable_state()
+        return state, result
 
-        try:
-            send_task_stream, receive_task_stream = create_memory_object_stream[GraphTask]()
+    @asynccontextmanager
+    async def worker(self, deps: DepsT) -> AsyncIterator[_InMemoryRunState]:
+        send_task_stream, receive_task_stream = create_memory_object_stream[GraphTask]()
 
-            async with create_task_group() as tg:
-                run = _InMemoryRunState(tg, receive_task_stream, send_task_stream)
+        async with create_task_group() as tg:
+            run = _InMemoryRunState(tg, receive_task_stream, send_task_stream)
 
-                async def process_tasks(receive_stream: MemoryObjectReceiveStream[GraphTask]) -> None:
-                    async def handle_task(t: GraphTask):
-                        engine_ = _InMemoryGraphRunAPI[StateT, DepsT](run)
-                        walker = GraphWalker(self.graph, engine_, deps)
-                        await walker.handle_task(t)
+            async def process_tasks(receive_stream: MemoryObjectReceiveStream[GraphTask]) -> None:
+                async def handle_task(t: GraphTask):
+                    engine_ = _InMemoryGraphRunAPI[StateT, DepsT](run)
+                    walker = GraphWalker(self.graph, engine_, deps)
+                    await walker.handle_task(t)
 
-                    async with receive_stream:
-                        async for task in receive_stream:
-                            tg.start_soon(handle_task, task)
+                async with receive_stream:
+                    async for task in receive_stream:
+                        tg.start_soon(handle_task, task)
 
-                tg.start_soon(process_tasks, receive_task_stream)
-                async with send_task_stream:
-                    run_api = _InMemoryGraphRunAPI[StateT, DepsT](run)
-                    result = await GraphWalker(self.graph, run_api, deps).run(state, inputs)
-                    state = await run_api.get_immutable_state()
-                    tg.cancel_scope.cancel()
-
-            return state, result
-        finally:
-            self._runs.pop(run_id, None)  # clean up
+            tg.start_soon(process_tasks, receive_task_stream)
+            async with send_task_stream:
+                yield run
+                tg.cancel_scope.cancel()

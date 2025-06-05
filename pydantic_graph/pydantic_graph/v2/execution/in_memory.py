@@ -42,27 +42,9 @@ class _InMemoryRunState:
 class _InMemoryGraphRunAPI[StateT, DepsT](GraphRunAPI[StateT, DepsT]):
     _run_state: _InMemoryRunState
 
-    @property
-    def _active_reducers(self):
-        return self._run_state.active_reducers
-
-    @property
-    def _requested_tasks(self):
-        return self._run_state.requested_tasks
-
-    @property
-    def _state(self) -> StateT:
-        if self._run_state.state is None:
-            raise RuntimeError('State has not been initialized for this graph run engine.')
-        return self._run_state.state.value
-
-    @_state.setter
-    def _state(self, value: StateT) -> None:
-        self._run_state.state = Some(value)
-
-    @property
-    def _finish_event(self):
-        return self._run_state.finish_event
+    async def start_task_soon(self, task: GraphTask) -> None:
+        self._requested_tasks[task.task_id] = task
+        await self._run_state.send_task_stream.send(task)
 
     async def mark_task_completed(self, task_id: TaskId, deps: DepsT) -> list[tuple[JoinId, Any]]:
         popped_task = self._requested_tasks.pop(task_id)
@@ -91,36 +73,6 @@ class _InMemoryGraphRunAPI[StateT, DepsT](GraphRunAPI[StateT, DepsT]):
     async def any_tasks_remain(self) -> bool:
         return len(self._requested_tasks) > 0
 
-    @asynccontextmanager
-    async def get_reducer(
-        self, join_id: JoinId, fork_run_id: NodeRunId
-    ) -> AsyncIterator[Reducer[StateT, DepsT, Any, Any] | None]:
-        async with self._reducer_lock(fork_run_id):
-            yield self._active_reducers.get((join_id, fork_run_id))
-
-    async def set_reducer(
-        self, join_id: JoinId, fork_run_id: NodeRunId, fork_thread_index: int, reducer: Reducer[StateT, DepsT, Any, Any]
-    ) -> None:
-        self._active_reducers[(join_id, fork_run_id)] = reducer
-
-    async def start_task_soon(self, task: GraphTask) -> None:
-        self._requested_tasks[task.task_id] = task
-        await self._run_state.send_task_stream.send(task)
-
-    async def set_run_result(self, result: Any) -> None:
-        if self._run_state.result is not None:
-            raise RuntimeError(
-                f'Result has already been set for this graph run: result={self._run_state.result.value} state={self._state}'
-            )
-        self._run_state.result = Some(result)
-
-    async def mark_run_finished(self) -> None:
-        self._finish_event.set()
-
-    async def wait(self) -> Maybe[Any]:
-        await self._finish_event.wait()
-        return self._run_state.result
-
     async def initialize_state(self, state: StateT) -> None:
         async with self._state_lock():
             assert self._run_state.state is None, 'State has already been initialized for this graph run engine.'
@@ -136,6 +88,55 @@ class _InMemoryGraphRunAPI[StateT, DepsT](GraphRunAPI[StateT, DepsT]):
             state = await self._get_state_unsynchronized()
             yield state
             await self._set_state_unsynchronized(state)
+
+    @asynccontextmanager
+    async def get_reducer(
+        self, join_id: JoinId, fork_run_id: NodeRunId
+    ) -> AsyncIterator[Reducer[StateT, DepsT, Any, Any] | None]:
+        async with self._reducer_lock(fork_run_id):
+            yield self._active_reducers.get((join_id, fork_run_id))
+
+    async def set_reducer(
+        self, join_id: JoinId, fork_run_id: NodeRunId, fork_thread_index: int, reducer: Reducer[StateT, DepsT, Any, Any]
+    ) -> None:
+        self._active_reducers[(join_id, fork_run_id)] = reducer
+
+    async def set_run_result(self, result: Any) -> None:
+        if self._run_state.result is not None:
+            raise RuntimeError(
+                f'Result has already been set for this graph run: result={self._run_state.result.value} state={self._state}'
+            )
+        self._run_state.result = Some(result)
+
+    async def mark_run_finished(self) -> None:
+        self._finish_event.set()
+
+    async def wait(self) -> Maybe[Any]:
+        await self._finish_event.wait()
+        return self._run_state.result
+
+    # Internal helpers
+    @property
+    def _active_reducers(self):
+        return self._run_state.active_reducers
+
+    @property
+    def _requested_tasks(self):
+        return self._run_state.requested_tasks
+
+    @property
+    def _state(self) -> StateT:
+        if self._run_state.state is None:
+            raise RuntimeError('State has not been initialized for this graph run engine.')
+        return self._run_state.state.value
+
+    @_state.setter
+    def _state(self, value: StateT) -> None:
+        self._run_state.state = Some(value)
+
+    @property
+    def _finish_event(self):
+        return self._run_state.finish_event
 
     @asynccontextmanager
     async def _state_lock(self) -> AsyncIterator[None]:

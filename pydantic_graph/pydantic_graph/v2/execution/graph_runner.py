@@ -75,6 +75,9 @@ class GraphRunAPI[StateT, DepsT](ABC):
         """Update the stored reducer state for the given join ID and fork run ID.
 
         The fork_thread_index is provided to help ensure idempotency of the reduction.
+
+        TODO: If implementing a more robust graph runner e.g. with database backing, this needs to do an update that
+         records that the fork_thread_index was handled for idempotency's sake.
         """
         raise NotImplementedError
 

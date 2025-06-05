@@ -69,8 +69,6 @@ class GraphWalker[StateT, DepsT, InputT, OutputT]:
         elif isinstance(node, Step):
             await self._handle_step(node, inputs, fork_stack)
         elif isinstance(node, Join):
-            # TODO: When reducing a join, need to somehow record that it happened to prevent issues if the task is
-            #  restarted or similar
             await self._handle_reduce_join(node, inputs, fork_stack)
         elif isinstance(node, Decision):
             await self._handle_decision(node, inputs, fork_stack)

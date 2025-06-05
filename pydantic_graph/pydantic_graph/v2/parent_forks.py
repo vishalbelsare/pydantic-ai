@@ -32,7 +32,7 @@ class ParentForkFinder[T: Hashable]:
     edges: dict[T, list[T]]  # source_id to list of destination_ids
 
     def find_parent_fork(self, join_id: T) -> ParentFork[T] | None:
-        """Return the *closest* parent fork of the join, together with the set of
+        """Return the farthest (most ancestral) parent fork of the join, together with the set of
         nodes that lie strictly between that fork and the join.
 
         If every dominating fork of J lets J participate in a cycle that avoids the
@@ -40,6 +40,9 @@ class ParentForkFinder[T: Hashable]:
         """
         visited: set[str] = set()
         cur = join_id  # start at J and walk up the immediate dominator chain
+
+        # TODO: Make it a node-configuration option to choose the closest _or_ the farthest. Or manually specified(?)
+        parent_fork: ParentFork[T] | None = None
         while True:
             cur = self._immediate_dominator(cur)
             if cur is None:  # reached the root
@@ -54,10 +57,15 @@ class ParentForkFinder[T: Hashable]:
 
             upstream_nodes = self._get_upstream_nodes_if_parent(join_id, cur)
             if upstream_nodes is not None:  # found upstream nodes without a cycle
-                return ParentFork[T](cur, upstream_nodes)
+                parent_fork = ParentFork[T](cur, upstream_nodes)
+            elif parent_fork is not None:
+                # We reached a fork that is an ancestor of a parent fork but is not itself a parent fork.
+                # This means there is a cycle to J that is downstream of `cur`, and so any node further upstream
+                # will fail to be a parent fork for the same reason. So we can stop here and just return `parent_fork`.
+                return parent_fork
 
         # No dominating fork passed the cycle test to be a "parent" fork
-        return None
+        return parent_fork
 
     @cached_property
     def _predecessors(self) -> dict[T, list[T]]:

@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import uuid
-from collections.abc import AsyncIterator, Mapping, Sequence
+from collections import defaultdict
+from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
 from copy import deepcopy
 from dataclasses import dataclass, field
@@ -34,7 +35,8 @@ class _InMemoryRunState:
     result: Maybe[Any] = field(default=None)
 
     finish_event: Event = field(default_factory=Event)
-    lock: Lock = field(default_factory=Lock)
+    state_lock: Lock = field(default_factory=Lock)
+    reducer_locks: dict[NodeRunId, Lock] = field(default_factory=lambda: defaultdict(Lock))
 
 
 @dataclass
@@ -63,14 +65,8 @@ class _InMemoryGraphRunAPI[StateT, DepsT](GraphRunAPI[StateT, DepsT]):
     def _finish_event(self):
         return self._run_state.finish_event
 
-    async def store_requested_task(self, task: GraphTask) -> None:
-        self._requested_tasks[task.task_id] = task
-
-    async def complete_requested_task(self, task_id: TaskId) -> None:
+    async def mark_task_completed(self, task_id: TaskId) -> None:
         self._requested_tasks.pop(task_id)
-
-    async def get_requested_tasks(self) -> Mapping[TaskId, GraphTask]:
-        return self._requested_tasks
 
     async def any_tasks_remain(self) -> bool:
         return len(self._requested_tasks) > 0
@@ -82,19 +78,19 @@ class _InMemoryGraphRunAPI[StateT, DepsT](GraphRunAPI[StateT, DepsT]):
                 return False
         return True
 
-    async def get_active_reducer_state(
+    @asynccontextmanager
+    async def get_reducer(
         self, join_id: JoinId, fork_run_id: NodeRunId
-    ) -> Reducer[StateT, DepsT, Any, Any] | None:
-        return self._active_reducers.get((join_id, fork_run_id))
+    ) -> AsyncIterator[Reducer[StateT, DepsT, Any, Any] | None]:
+        async with self._reducer_lock(fork_run_id):
+            yield self._active_reducers.get((join_id, fork_run_id))
 
-    async def set_active_reducer_state(
-        self, join_id: JoinId, fork_run_id: NodeRunId, reducer: Reducer[StateT, DepsT, Any, Any]
+    async def set_reducer(
+        self, join_id: JoinId, fork_run_id: NodeRunId, fork_thread_index: int, reducer: Reducer[StateT, DepsT, Any, Any]
     ) -> None:
-        # Probably need a way to set reducer state / otherwise rely on it being serializable
         self._active_reducers[(join_id, fork_run_id)] = reducer
 
-    async def complete_active_reducer(self, join_id: JoinId, fork_run_id: NodeRunId) -> None:
-        # Probably need a way to set reducer state / otherwise rely on it being serializable
+    async def mark_reducer_completed(self, join_id: JoinId, fork_run_id: NodeRunId) -> None:
         self._active_reducers.pop((join_id, fork_run_id))
 
     async def get_active_reducers_with_fork_run_id(
@@ -104,25 +100,23 @@ class _InMemoryGraphRunAPI[StateT, DepsT](GraphRunAPI[StateT, DepsT]):
         # Note: should return a copy of any dicts etc. to prevent errors due to modifications during iteration
         return [(k, r) for k, r in self._active_reducers.items() if k[1] in fork_run_ids]
 
-    async def request_task(self, task: GraphTask) -> None:
-        await self.store_requested_task(task)
+    async def start_task_soon(self, task: GraphTask) -> None:
+        self._requested_tasks[task.task_id] = task
         await self._run_state.send_task_stream.send(task)
 
-    async def set_result(self, result: Any) -> None:
+    async def set_run_result(self, result: Any) -> None:
         if self._run_state.result is not None:
             raise RuntimeError(
                 f'Result has already been set for this graph run: result={self._run_state.result.value} state={self._state}'
             )
         self._run_state.result = Some(result)
 
-    async def get_result(self) -> Maybe[Any]:
-        return self._run_state.result
-
-    async def mark_finished(self) -> None:
+    async def mark_run_finished(self) -> None:
         self._finish_event.set()
 
     async def wait(self) -> Maybe[Any]:
-        return await self._finish_event.wait()
+        await self._finish_event.wait()
+        return self._run_state.result
 
     async def initialize_state(self, state: StateT) -> None:
         async with self._state_lock():
@@ -142,7 +136,12 @@ class _InMemoryGraphRunAPI[StateT, DepsT](GraphRunAPI[StateT, DepsT]):
 
     @asynccontextmanager
     async def _state_lock(self) -> AsyncIterator[None]:
-        async with self._run_state.lock:
+        async with self._run_state.state_lock:
+            yield
+
+    @asynccontextmanager
+    async def _reducer_lock(self, fork_run_id: NodeRunId) -> AsyncIterator[None]:
+        async with self._run_state.reducer_locks[fork_run_id]:
             yield
 
     async def _get_state_unsynchronized(self) -> StateT:
@@ -185,9 +184,9 @@ class InMemoryGraphRunner[StateT, DepsT, InputT, OutputT](GraphRunner[StateT, De
 
                 tg.start_soon(process_tasks, receive_task_stream)
                 async with send_task_stream:
-                    engine = _InMemoryGraphRunAPI[StateT, DepsT](run)
-                    result = await GraphWalker(self.graph, engine, deps).run(state, inputs)
-                    state = await engine.get_immutable_state()
+                    run_api = _InMemoryGraphRunAPI[StateT, DepsT](run)
+                    result = await GraphWalker(self.graph, run_api, deps).run(state, inputs)
+                    state = await run_api.get_immutable_state()
                     tg.cancel_scope.cancel()
 
             return state, result

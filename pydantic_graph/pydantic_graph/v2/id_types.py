@@ -11,3 +11,6 @@ ForkId = NewType('ForkId', NodeId)
 
 GraphRunId = NewType('GraphRunId', str)
 TaskId = NewType('TaskId', uuid.UUID)
+ThreadIndex = NewType('ThreadIndex', int)
+
+ForkStack = tuple[tuple[ForkId, NodeRunId, ThreadIndex], ...]

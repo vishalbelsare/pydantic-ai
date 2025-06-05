@@ -11,7 +11,7 @@ from pydantic_graph.v2.decision import Decision
 from pydantic_graph.v2.execution.graph_runner import GraphRunAPI
 from pydantic_graph.v2.execution.graph_task import GraphTask
 from pydantic_graph.v2.graph import Graph
-from pydantic_graph.v2.id_types import ForkId, NodeRunId
+from pydantic_graph.v2.id_types import ForkStack, NodeRunId, ThreadIndex
 from pydantic_graph.v2.join import Join, ReducerContext
 from pydantic_graph.v2.node import (
     EndNode,
@@ -23,8 +23,6 @@ from pydantic_graph.v2.paths import BroadcastMarker, DestinationMarker, LabelMar
 from pydantic_graph.v2.step import Step, StepContext
 from pydantic_graph.v2.transform import TransformContext
 from pydantic_graph.v2.util import Maybe, TypeExpression
-
-ForkStack = tuple[tuple[ForkId, NodeRunId], ...]
 
 
 @dataclass(init=False)
@@ -48,12 +46,11 @@ class GraphWalker[StateT, DepsT, InputT, OutputT]:
     async def run(self, state: StateT, inputs: InputT) -> OutputT:
         await self.run_api.initialize_state(state)
 
-        initial_fork_stack = ((StartNode.id, NodeRunId(str(uuid.uuid4()))),)
+        initial_fork_stack: ForkStack = ((StartNode.id, NodeRunId(str(uuid.uuid4())), ThreadIndex(0)),)
         start_task = GraphTask(node_id=StartNode.id, inputs=inputs, fork_stack=initial_fork_stack)
         await self._request_task(start_task)
-        await self.run_api.wait()
+        result = await self.run_api.wait()
 
-        result = await self.run_api.get_result()
         if result is None:
             raise RuntimeError(
                 'Graph run completed, but no result was produced. This is either a bug in the graph or a bug in the graph runner.'
@@ -88,23 +85,25 @@ class GraphWalker[StateT, DepsT, InputT, OutputT]:
     async def _handle_reduce_join(self, join: Join[Any, Any, Any, Any], inputs: Any, fork_stack: ForkStack) -> None:
         # Find the matching fork run id in the stack; this will be used to look for an active reducer
         parent_fork = self.graph.get_parent_fork(join.id)
-        matching_fork_run_id = next(iter(x[1] for x in fork_stack[::-1] if x[0] == parent_fork.fork_id), None)
-        if matching_fork_run_id is None:
+        matching_fork_stack_item = next(iter(x for x in fork_stack[::-1] if x[0] == parent_fork.fork_id), None)
+        if matching_fork_stack_item is None:
             raise RuntimeError(
                 f'Fork {parent_fork.fork_id} not found in stack {fork_stack}. This means the dominating fork is not dominating (this is a bug).'
             )
+        _, fork_run_id, thread_index = matching_fork_stack_item
 
         # Get or create the active reducer
-        reducer = await self.run_api.get_active_reducer_state(join.id, matching_fork_run_id)
-        state = await self.run_api.get_immutable_state()
-        ctx = ReducerContext(state, self.deps, inputs)
+        async with self.run_api.get_reducer(join.id, fork_run_id) as reducer:
+            state = await self.run_api.get_immutable_state()
+            ctx = ReducerContext(state, self.deps, inputs)
 
-        # TODO: Need to store reductions in the database and have a way to ensure executions are idempotent
-        if reducer is None:
-            reducer = join.create_reducer(ctx)
-            await self.run_api.set_active_reducer_state(join.id, matching_fork_run_id, reducer)
-        else:
-            reducer.reduce(ctx)
+            # TODO: Need to store reductions in the database and have a way to ensure executions are idempotent
+            if reducer is None:
+                reducer = join.create_reducer(ctx)
+            else:
+                reducer.reduce(ctx)
+
+            await self.run_api.set_reducer(join.id, fork_run_id, thread_index, reducer)
 
     async def _handle_decision(
         self, decision: Decision[StateT, DepsT, Any], inputs: Any, fork_stack: ForkStack
@@ -133,7 +132,7 @@ class GraphWalker[StateT, DepsT, InputT, OutputT]:
         raise RuntimeError(f'No branch matched inputs {inputs} for decision node {decision}.')
 
     async def _handle_end(self, inputs: Any) -> None:
-        await self.run_api.set_result(inputs)
+        await self.run_api.set_run_result(inputs)
 
     async def _handle_path(self, path: Path, inputs: Any, fork_stack: ForkStack) -> None:
         if not path.items:
@@ -144,13 +143,13 @@ class GraphWalker[StateT, DepsT, InputT, OutputT]:
             await self._handle_node(item.destination, inputs, fork_stack)
         elif isinstance(item, SpreadMarker):
             node_run_id = NodeRunId(str(uuid.uuid4()))
-            fork_stack += ((item.fork_id, node_run_id),)
-            for input_item in inputs:
-                await self.run_api.request_task(GraphTask(item.fork_id, input_item, fork_stack))
+            for i, input_item in enumerate(inputs):
+                new_fork_stack = fork_stack + ((item.fork_id, node_run_id, ThreadIndex(i)),)
+                await self.run_api.start_task_soon(GraphTask(item.fork_id, input_item, new_fork_stack))
         elif isinstance(item, BroadcastMarker):
-            node_run_id = NodeRunId(str(uuid.uuid4()))
-            fork_stack += ((item.fork_id, node_run_id),)
-            await self.run_api.request_task(GraphTask(item.fork_id, inputs, fork_stack))
+            # node_run_id = NodeRunId(str(uuid.uuid4()))
+            # fork_stack += ((item.fork_id, node_run_id),)
+            await self.run_api.start_task_soon(GraphTask(item.fork_id, inputs, fork_stack))
         elif isinstance(item, TransformMarker):
             state = await self.run_api.get_immutable_state()
             ctx = TransformContext(state, self.deps, inputs)
@@ -168,17 +167,17 @@ class GraphWalker[StateT, DepsT, InputT, OutputT]:
                 task_group.start_soon(self._handle_path, path, inputs, fork_stack)
 
     async def _request_task(self, task: GraphTask) -> None:
-        await self.run_api.request_task(task)
+        await self.run_api.start_task_soon(task)
 
     async def _clean_up_task(self, task: GraphTask) -> None:
-        await self.run_api.complete_requested_task(task.task_id)
+        await self.run_api.mark_task_completed(task.task_id)
         await self._handle_finalize_joins(task.fork_stack)
         if not await self.run_api.any_tasks_remain():
-            await self.run_api.mark_finished()
+            await self.run_api.mark_run_finished()
 
     async def _handle_finalize_joins(self, popped_task_fork_stack: ForkStack) -> None:
         # If the popped task was the last item preventing one or more joins, those joins can now be finalized
-        task_fork_run_indices = {fork_run_id: i for i, (_, fork_run_id) in enumerate(popped_task_fork_stack)}
+        task_fork_run_indices = {fork_run_id: i for i, (_, fork_run_id, _) in enumerate(popped_task_fork_stack)}
 
         # Note: might be more efficient to maintain a better data structure for looking up reducers by join_id and
         # fork_run_id without iterating through every item. This only matters if there is a large number of reducers.
@@ -189,14 +188,12 @@ class GraphWalker[StateT, DepsT, InputT, OutputT]:
             assert fork_run_index is not None  # should be filtered by the _get_reducers_with_fork_run_id method
 
             # This reducer _may_ now be ready to finalize:
+            # TODO: Combine the next 6 lines into a single run_api method
             if await self.run_api.is_fork_run_completed(fork_run_id):
+                await self.run_api.mark_reducer_completed(join_id, fork_run_id)
                 state = await self.run_api.get_immutable_state()
                 ctx = ReducerContext(state, self.deps, None)
                 output = reducer.finalize(ctx)
                 new_fork_stack = popped_task_fork_stack[:fork_run_index]
-                await self.run_api.complete_active_reducer(join_id, fork_run_id)
-
-                # Should _now_ traverse the edges leaving this join
                 node = self.graph.nodes[join_id]
-
                 await self._handle_edges(node, output, new_fork_stack)

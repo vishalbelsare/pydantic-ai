@@ -332,8 +332,9 @@ class GraphBuilder[StateT, DepsT, GraphInputT, GraphOutputT]:
 def _normalize_forks(
     nodes: dict[NodeId, AnyNode], edges: dict[NodeId, list[Path]]
 ) -> tuple[dict[NodeId, AnyNode], dict[NodeId, list[Path]]]:
-    """Rework the nodes/edges so that the _only_ nodes with multiple edges coming out are broadcast forks
-    Also, add forks to edges
+    """Rework the nodes/edges so that the _only_ nodes with multiple edges coming out are broadcast forks.
+
+    Also, add forks to edges.
     """
     new_nodes = nodes.copy()
     new_edges: dict[NodeId, list[Path]] = {}

@@ -17,7 +17,7 @@ from pydantic_graph.v2.execution.graph_task import GraphTask
 from pydantic_graph.v2.execution.graph_walker import GraphWalker
 from pydantic_graph.v2.graph import Graph
 from pydantic_graph.v2.id_types import GraphRunId, JoinId, NodeRunId, TaskId
-from pydantic_graph.v2.join import Reducer
+from pydantic_graph.v2.join import Reducer, ReducerContext
 from pydantic_graph.v2.util import Maybe, Some
 
 
@@ -65,18 +65,32 @@ class _InMemoryGraphRunAPI[StateT, DepsT](GraphRunAPI[StateT, DepsT]):
     def _finish_event(self):
         return self._run_state.finish_event
 
-    async def mark_task_completed(self, task_id: TaskId) -> None:
-        self._requested_tasks.pop(task_id)
+    async def mark_task_completed(self, task_id: TaskId, deps: DepsT) -> list[tuple[JoinId, Any]]:
+        popped_task = self._requested_tasks.pop(task_id)
+        popped_task_fork_stack = popped_task.fork_stack
+
+        # If the popped task was the last item preventing one or more joins, those joins can now be finalized
+        task_fork_run_indices = {fork_run_id: i for i, (_, fork_run_id, _) in enumerate(popped_task_fork_stack)}
+
+        finalized_joins: list[tuple[JoinId, Any]] = []
+
+        # Note: might be more efficient to maintain a better data structure for looking up reducers by join_id and
+        # fork_run_id without iterating through every item. This only matters if there is a large number of reducers.
+        for (join_id, fork_run_id), reducer in await self._get_reducers_with_fork_run_id(list(task_fork_run_indices)):
+            fork_run_index = task_fork_run_indices.get(fork_run_id)
+            assert fork_run_index is not None  # should be filtered by the _get_reducers_with_fork_run_id method
+
+            # This reducer _may_ now be ready to finalize:
+            if await self._is_fork_run_completed(fork_run_id):
+                self._active_reducers.pop((join_id, fork_run_id))
+                state = await self.get_immutable_state()
+                ctx = ReducerContext(state, deps, None)
+                output = reducer.finalize(ctx)
+                finalized_joins.append((join_id, output))
+        return finalized_joins
 
     async def any_tasks_remain(self) -> bool:
         return len(self._requested_tasks) > 0
-
-    async def is_fork_run_completed(self, fork_run_id: NodeRunId) -> bool:
-        for walk in self._requested_tasks.values():
-            # might be a good idea to hold walks_by_fork_id in memory to reduce overhead here
-            if fork_run_id in {x[1] for x in walk.fork_stack}:
-                return False
-        return True
 
     @asynccontextmanager
     async def get_reducer(
@@ -89,16 +103,6 @@ class _InMemoryGraphRunAPI[StateT, DepsT](GraphRunAPI[StateT, DepsT]):
         self, join_id: JoinId, fork_run_id: NodeRunId, fork_thread_index: int, reducer: Reducer[StateT, DepsT, Any, Any]
     ) -> None:
         self._active_reducers[(join_id, fork_run_id)] = reducer
-
-    async def mark_reducer_completed(self, join_id: JoinId, fork_run_id: NodeRunId) -> None:
-        self._active_reducers.pop((join_id, fork_run_id))
-
-    async def get_active_reducers_with_fork_run_id(
-        self, fork_run_ids: Sequence[NodeRunId]
-    ) -> list[tuple[tuple[JoinId, NodeRunId], Reducer[StateT, DepsT, Any, Any]]]:
-        # This is a helper method to get all reducers for a specific fork run id
-        # Note: should return a copy of any dicts etc. to prevent errors due to modifications during iteration
-        return [(k, r) for k, r in self._active_reducers.items() if k[1] in fork_run_ids]
 
     async def start_task_soon(self, task: GraphTask) -> None:
         self._requested_tasks[task.task_id] = task
@@ -149,6 +153,20 @@ class _InMemoryGraphRunAPI[StateT, DepsT](GraphRunAPI[StateT, DepsT]):
 
     async def _set_state_unsynchronized(self, state: StateT) -> None:
         self._state = state
+
+    async def _get_reducers_with_fork_run_id(
+        self, fork_run_ids: Sequence[NodeRunId]
+    ) -> list[tuple[tuple[JoinId, NodeRunId], Reducer[StateT, DepsT, Any, Any]]]:
+        # This is a helper method to get all reducers for a specific fork run id
+        # Note: should return a copy of any dicts etc. to prevent errors due to modifications during iteration
+        return [(k, r) for k, r in self._active_reducers.items() if k[1] in fork_run_ids]
+
+    async def _is_fork_run_completed(self, fork_run_id: NodeRunId) -> bool:
+        for walk in self._requested_tasks.values():
+            # might be a good idea to hold walks_by_fork_id in memory to reduce overhead here
+            if fork_run_id in {x[1] for x in walk.fork_stack}:
+                return False
+        return True
 
 
 @dataclass

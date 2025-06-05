@@ -170,30 +170,12 @@ class GraphWalker[StateT, DepsT, InputT, OutputT]:
         await self.run_api.start_task_soon(task)
 
     async def _clean_up_task(self, task: GraphTask) -> None:
-        await self.run_api.mark_task_completed(task.task_id)
-        await self._handle_finalize_joins(task.fork_stack)
+        finalized_joins = await self.run_api.mark_task_completed(task.task_id, self.deps)
+
+        new_fork_stack = task.fork_stack[:-1]
+        for join_id, output in finalized_joins:
+            node = self.graph.nodes[join_id]
+            await self._handle_edges(node, output, new_fork_stack)
+
         if not await self.run_api.any_tasks_remain():
             await self.run_api.mark_run_finished()
-
-    async def _handle_finalize_joins(self, popped_task_fork_stack: ForkStack) -> None:
-        # If the popped task was the last item preventing one or more joins, those joins can now be finalized
-        task_fork_run_indices = {fork_run_id: i for i, (_, fork_run_id, _) in enumerate(popped_task_fork_stack)}
-
-        # Note: might be more efficient to maintain a better data structure for looking up reducers by join_id and
-        # fork_run_id without iterating through every item. This only matters if there is a large number of reducers.
-        for (join_id, fork_run_id), reducer in await self.run_api.get_active_reducers_with_fork_run_id(
-            list(task_fork_run_indices)
-        ):
-            fork_run_index = task_fork_run_indices.get(fork_run_id)
-            assert fork_run_index is not None  # should be filtered by the _get_reducers_with_fork_run_id method
-
-            # This reducer _may_ now be ready to finalize:
-            # TODO: Combine the next 6 lines into a single run_api method
-            if await self.run_api.is_fork_run_completed(fork_run_id):
-                await self.run_api.mark_reducer_completed(join_id, fork_run_id)
-                state = await self.run_api.get_immutable_state()
-                ctx = ReducerContext(state, self.deps, None)
-                output = reducer.finalize(ctx)
-                new_fork_stack = popped_task_fork_stack[:fork_run_index]
-                node = self.graph.nodes[join_id]
-                await self._handle_edges(node, output, new_fork_stack)

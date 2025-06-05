@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import AsyncIterator, Sequence
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -19,8 +19,11 @@ class GraphRunAPI[StateT, DepsT](ABC):
         raise NotImplementedError
 
     @abstractmethod
-    async def mark_task_completed(self, task_id: TaskId) -> None:
-        """Mark a task as completed. This is necessary so that we can track whether a join is ready to proceed."""
+    async def mark_task_completed(self, task_id: TaskId, deps: DepsT) -> list[tuple[JoinId, Any]]:
+        """Mark a task as completed.
+
+        Returns a list of any joins that become ready to proceed, with the output of their finalization.
+        """
         raise NotImplementedError
 
     @abstractmethod
@@ -70,33 +73,6 @@ class GraphRunAPI[StateT, DepsT](ABC):
         """Update the stored reducer state for the given join ID and fork run ID.
 
         The fork_thread_index is provided to help ensure idempotency of the reduction.
-        """
-        raise NotImplementedError
-
-    @abstractmethod
-    async def mark_reducer_completed(self, join_id: JoinId, fork_run_id: NodeRunId) -> None:
-        """Mark a reducer as completed for the given join ID and fork run ID.
-
-        When this is the case, we can compute the reducer output and drop the reducer state.
-        """
-        raise NotImplementedError
-
-    @abstractmethod
-    async def is_fork_run_completed(self, fork_run_id: NodeRunId) -> bool:
-        """Check if there are any tasks remaining that are descendants of the given fork run ID.
-
-        This is used as part of the join logic to determine if its parent fork has completed its execution.
-        If so, the corresponding join can proceed to the next step.
-        """
-        raise NotImplementedError
-
-    @abstractmethod
-    async def get_active_reducers_with_fork_run_id(
-        self, fork_run_ids: Sequence[NodeRunId]
-    ) -> list[tuple[tuple[JoinId, NodeRunId], Reducer[StateT, DepsT, Any, Any]]]:
-        """Get all active reducers that are associated with the given fork run IDs.
-
-        This is used during clean-up of a task to check if there are any reducers that may be ready to be completed.
         """
         raise NotImplementedError
 

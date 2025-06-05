@@ -108,20 +108,22 @@ class GraphWalker[StateT, DepsT, InputT, OutputT]:
     ) -> None:
         for branch in decision.branches:
             match_tester = branch.matches
-            branch_source = branch.source
-            if get_origin(branch_source) is TypeExpression:
-                branch_source = get_args(branch_source)[0]
             if match_tester is not None:
                 inputs_match = match_tester(inputs)
-            elif branch_source in {Any, object}:
-                inputs_match = True
-            elif get_origin(branch_source) is Literal:
-                inputs_match = inputs in get_args(branch_source)
             else:
-                try:
-                    inputs_match = isinstance(inputs, branch_source)
-                except TypeError as e:
-                    raise RuntimeError(f'Decision branch source {branch_source} is not a valid type.') from e
+                branch_source = branch.source
+                if get_origin(branch_source) is TypeExpression:
+                    branch_source = get_args(branch_source)[0]
+
+                if branch_source in {Any, object}:
+                    inputs_match = True
+                elif get_origin(branch_source) is Literal:
+                    inputs_match = inputs in get_args(branch_source)
+                else:
+                    try:
+                        inputs_match = isinstance(inputs, branch_source)
+                    except TypeError as e:
+                        raise RuntimeError(f'Decision branch source {branch_source} is not a valid type.') from e
 
             if inputs_match:
                 await self._handle_path(branch.path, inputs, fork_stack)

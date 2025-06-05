@@ -14,18 +14,19 @@ if TYPE_CHECKING:
 
 @dataclass
 class TransformMarker:
+    # TODO: Transforms need to be serializable so graphs can be serialized
     transform: TransformFunction[Any, Any, Any, Any]
 
 
 @dataclass
 class SpreadMarker:
-    fork_id: ForkId  # TODO: Change this to holding an actual `Fork` node to be more like DestinationMarker
+    fork_id: ForkId
 
 
 @dataclass
 class BroadcastMarker:
     paths: Sequence[Path]
-    fork_id: ForkId  # TODO: Change this to holding an actual `Fork` node to be more like DestinationMarker
+    fork_id: ForkId
 
 
 @dataclass
@@ -35,6 +36,7 @@ class LabelMarker:
 
 @dataclass
 class DestinationMarker:
+    # TODO: destination here should be an ID, not an actual node, to help with serialization
     destination: DestinationNode[Any, Any, Any]
 
 

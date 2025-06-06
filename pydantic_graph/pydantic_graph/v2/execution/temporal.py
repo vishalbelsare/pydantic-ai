@@ -56,10 +56,6 @@ class _InMemoryRunState:
     state_lock: Lock = field(default_factory=Lock)
     reducer_locks: dict[NodeRunId, Lock] = field(default_factory=lambda: defaultdict(Lock))
 
-# @activity.defn
-def run_task(graph: Graph[Any, Any, Any, Any], task: GraphTask):
-    pass
-
 @dataclass
 class _InMemoryGraphRunAPI[StateT, DepsT](GraphRunAPI[StateT, DepsT]):
     # graph: Graph[StateT, DepsT, Any, Any] = field(repr=False)
@@ -190,6 +186,10 @@ class _InMemoryGraphRunAPI[StateT, DepsT](GraphRunAPI[StateT, DepsT]):
             if fork_run_id in {x[1] for x in walk.fork_stack}:
                 return False
         return True
+
+# @activity.defn
+def run_task(graph: Graph[Any, Any, Any, Any], task: GraphTask):
+    pass
 
 
 @dataclass

@@ -22,7 +22,7 @@ from pydantic_graph.v2.node_types import AnyNode
 from pydantic_graph.v2.paths import BroadcastMarker, DestinationMarker, LabelMarker, Path, SpreadMarker, TransformMarker
 from pydantic_graph.v2.step import Step, StepContext
 from pydantic_graph.v2.transform import TransformContext
-from pydantic_graph.v2.util import Maybe, TypeExpression
+from pydantic_graph.v2.util import TypeExpression
 
 
 @dataclass(init=False)
@@ -41,14 +41,12 @@ class GraphWalker[StateT, DepsT, InputT, OutputT]:
         self.run_api = api
         self.deps = deps
 
-        self.result: Maybe[OutputT] = None
-
     async def run(self, state: StateT, inputs: InputT) -> OutputT:
         await self.run_api.initialize_state(state)
 
         initial_fork_stack: ForkStack = ((StartNode.id, NodeRunId(str(uuid.uuid4())), ThreadIndex(0)),)
         start_task = GraphTask(node_id=StartNode.id, inputs=inputs, fork_stack=initial_fork_stack)
-        await self._request_task(start_task)
+        await self.run_api.start_task_soon(start_task)
         result = await self.run_api.wait()
 
         if result is None:
@@ -165,9 +163,6 @@ class GraphWalker[StateT, DepsT, InputT, OutputT]:
         async with create_task_group() as task_group:
             for path in edges:
                 task_group.start_soon(self._handle_path, path, inputs, fork_stack)
-
-    async def _request_task(self, task: GraphTask) -> None:
-        await self.run_api.start_task_soon(task)
 
     async def _clean_up_task(self, task: GraphTask) -> None:
         finalized_joins = await self.run_api.mark_task_completed(task.task_id, self.deps)

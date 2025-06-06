@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+from asyncio import Task
 from collections import defaultdict
 from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
@@ -22,10 +24,7 @@ from pydantic_graph.v2.util import Maybe, Some
 
 @dataclass
 class _InMemoryRunState:
-    task_group: TaskGroup
-    """note: I think this is not currently used in the run, but I think it may be necessary for cancellation"""
-    receive_task_stream: MemoryObjectReceiveStream[GraphTask]
-    send_task_stream: MemoryObjectSendStream[GraphTask]
+    active_tasks: list[Task[None]] = field(default_factory=list)
 
     state: Maybe[Any] = None  # might be better to make this non-Maybe and only create instances when you have this
 
@@ -40,11 +39,11 @@ class _InMemoryRunState:
 
 @dataclass
 class _InMemoryGraphRunAPI[StateT, DepsT](GraphRunAPI[StateT, DepsT]):
-    _run_state: _InMemoryRunState
+    _run_state: _InMemoryRunState = field(default_factory=_InMemoryRunState)
 
-    async def start_task_soon(self, task: GraphTask) -> None:
+    async def start_task_soon(self, task: GraphTask, walker: GraphWalker[Any, Any, Any, Any]) -> None:
         self._requested_tasks[task.task_id] = task
-        await self._run_state.send_task_stream.send(task)
+        self._run_state.active_tasks.append(asyncio.create_task(walker.handle_task(task)))
 
     async def mark_task_completed(self, task_id: TaskId, deps: DepsT) -> list[tuple[JoinId, Any]]:
         popped_task = self._requested_tasks.pop(task_id)
@@ -179,18 +178,15 @@ class InMemoryGraphRunner[StateT, DepsT, InputT, OutputT](GraphRunner[StateT, De
         deps: DepsT,
         inputs: InputT,
     ) -> tuple[StateT, OutputT]:
-        async with self.worker(deps) as run_state:
-            run_api = _InMemoryGraphRunAPI[StateT, DepsT](run_state)
-            result = await GraphWalker(self.graph, run_api, deps).run(state, inputs)
-            state = await run_api.get_immutable_state()
+        run_api = _InMemoryGraphRunAPI[StateT, DepsT]()
+        result = await GraphWalker(self.graph, run_api, deps).run(state, inputs)
+        state = await run_api.get_immutable_state()
         return state, result
 
     @asynccontextmanager
     async def worker(self, deps: DepsT) -> AsyncIterator[_InMemoryRunState]:
-        send_task_stream, receive_task_stream = create_memory_object_stream[GraphTask]()
-
         async with create_task_group() as tg:
-            run = _InMemoryRunState(tg, receive_task_stream, send_task_stream)
+            run = _InMemoryRunState()
 
             async def process_tasks(receive_stream: MemoryObjectReceiveStream[GraphTask]) -> None:
                 async def handle_task(t: GraphTask):

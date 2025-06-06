@@ -46,7 +46,7 @@ class GraphWalker[StateT, DepsT, InputT, OutputT]:
 
         initial_fork_stack: ForkStack = ((StartNode.id, NodeRunId(str(uuid.uuid4())), ThreadIndex(0)),)
         start_task = GraphTask(node_id=StartNode.id, inputs=inputs, fork_stack=initial_fork_stack)
-        await self.run_api.start_task_soon(start_task)
+        await self.start_task_soon(start_task)
         result = await self.run_api.wait()
 
         if result is None:
@@ -55,6 +55,10 @@ class GraphWalker[StateT, DepsT, InputT, OutputT]:
             )
 
         return result.value
+
+    async def start_task_soon(self, task: GraphTask) -> None:
+        """Request a task to be run. This is typically called by the graph runner when it needs to execute a step."""
+        await self.run_api.start_task_soon(task, self)
 
     async def handle_task(self, task: GraphTask) -> None:
         node = self.graph.nodes[task.node_id]
@@ -143,11 +147,11 @@ class GraphWalker[StateT, DepsT, InputT, OutputT]:
             node_run_id = NodeRunId(str(uuid.uuid4()))
             for i, input_item in enumerate(inputs):
                 new_fork_stack = fork_stack + ((item.fork_id, node_run_id, ThreadIndex(i)),)
-                await self.run_api.start_task_soon(GraphTask(item.fork_id, input_item, new_fork_stack))
+                await self.start_task_soon(GraphTask(item.fork_id, input_item, new_fork_stack))
         elif isinstance(item, BroadcastMarker):
             # node_run_id = NodeRunId(str(uuid.uuid4()))
             # fork_stack += ((item.fork_id, node_run_id),)
-            await self.run_api.start_task_soon(GraphTask(item.fork_id, inputs, fork_stack))
+            await self.start_task_soon(GraphTask(item.fork_id, inputs, fork_stack))
         elif isinstance(item, TransformMarker):
             state = await self.run_api.get_immutable_state()
             ctx = TransformContext(state, self.deps, inputs)

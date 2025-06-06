@@ -3,19 +3,22 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
 from pydantic_graph.v2.execution.graph_task import GraphTask
+
 from pydantic_graph.v2.graph import Graph
 from pydantic_graph.v2.id_types import JoinId, NodeRunId, TaskId
 from pydantic_graph.v2.join import Reducer
 from pydantic_graph.v2.util import Maybe
 
+if TYPE_CHECKING:
+    from pydantic_graph.v2.execution.graph_walker import GraphWalker
 
 class GraphRunAPI[StateT, DepsT](ABC):
     # Tasks
     @abstractmethod
-    async def start_task_soon(self, task: GraphTask) -> None:
+    async def start_task_soon(self, task: GraphTask, walker: GraphWalker[Any, Any, Any, Any]) -> None:
         """Request a task to be run. This is typically called by the graph runner when it needs to execute a step."""
         raise NotImplementedError
 

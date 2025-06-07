@@ -15,6 +15,7 @@ from pydantic_graph.v2.util import Maybe
 if TYPE_CHECKING:
     from pydantic_graph.v2.execution.graph_walker import GraphWalker
 
+
 class GraphRunAPI[StateT, DepsT](ABC):
     # Tasks
     @abstractmethod

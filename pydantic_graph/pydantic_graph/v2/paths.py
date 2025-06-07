@@ -15,6 +15,7 @@ if TYPE_CHECKING:
 @dataclass
 class TransformMarker:
     # TODO: Transforms need to be serializable so graphs can be serialized
+    #  I'm not sure _exactly_ what the requirement is, but basically we need to have IDs here
     transform: TransformFunction[Any, Any, Any, Any]
 
 

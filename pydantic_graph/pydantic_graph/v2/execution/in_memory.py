@@ -9,9 +9,8 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any
 
-from anyio import Event, Lock, create_memory_object_stream, create_task_group
-from anyio.abc import TaskGroup
-from anyio.streams.memory import MemoryObjectReceiveStream, MemoryObjectSendStream
+from anyio import Event, Lock, create_task_group
+from anyio.streams.memory import MemoryObjectReceiveStream
 
 from pydantic_graph.v2.execution.graph_runner import GraphRunAPI, GraphRunner
 from pydantic_graph.v2.execution.graph_task import GraphTask

@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import uuid
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
-from typing import Any, get_args, get_origin, Sequence, assert_never, Iterable
+from typing import Any, assert_never, get_args, get_origin
 
 from typing_extensions import Literal
 
@@ -11,14 +12,15 @@ from pydantic_graph.v2.decision import Decision
 from pydantic_graph.v2.execution.graph_runner import GraphRunAPI
 from pydantic_graph.v2.execution.graph_task import GraphTask
 from pydantic_graph.v2.graph import Graph
-from pydantic_graph.v2.id_types import ForkStack, NodeRunId, ThreadIndex, NodeId, TaskId, JoinId, ForkStackItem
-from pydantic_graph.v2.join import Join, ReducerContext, Reducer
+from pydantic_graph.v2.id_types import ForkStack, ForkStackItem, JoinId, NodeId, NodeRunId, TaskId, ThreadIndex
+from pydantic_graph.v2.join import Join, Reducer, ReducerContext
 from pydantic_graph.v2.node import (
     EndNode,
     Fork,
     StartNode,
 )
 from pydantic_graph.v2.node_types import AnyNode
+from pydantic_graph.v2.parent_forks import ParentFork
 from pydantic_graph.v2.paths import BroadcastMarker, DestinationMarker, LabelMarker, Path, SpreadMarker, TransformMarker
 from pydantic_graph.v2.step import Step, StepContext
 from pydantic_graph.v2.util import TypeExpression
@@ -28,11 +30,13 @@ from pydantic_graph.v2.util import TypeExpression
 class EndMarker:
     value: Any
 
+
 @dataclass
 class JoinItem:
     join_id: JoinId
     inputs: Any
     fork_stack: ForkStack
+
 
 @dataclass(init=False)
 class GraphWalker[StateT, DepsT, InputT, OutputT]:
@@ -50,6 +54,26 @@ class GraphWalker[StateT, DepsT, InputT, OutputT]:
         self.run_api = api
         self.deps = deps
 
+    def _get_completed_fork_runs(
+        self, t: GraphTask, active_tasks: Iterable[GraphTask], reducers_keys: Iterable[tuple[JoinId, NodeRunId]]
+    ) -> list[tuple[JoinId, NodeRunId, ForkStack]]:
+        completed_fork_runs: list[tuple[JoinId, NodeRunId, ForkStack]] = []
+
+        fork_run_indices = {fsi.node_run_id: i for i, fsi in enumerate(t.fork_stack)}
+        for join_id, fork_run_id in reducers_keys:
+            fork_run_index = fork_run_indices.get(fork_run_id)
+            if fork_run_index is None:
+                continue  # The fork_run_id is not in the current task's fork stack, so this task didn't complete it.
+
+            new_fork_stack = t.fork_stack[:fork_run_index]
+
+            parent_fork = self.graph.get_parent_fork(join_id)
+
+            # This reducer _may_ now be ready to finalize:
+            if _is_fork_run_completed(active_tasks, fork_run_id, parent_fork):
+                completed_fork_runs.append((join_id, fork_run_id, new_fork_stack))
+        return completed_fork_runs
+
     async def run(self, state: StateT, inputs: InputT) -> OutputT:
         await self.run_api.initialize_state(state)
 
@@ -61,25 +85,13 @@ class GraphWalker[StateT, DepsT, InputT, OutputT]:
         pending: set[asyncio.Task[EndMarker | JoinItem | Sequence[GraphTask]]] = {
             asyncio.create_task(self.handle_task(start_task), name=start_task.task_id)
         }
+
+        def _start_task(t: GraphTask) -> None:
+            """Helper function to start a new task while doing all necessary tracking."""
+            tasks_by_id[t.task_id] = t
+            pending.add(asyncio.create_task(self.handle_task(t), name=t.task_id))
+
         active_reducers: dict[tuple[JoinId, NodeRunId], Reducer[Any, Any, Any, Any]] = {}
-
-        def _finalize_joins(t: GraphTask) -> list[tuple[JoinId, Any, ForkStack]]:
-            finalized_joins: list[tuple[JoinId, Any, ForkStack]] = []
-            task_fork_run_indices = {fsi.node_run_id: i for i, fsi in enumerate(t.fork_stack)}
-            matching_reducers = [(k, r) for k, r in active_reducers.items() if k[1] in task_fork_run_indices]
-            for (join_id, fork_run_id), reducer in matching_reducers:
-                fork_run_index = task_fork_run_indices.get(fork_run_id)
-                assert fork_run_index is not None  # should be filtered by the _get_reducers_with_fork_run_id method
-                new_fork_stack = t.fork_stack[:fork_run_index]
-
-                # This reducer _may_ now be ready to finalize:
-                if _is_fork_run_completed(tasks_by_id.values(), fork_run_id):
-                    active_reducers.pop((join_id, fork_run_id))
-                    # TODO: Remove state/deps from ReducerContext if possible. (At least state)
-                    ctx = ReducerContext(None, None, None)
-                    output = reducer.finalize(ctx)
-                    finalized_joins.append((join_id, output, new_fork_stack))
-            return finalized_joins
 
         while pending:
             done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
@@ -108,17 +120,21 @@ class GraphWalker[StateT, DepsT, InputT, OutputT]:
                         reducer.reduce(ReducerContext(None, None, result.inputs))
                 else:
                     for new_task in result:
-                        tasks_by_id[new_task.task_id] = new_task
-                        pending.add(asyncio.create_task(self.handle_task(new_task), name=new_task.task_id))
+                        _start_task(new_task)
 
-                finalized_joins = _finalize_joins(source_task)
-                for join_id, output, fork_stack in finalized_joins:
+                for join_id, fork_run_id, fork_stack in self._get_completed_fork_runs(
+                    source_task, tasks_by_id.values(), active_reducers.keys()
+                ):
+                    reducer = active_reducers.pop((join_id, fork_run_id))
+
+                    # TODO: Remove state/deps from ReducerContext if possible. (At least state)
+                    ctx = ReducerContext(None, None, None)
+                    output = reducer.finalize(ctx)
                     join_node = self.graph.nodes[join_id]
-                    assert isinstance(join_node, Join)
+                    assert isinstance(join_node, Join)  # We could drop this but if it fails it means there is a bug.
                     new_tasks = self._handle_edges(join_node, output, fork_stack)
                     for new_task in new_tasks:
-                        tasks_by_id[new_task.task_id] = new_task
-                        pending.add(asyncio.create_task(self.handle_task(new_task), name=new_task.task_id))
+                        _start_task(new_task)
         raise RuntimeError(
             'Graph run completed, but no result was produced. This is either a bug in the graph or a bug in the graph runner.'
         )
@@ -213,11 +229,12 @@ class GraphWalker[StateT, DepsT, InputT, OutputT]:
             new_tasks.extend(self._handle_path(path, inputs, fork_stack))
         return new_tasks
 
-def _is_fork_run_completed(tasks: Iterable[GraphTask], fork_run_id: NodeRunId) -> bool:
+
+def _is_fork_run_completed(tasks: Iterable[GraphTask], fork_run_id: NodeRunId, parent_fork: ParentFork[NodeId]) -> bool:
     # Check if any of the tasks in the graph have this fork_run_id in their fork_stack
     # If this is the case, then the fork run is not yet completed
-    # TODO: We actually only need to check if the node is upstream of the fork run
     for t in tasks:
         if fork_run_id in {x.node_run_id for x in t.fork_stack}:
-            return False
+            if t.node_id in parent_fork.intermediate_nodes:
+                return False
     return True

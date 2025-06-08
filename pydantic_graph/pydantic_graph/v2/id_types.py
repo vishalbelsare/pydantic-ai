@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import uuid
 from dataclasses import dataclass
 from typing import NewType
 
@@ -15,6 +14,7 @@ GraphRunId = NewType('GraphRunId', str)
 TaskId = NewType('TaskId', str)
 ThreadIndex = NewType('ThreadIndex', int)
 
+
 @dataclass(frozen=True)
 class ForkStackItem:
     fork_id: ForkId
@@ -23,5 +23,6 @@ class ForkStackItem:
     """The ID associated to the specific run of the node that created this fork."""
     thread_index: ThreadIndex
     """The index of the thread that created this fork; may be used to ensure idempotency."""
+
 
 ForkStack = tuple[ForkStackItem, ...]

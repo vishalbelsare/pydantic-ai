@@ -3,10 +3,9 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from pydantic_graph.v2.execution.graph_task import GraphTask
-
 from pydantic_graph.v2.graph import Graph
 from pydantic_graph.v2.id_types import JoinId, NodeRunId, TaskId
 from pydantic_graph.v2.join import Reducer

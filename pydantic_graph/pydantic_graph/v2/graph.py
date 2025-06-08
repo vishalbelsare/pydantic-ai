@@ -203,12 +203,14 @@ class GraphBuilder[StateT, DepsT, GraphInputT, GraphOutputT]:
                     new_node = Fork[Any, Any](id=item.fork_id, is_spread=True)
                     self._insert_node(new_node)
                 elif isinstance(item, DestinationMarker):
-                    self._insert_node(item.destination)
+                    pass
 
         for edge in edges:
             for source_node in edge.sources:
                 self._insert_node(source_node)
                 self._edges_by_source[source_node.id].append(edge.path)
+            for destination_node in edge.destinations:
+                self._insert_node(destination_node)
 
             _handle_path(edge.path)
 
@@ -401,7 +403,7 @@ def _collect_dominating_forks(
                         _handle_path(Path([*fork.items]), item.fork_id)
                     # Broadcasts should only ever occur as the last item in the list, so no need to update the working_source_id
                 elif isinstance(item, DestinationMarker):
-                    edges[last_source_id].append(item.destination.id)
+                    edges[last_source_id].append(item.destination_id)
                     # Destinations should only ever occur as the last item in the list, so no need to update the working_source_id
 
         if isinstance(node, Decision):

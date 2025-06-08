@@ -9,10 +9,9 @@ from typing import Any, assert_never, get_args, get_origin
 from typing_extensions import Literal
 
 from pydantic_graph.v2.decision import Decision
-from pydantic_graph.v2.execution.graph_runner import GraphRunAPI
 from pydantic_graph.v2.execution.graph_task import GraphTask
 from pydantic_graph.v2.graph import Graph
-from pydantic_graph.v2.id_types import ForkStack, ForkStackItem, JoinId, NodeId, NodeRunId, TaskId, ThreadIndex
+from pydantic_graph.v2.id_types import ForkStack, ForkStackItem, JoinId, NodeId, NodeRunId, TaskId
 from pydantic_graph.v2.join import Join, Reducer, ReducerContext
 from pydantic_graph.v2.node import (
     EndNode,
@@ -20,9 +19,8 @@ from pydantic_graph.v2.node import (
     StartNode,
 )
 from pydantic_graph.v2.node_types import AnyNode
-from pydantic_graph.v2.parent_forks import ParentFork
 from pydantic_graph.v2.paths import BroadcastMarker, DestinationMarker, LabelMarker, Path, SpreadMarker, TransformMarker
-from pydantic_graph.v2.step import Step, StepContext
+from pydantic_graph.v2.step import StateManager, Step, StepContext
 from pydantic_graph.v2.util import TypeExpression
 
 
@@ -41,43 +39,26 @@ class JoinItem:
 @dataclass(init=False)
 class GraphWalker[StateT, DepsT, InputT, OutputT]:
     graph: Graph[StateT, DepsT, InputT, OutputT]
-    run_api: GraphRunAPI[StateT, DepsT]
+    state_manager: StateManager[StateT]
     deps: DepsT
 
+    # TODO: Need to figure out how to turn this into something that works as a temporal workflow.
+    # Probably need to make it so the state, deps, and inputs are passed to `run`.
+    # Then, need to move the `_handle_node` method to a standalone method that can be used as an activity.
+    # In the short term, it probably makes the most sense for the graph to be an attribute of both
+    # and part of the registered activities etc., but eventually it should be possible for it to be dynamic...
     def __init__(
         self,
         graph: Graph[StateT, DepsT, InputT, OutputT],
-        api: GraphRunAPI[StateT, DepsT],
+        state_manager: StateManager[StateT],
         deps: DepsT,
     ):
         self.graph = graph
-        self.run_api = api
+        self.state_manager = state_manager
         self.deps = deps
 
-    def _get_completed_fork_runs(
-        self, t: GraphTask, active_tasks: Iterable[GraphTask], reducers_keys: Iterable[tuple[JoinId, NodeRunId]]
-    ) -> list[tuple[JoinId, NodeRunId, ForkStack]]:
-        completed_fork_runs: list[tuple[JoinId, NodeRunId, ForkStack]] = []
-
-        fork_run_indices = {fsi.node_run_id: i for i, fsi in enumerate(t.fork_stack)}
-        for join_id, fork_run_id in reducers_keys:
-            fork_run_index = fork_run_indices.get(fork_run_id)
-            if fork_run_index is None:
-                continue  # The fork_run_id is not in the current task's fork stack, so this task didn't complete it.
-
-            new_fork_stack = t.fork_stack[:fork_run_index]
-
-            parent_fork = self.graph.get_parent_fork(join_id)
-
-            # This reducer _may_ now be ready to finalize:
-            if _is_fork_run_completed(active_tasks, fork_run_id, parent_fork):
-                completed_fork_runs.append((join_id, fork_run_id, new_fork_stack))
-        return completed_fork_runs
-
-    async def run(self, state: StateT, inputs: InputT) -> OutputT:
-        await self.run_api.initialize_state(state)
-
-        initial_fork_stack: ForkStack = (ForkStackItem(StartNode.id, NodeRunId(str(uuid.uuid4())), ThreadIndex(0)),)
+    async def run(self, inputs: InputT) -> OutputT:
+        initial_fork_stack: ForkStack = (ForkStackItem(StartNode.id, NodeRunId(str(uuid.uuid4())), 0),)
 
         start_task = GraphTask(node_id=StartNode.id, inputs=inputs, fork_stack=initial_fork_stack)
 
@@ -150,7 +131,7 @@ class GraphWalker[StateT, DepsT, InputT, OutputT]:
         if isinstance(node, (StartNode, Fork)):
             return self._handle_edges(node, inputs, fork_stack)
         elif isinstance(node, Step):
-            step_context = StepContext[StateT, DepsT, Any](self.run_api, self.deps, inputs)
+            step_context = StepContext[StateT, DepsT, Any](self.state_manager, self.deps, inputs)
             output = await node.call(step_context)
             return self._handle_edges(node, output, fork_stack)
         elif isinstance(node, Join):
@@ -195,17 +176,15 @@ class GraphWalker[StateT, DepsT, InputT, OutputT]:
 
         item = path.items[0]
         if isinstance(item, DestinationMarker):
-            # TODO: DestinationMarker should have ids not actual destination nodes
-            return [GraphTask(item.destination.id, inputs, fork_stack)]
+            return [GraphTask(item.destination_id, inputs, fork_stack)]
         elif isinstance(item, SpreadMarker):
             node_run_id = NodeRunId(str(uuid.uuid4()))
-            tasks: list[GraphTask] = []
-            for i, input_item in enumerate(inputs):
-                # TODO: Can probably remove the ThreadIndex if we do the joins inside the workflow
-                #  That would allow us to replace this whole thing with a list comprehension
-                new_fork_stack = fork_stack + (ForkStackItem(item.fork_id, node_run_id, ThreadIndex(i)),)
-                tasks.append(GraphTask(item.fork_id, input_item, new_fork_stack))
-            return tasks
+            return [
+                GraphTask(
+                    item.fork_id, input_item, fork_stack + (ForkStackItem(item.fork_id, node_run_id, thread_index),)
+                )
+                for thread_index, input_item in enumerate(inputs)
+            ]
         elif isinstance(item, BroadcastMarker):
             return [GraphTask(item.fork_id, inputs, fork_stack)]
         elif isinstance(item, TransformMarker):
@@ -229,12 +208,30 @@ class GraphWalker[StateT, DepsT, InputT, OutputT]:
             new_tasks.extend(self._handle_path(path, inputs, fork_stack))
         return new_tasks
 
+    def _get_completed_fork_runs(
+        self, t: GraphTask, active_tasks: Iterable[GraphTask], reducers_keys: Iterable[tuple[JoinId, NodeRunId]]
+    ) -> list[tuple[JoinId, NodeRunId, ForkStack]]:
+        completed_fork_runs: list[tuple[JoinId, NodeRunId, ForkStack]] = []
 
-def _is_fork_run_completed(tasks: Iterable[GraphTask], fork_run_id: NodeRunId, parent_fork: ParentFork[NodeId]) -> bool:
-    # Check if any of the tasks in the graph have this fork_run_id in their fork_stack
-    # If this is the case, then the fork run is not yet completed
-    for t in tasks:
-        if fork_run_id in {x.node_run_id for x in t.fork_stack}:
-            if t.node_id in parent_fork.intermediate_nodes:
-                return False
-    return True
+        fork_run_indices = {fsi.node_run_id: i for i, fsi in enumerate(t.fork_stack)}
+        for join_id, fork_run_id in reducers_keys:
+            fork_run_index = fork_run_indices.get(fork_run_id)
+            if fork_run_index is None:
+                continue  # The fork_run_id is not in the current task's fork stack, so this task didn't complete it.
+
+            new_fork_stack = t.fork_stack[:fork_run_index]
+            # This reducer _may_ now be ready to finalize:
+            if self._is_fork_run_completed(active_tasks, join_id, fork_run_id):
+                completed_fork_runs.append((join_id, fork_run_id, new_fork_stack))
+
+        return completed_fork_runs
+
+    def _is_fork_run_completed(self, tasks: Iterable[GraphTask], join_id: JoinId, fork_run_id: NodeRunId) -> bool:
+        # Check if any of the tasks in the graph have this fork_run_id in their fork_stack
+        # If this is the case, then the fork run is not yet completed
+        parent_fork = self.graph.get_parent_fork(join_id)
+        for t in tasks:
+            if fork_run_id in {x.node_run_id for x in t.fork_stack}:
+                if t.node_id in parent_fork.intermediate_nodes:
+                    return False
+        return True

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Awaitable
 from contextlib import asynccontextmanager
 from typing import Protocol
@@ -7,15 +8,16 @@ from typing import Protocol
 from pydantic_graph.v2.id_types import NodeId
 
 
-class StateManager[StateT](Protocol):
+class StateManager[StateT](ABC):
+    @abstractmethod
     async def get_immutable_state(self) -> StateT:
         raise NotImplementedError
 
+    @abstractmethod
     @asynccontextmanager
     async def get_mutable_state(self) -> AsyncIterator[StateT]:
         raise NotImplementedError
         yield
-
 
 # TODO: Should StepContext be passed to joins/forks/decisions? Like, unified with ReducerContext etc.?
 # TODO: Make InputT default to object so it can be dropped when not relevant?

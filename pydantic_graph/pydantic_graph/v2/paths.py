@@ -9,13 +9,14 @@ from pydantic_graph.v2.id_types import ForkId, NodeId
 from pydantic_graph.v2.transform import TransformFunction
 
 if TYPE_CHECKING:
-    from pydantic_graph.v2.node_types import DestinationNode, SourceNode
+    from pydantic_graph.v2.node_types import AnyDestinationNode, DestinationNode, SourceNode
 
 
 @dataclass
 class TransformMarker:
     # TODO: Transforms need to be serializable so graphs can be serialized
     #  I'm not sure _exactly_ what the requirement is, but basically we need to have IDs here
+    #  It's probably easiest to make transforms just be "anonymous" steps and then replace this with DestinationMarker
     transform: TransformFunction[Any, Any, Any, Any]
 
 
@@ -37,8 +38,7 @@ class LabelMarker:
 
 @dataclass
 class DestinationMarker:
-    # TODO: destination here should be an ID, not an actual node, to help with serialization
-    destination: DestinationNode[Any, Any, Any]
+    destination_id: NodeId
 
 
 type PathItem = TransformMarker | SpreadMarker | BroadcastMarker | LabelMarker | DestinationMarker
@@ -85,11 +85,11 @@ class PathBuilder[StateT, DepsT, OutputT]:
     ) -> Path:
         if extra_destinations:
             next_item = BroadcastMarker(
-                paths=[Path(items=[DestinationMarker(d)]) for d in (destination,) + extra_destinations],
+                paths=[Path(items=[DestinationMarker(d.id)]) for d in (destination,) + extra_destinations],
                 fork_id=ForkId(NodeId(fork_id or 'extra_broadcast_' + secrets.token_hex(8))),
             )
         else:
-            next_item = DestinationMarker(destination=destination)
+            next_item = DestinationMarker(destination.id)
         return Path(items=[*self.working_items, next_item])
 
     def fork(self, forks: Sequence[Path], /, *, fork_id: str | None = None) -> Path:
@@ -117,6 +117,7 @@ class PathBuilder[StateT, DepsT, OutputT]:
 class EdgePath[StateT, DepsT]:
     sources: Sequence[SourceNode[StateT, DepsT, Any]]
     path: Path
+    destinations: list[AnyDestinationNode]  # can be referenced by DestinationMarker in `path.items`
 
 
 # @dataclass  # TODO: Change this back to a dataclass if we can do so without variance issues
@@ -159,14 +160,20 @@ class EdgePathBuilder[StateT, DepsT, OutputT]:
         fork_id: str | None = None,
     ) -> EdgePath[StateT, DepsT]:
         if callable(first_item):
+            new_edge_paths = first_item(self)
+            path = self.path_builder.fork([Path(x.path.items) for x in new_edge_paths], fork_id=fork_id)
+            destinations = [d for ep in new_edge_paths for d in ep.destinations]
             return EdgePath(
                 sources=self.sources,
-                path=self.path_builder.fork([Path(x.path.items) for x in first_item(self)], fork_id=fork_id),
+                path=path,
+                destinations=destinations,
             )
-
-        return EdgePath(
-            sources=self.sources, path=self.path_builder.to(first_item, *extra_destinations, fork_id=fork_id)
-        )
+        else:
+            return EdgePath(
+                sources=self.sources,
+                path=self.path_builder.to(first_item, *extra_destinations, fork_id=fork_id),
+                destinations=[first_item, *extra_destinations],
+            )
 
     def spread[T](
         self: EdgePathBuilder[StateT, DepsT, Iterable[T]], fork_id: str | None = None

@@ -61,7 +61,7 @@ def build_mermaid_graph(graph: Graph[Any, Any, Any, Any]) -> MermaidGraph:
             elif isinstance(item, LabelMarker):
                 working_label = item.label
             elif isinstance(item, DestinationMarker):
-                edges_by_source[last_source_id].append(MermaidEdge(last_source_id, item.destination.id, working_label))
+                edges_by_source[last_source_id].append(MermaidEdge(last_source_id, item.destination_id, working_label))
 
     for node_id, node in graph.nodes.items():
         kind: NodeKind

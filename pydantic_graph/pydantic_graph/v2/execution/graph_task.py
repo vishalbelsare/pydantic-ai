@@ -17,5 +17,4 @@ class GraphTask:
     Stack of forks that have been entered; used so that the GraphRunner can decide when to proceed through joins
     """
 
-    # Can probably remove this ID
     task_id: TaskId = field(default_factory=lambda: TaskId(str(uuid.uuid4())))

@@ -5,7 +5,11 @@ from typing import overload
 
 import httpx
 
+from pydantic_ai.exceptions import UserError
 from pydantic_ai.models import cached_async_http_client
+from pydantic_ai.profiles import ModelProfile
+from pydantic_ai.profiles.anthropic import anthropic_model_profile
+from pydantic_ai.providers import Provider
 
 try:
     from anthropic import AsyncAnthropic
@@ -14,9 +18,6 @@ except ImportError as _import_error:  # pragma: no cover
         'Please install the `anthropic` package to use the Anthropic provider, '
         'you can use the `anthropic` optional group — `pip install "pydantic-ai-slim[anthropic]"`'
     ) from _import_error
-
-
-from . import Provider
 
 
 class AnthropicProvider(Provider[AsyncAnthropic]):
@@ -33,6 +34,9 @@ class AnthropicProvider(Provider[AsyncAnthropic]):
     @property
     def client(self) -> AsyncAnthropic:
         return self._client
+
+    def model_profile(self, model_name: str) -> ModelProfile | None:
+        return anthropic_model_profile(model_name)
 
     @overload
     def __init__(self, *, anthropic_client: AsyncAnthropic | None = None) -> None: ...
@@ -62,8 +66,8 @@ class AnthropicProvider(Provider[AsyncAnthropic]):
             self._client = anthropic_client
         else:
             api_key = api_key or os.environ.get('ANTHROPIC_API_KEY')
-            if api_key is None:
-                raise ValueError(
+            if not api_key:
+                raise UserError(
                     'Set the `ANTHROPIC_API_KEY` environment variable or pass it via `AnthropicProvider(api_key=...)`'
                     'to use the Anthropic provider.'
                 )
@@ -71,4 +75,5 @@ class AnthropicProvider(Provider[AsyncAnthropic]):
             if http_client is not None:
                 self._client = AsyncAnthropic(api_key=api_key, http_client=http_client)
             else:
-                self._client = AsyncAnthropic(api_key=api_key, http_client=cached_async_http_client())
+                http_client = cached_async_http_client(provider='anthropic')
+                self._client = AsyncAnthropic(api_key=api_key, http_client=http_client)

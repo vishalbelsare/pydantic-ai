@@ -5,7 +5,15 @@ from typing import overload
 
 from httpx import AsyncClient as AsyncHTTPClient
 
+from pydantic_ai.exceptions import UserError
 from pydantic_ai.models import cached_async_http_client
+from pydantic_ai.profiles import ModelProfile
+from pydantic_ai.profiles.deepseek import deepseek_model_profile
+from pydantic_ai.profiles.google import google_model_profile
+from pydantic_ai.profiles.meta import meta_model_profile
+from pydantic_ai.profiles.mistral import mistral_model_profile
+from pydantic_ai.profiles.qwen import qwen_model_profile
+from pydantic_ai.providers import Provider
 
 try:
     from groq import AsyncGroq
@@ -14,9 +22,6 @@ except ImportError as _import_error:  # pragma: no cover
         'Please install the `groq` package to use the Groq provider, '
         'you can use the `groq` optional group — `pip install "pydantic-ai-slim[groq]"`'
     ) from _import_error
-
-
-from . import Provider
 
 
 class GroqProvider(Provider[AsyncGroq]):
@@ -33,6 +38,25 @@ class GroqProvider(Provider[AsyncGroq]):
     @property
     def client(self) -> AsyncGroq:
         return self._client
+
+    def model_profile(self, model_name: str) -> ModelProfile | None:
+        prefix_to_profile = {
+            'llama': meta_model_profile,
+            'meta-llama/': meta_model_profile,
+            'gemma': google_model_profile,
+            'qwen': qwen_model_profile,
+            'deepseek': deepseek_model_profile,
+            'mistral': mistral_model_profile,
+        }
+
+        for prefix, profile_func in prefix_to_profile.items():
+            model_name = model_name.lower()
+            if model_name.startswith(prefix):
+                if prefix.endswith('/'):
+                    model_name = model_name[len(prefix) :]
+                return profile_func(model_name)
+
+        return None
 
     @overload
     def __init__(self, *, groq_client: AsyncGroq | None = None) -> None: ...
@@ -64,14 +88,13 @@ class GroqProvider(Provider[AsyncGroq]):
         else:
             api_key = api_key or os.environ.get('GROQ_API_KEY')
 
-            if api_key is None:
-                raise ValueError(
+            if not api_key:
+                raise UserError(
                     'Set the `GROQ_API_KEY` environment variable or pass it via `GroqProvider(api_key=...)`'
                     'to use the Groq provider.'
                 )
             elif http_client is not None:
                 self._client = AsyncGroq(base_url=self.base_url, api_key=api_key, http_client=http_client)
             else:
-                self._client = AsyncGroq(
-                    base_url=self.base_url, api_key=api_key, http_client=cached_async_http_client()
-                )
+                http_client = cached_async_http_client(provider='groq')
+                self._client = AsyncGroq(base_url=self.base_url, api_key=api_key, http_client=http_client)

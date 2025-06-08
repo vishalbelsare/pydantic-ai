@@ -9,9 +9,10 @@ import anyio.to_thread
 import httpx
 
 from pydantic_ai.exceptions import UserError
-
-from ..models import cached_async_http_client
-from . import Provider
+from pydantic_ai.models import cached_async_http_client
+from pydantic_ai.profiles import ModelProfile
+from pydantic_ai.profiles.google import google_model_profile
+from pydantic_ai.providers import Provider
 
 try:
     import google.auth
@@ -47,6 +48,9 @@ class GoogleVertexProvider(Provider[httpx.AsyncClient]):
     @property
     def client(self) -> httpx.AsyncClient:
         return self._client
+
+    def model_profile(self, model_name: str) -> ModelProfile | None:
+        return google_model_profile(model_name)  # pragma: lax no cover
 
     @overload
     def __init__(
@@ -98,7 +102,7 @@ class GoogleVertexProvider(Provider[httpx.AsyncClient]):
         if service_account_file and service_account_info:
             raise ValueError('Only one of `service_account_file` or `service_account_info` can be provided.')
 
-        self._client = http_client or cached_async_http_client()
+        self._client = http_client or cached_async_http_client(provider='google-vertex')
         self.service_account_file = service_account_file
         self.service_account_info = service_account_info
         self.project_id = project_id
@@ -129,7 +133,7 @@ class _VertexAIAuth(httpx.Auth):
         self.credentials = None
 
     async def async_auth_flow(self, request: httpx.Request) -> AsyncGenerator[httpx.Request, httpx.Response]:
-        if self.credentials is None:
+        if self.credentials is None:  # pragma: no branch
             self.credentials = await self._get_credentials()
         if self.credentials.token is None:  # type: ignore[reportUnknownMemberType]
             await self._refresh_token()
@@ -158,9 +162,9 @@ class _VertexAIAuth(httpx.Auth):
             creds, creds_project_id = await _async_google_auth()
             creds_source = '`google.auth.default()`'
 
-        if self.project_id is None:
+        if self.project_id is None:  # pragma: no branch
             if creds_project_id is None:
-                raise UserError(f'No project_id provided and none found in {creds_source}')
+                raise UserError(f'No project_id provided and none found in {creds_source}')  # pragma: no cover
             self.project_id = creds_project_id
         return creds
 

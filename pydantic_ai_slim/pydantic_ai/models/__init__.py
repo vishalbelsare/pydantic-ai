@@ -9,209 +9,283 @@ from __future__ import annotations as _annotations
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Iterator
 from contextlib import asynccontextmanager, contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
-from functools import cache
-from typing import TYPE_CHECKING
+from functools import cache, cached_property
 
 import httpx
-from typing_extensions import Literal
+from typing_extensions import Literal, TypeAliasType
+
+from pydantic_ai.profiles import DEFAULT_PROFILE, ModelProfile, ModelProfileSpec
 
 from .._parts_manager import ModelResponsePartsManager
 from ..exceptions import UserError
-from ..messages import ModelMessage, ModelResponse, ModelResponseStreamEvent
+from ..messages import ModelMessage, ModelRequest, ModelResponse, ModelResponseStreamEvent
+from ..profiles._json_schema import JsonSchemaTransformer
 from ..settings import ModelSettings
+from ..tools import ToolDefinition
 from ..usage import Usage
 
-if TYPE_CHECKING:
-    from ..tools import ToolDefinition
-
-
-KnownModelName = Literal[
-    'anthropic:claude-3-7-sonnet-latest',
-    'anthropic:claude-3-5-haiku-latest',
-    'anthropic:claude-3-5-sonnet-latest',
-    'anthropic:claude-3-opus-latest',
-    'claude-3-7-sonnet-latest',
-    'claude-3-5-haiku-latest',
-    'bedrock:amazon.titan-tg1-large',
-    'bedrock:amazon.titan-text-lite-v1',
-    'bedrock:amazon.titan-text-express-v1',
-    'bedrock:us.amazon.nova-pro-v1:0',
-    'bedrock:us.amazon.nova-lite-v1:0',
-    'bedrock:us.amazon.nova-micro-v1:0',
-    'bedrock:anthropic.claude-3-5-sonnet-20241022-v2:0',
-    'bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0',
-    'bedrock:anthropic.claude-3-5-haiku-20241022-v1:0',
-    'bedrock:us.anthropic.claude-3-5-haiku-20241022-v1:0',
-    'bedrock:anthropic.claude-instant-v1',
-    'bedrock:anthropic.claude-v2:1',
-    'bedrock:anthropic.claude-v2',
-    'bedrock:anthropic.claude-3-sonnet-20240229-v1:0',
-    'bedrock:us.anthropic.claude-3-sonnet-20240229-v1:0',
-    'bedrock:anthropic.claude-3-haiku-20240307-v1:0',
-    'bedrock:us.anthropic.claude-3-haiku-20240307-v1:0',
-    'bedrock:anthropic.claude-3-opus-20240229-v1:0',
-    'bedrock:us.anthropic.claude-3-opus-20240229-v1:0',
-    'bedrock:anthropic.claude-3-5-sonnet-20240620-v1:0',
-    'bedrock:us.anthropic.claude-3-5-sonnet-20240620-v1:0',
-    'bedrock:anthropic.claude-3-7-sonnet-20250219-v1:0',
-    'bedrock:us.anthropic.claude-3-7-sonnet-20250219-v1:0',
-    'bedrock:cohere.command-text-v14',
-    'bedrock:cohere.command-r-v1:0',
-    'bedrock:cohere.command-r-plus-v1:0',
-    'bedrock:cohere.command-light-text-v14',
-    'bedrock:meta.llama3-8b-instruct-v1:0',
-    'bedrock:meta.llama3-70b-instruct-v1:0',
-    'bedrock:meta.llama3-1-8b-instruct-v1:0',
-    'bedrock:us.meta.llama3-1-8b-instruct-v1:0',
-    'bedrock:meta.llama3-1-70b-instruct-v1:0',
-    'bedrock:us.meta.llama3-1-70b-instruct-v1:0',
-    'bedrock:meta.llama3-1-405b-instruct-v1:0',
-    'bedrock:us.meta.llama3-2-11b-instruct-v1:0',
-    'bedrock:us.meta.llama3-2-90b-instruct-v1:0',
-    'bedrock:us.meta.llama3-2-1b-instruct-v1:0',
-    'bedrock:us.meta.llama3-2-3b-instruct-v1:0',
-    'bedrock:us.meta.llama3-3-70b-instruct-v1:0',
-    'bedrock:mistral.mistral-7b-instruct-v0:2',
-    'bedrock:mistral.mixtral-8x7b-instruct-v0:1',
-    'bedrock:mistral.mistral-large-2402-v1:0',
-    'bedrock:mistral.mistral-large-2407-v1:0',
-    'claude-3-5-sonnet-latest',
-    'claude-3-opus-latest',
-    'cohere:c4ai-aya-expanse-32b',
-    'cohere:c4ai-aya-expanse-8b',
-    'cohere:command',
-    'cohere:command-light',
-    'cohere:command-light-nightly',
-    'cohere:command-nightly',
-    'cohere:command-r',
-    'cohere:command-r-03-2024',
-    'cohere:command-r-08-2024',
-    'cohere:command-r-plus',
-    'cohere:command-r-plus-04-2024',
-    'cohere:command-r-plus-08-2024',
-    'cohere:command-r7b-12-2024',
-    'deepseek:deepseek-chat',
-    'deepseek:deepseek-reasoner',
-    'google-gla:gemini-1.0-pro',
-    'google-gla:gemini-1.5-flash',
-    'google-gla:gemini-1.5-flash-8b',
-    'google-gla:gemini-1.5-pro',
-    'google-gla:gemini-2.0-flash-exp',
-    'google-gla:gemini-2.0-flash-thinking-exp-01-21',
-    'google-gla:gemini-exp-1206',
-    'google-gla:gemini-2.0-flash',
-    'google-gla:gemini-2.0-flash-lite-preview-02-05',
-    'google-gla:gemini-2.0-pro-exp-02-05',
-    'google-vertex:gemini-1.0-pro',
-    'google-vertex:gemini-1.5-flash',
-    'google-vertex:gemini-1.5-flash-8b',
-    'google-vertex:gemini-1.5-pro',
-    'google-vertex:gemini-2.0-flash-exp',
-    'google-vertex:gemini-2.0-flash-thinking-exp-01-21',
-    'google-vertex:gemini-exp-1206',
-    'google-vertex:gemini-2.0-flash',
-    'google-vertex:gemini-2.0-flash-lite-preview-02-05',
-    'google-vertex:gemini-2.0-pro-exp-02-05',
-    'gpt-3.5-turbo',
-    'gpt-3.5-turbo-0125',
-    'gpt-3.5-turbo-0301',
-    'gpt-3.5-turbo-0613',
-    'gpt-3.5-turbo-1106',
-    'gpt-3.5-turbo-16k',
-    'gpt-3.5-turbo-16k-0613',
-    'gpt-4',
-    'gpt-4-0125-preview',
-    'gpt-4-0314',
-    'gpt-4-0613',
-    'gpt-4-1106-preview',
-    'gpt-4-32k',
-    'gpt-4-32k-0314',
-    'gpt-4-32k-0613',
-    'gpt-4-turbo',
-    'gpt-4-turbo-2024-04-09',
-    'gpt-4-turbo-preview',
-    'gpt-4-vision-preview',
-    'gpt-4.5-preview',
-    'gpt-4.5-preview-2025-02-27',
-    'gpt-4o',
-    'gpt-4o-2024-05-13',
-    'gpt-4o-2024-08-06',
-    'gpt-4o-2024-11-20',
-    'gpt-4o-audio-preview',
-    'gpt-4o-audio-preview-2024-10-01',
-    'gpt-4o-audio-preview-2024-12-17',
-    'gpt-4o-mini',
-    'gpt-4o-mini-2024-07-18',
-    'gpt-4o-mini-audio-preview',
-    'gpt-4o-mini-audio-preview-2024-12-17',
-    'groq:gemma2-9b-it',
-    'groq:llama-3.1-8b-instant',
-    'groq:llama-3.2-11b-vision-preview',
-    'groq:llama-3.2-1b-preview',
-    'groq:llama-3.2-3b-preview',
-    'groq:llama-3.2-90b-vision-preview',
-    'groq:llama-3.3-70b-specdec',
-    'groq:llama-3.3-70b-versatile',
-    'groq:llama3-70b-8192',
-    'groq:llama3-8b-8192',
-    'groq:mixtral-8x7b-32768',
-    'mistral:codestral-latest',
-    'mistral:mistral-large-latest',
-    'mistral:mistral-moderation-latest',
-    'mistral:mistral-small-latest',
-    'o1',
-    'o1-2024-12-17',
-    'o1-mini',
-    'o1-mini-2024-09-12',
-    'o1-preview',
-    'o1-preview-2024-09-12',
-    'o3-mini',
-    'o3-mini-2025-01-31',
-    'openai:chatgpt-4o-latest',
-    'openai:gpt-3.5-turbo',
-    'openai:gpt-3.5-turbo-0125',
-    'openai:gpt-3.5-turbo-0301',
-    'openai:gpt-3.5-turbo-0613',
-    'openai:gpt-3.5-turbo-1106',
-    'openai:gpt-3.5-turbo-16k',
-    'openai:gpt-3.5-turbo-16k-0613',
-    'openai:gpt-4',
-    'openai:gpt-4-0125-preview',
-    'openai:gpt-4-0314',
-    'openai:gpt-4-0613',
-    'openai:gpt-4-1106-preview',
-    'openai:gpt-4-32k',
-    'openai:gpt-4-32k-0314',
-    'openai:gpt-4-32k-0613',
-    'openai:gpt-4-turbo',
-    'openai:gpt-4-turbo-2024-04-09',
-    'openai:gpt-4-turbo-preview',
-    'openai:gpt-4-vision-preview',
-    'openai:gpt-4.5-preview',
-    'openai:gpt-4.5-preview-2025-02-27',
-    'openai:gpt-4o',
-    'openai:gpt-4o-2024-05-13',
-    'openai:gpt-4o-2024-08-06',
-    'openai:gpt-4o-2024-11-20',
-    'openai:gpt-4o-audio-preview',
-    'openai:gpt-4o-audio-preview-2024-10-01',
-    'openai:gpt-4o-audio-preview-2024-12-17',
-    'openai:gpt-4o-mini',
-    'openai:gpt-4o-mini-2024-07-18',
-    'openai:gpt-4o-mini-audio-preview',
-    'openai:gpt-4o-mini-audio-preview-2024-12-17',
-    'openai:o1',
-    'openai:o1-2024-12-17',
-    'openai:o1-mini',
-    'openai:o1-mini-2024-09-12',
-    'openai:o1-preview',
-    'openai:o1-preview-2024-09-12',
-    'openai:o3-mini',
-    'openai:o3-mini-2025-01-31',
-    'test',
-]
+KnownModelName = TypeAliasType(
+    'KnownModelName',
+    Literal[
+        'anthropic:claude-2.0',
+        'anthropic:claude-2.1',
+        'anthropic:claude-3-5-haiku-20241022',
+        'anthropic:claude-3-5-haiku-latest',
+        'anthropic:claude-3-5-sonnet-20240620',
+        'anthropic:claude-3-5-sonnet-20241022',
+        'anthropic:claude-3-5-sonnet-latest',
+        'anthropic:claude-3-7-sonnet-20250219',
+        'anthropic:claude-3-7-sonnet-latest',
+        'anthropic:claude-3-haiku-20240307',
+        'anthropic:claude-3-opus-20240229',
+        'anthropic:claude-3-opus-latest',
+        'anthropic:claude-3-sonnet-20240229',
+        'anthropic:claude-4-opus-20250514',
+        'anthropic:claude-4-sonnet-20250514',
+        'anthropic:claude-opus-4-0',
+        'anthropic:claude-opus-4-20250514',
+        'anthropic:claude-sonnet-4-0',
+        'anthropic:claude-sonnet-4-20250514',
+        'bedrock:amazon.titan-tg1-large',
+        'bedrock:amazon.titan-text-lite-v1',
+        'bedrock:amazon.titan-text-express-v1',
+        'bedrock:us.amazon.nova-pro-v1:0',
+        'bedrock:us.amazon.nova-lite-v1:0',
+        'bedrock:us.amazon.nova-micro-v1:0',
+        'bedrock:anthropic.claude-3-5-sonnet-20241022-v2:0',
+        'bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0',
+        'bedrock:anthropic.claude-3-5-haiku-20241022-v1:0',
+        'bedrock:us.anthropic.claude-3-5-haiku-20241022-v1:0',
+        'bedrock:anthropic.claude-instant-v1',
+        'bedrock:anthropic.claude-v2:1',
+        'bedrock:anthropic.claude-v2',
+        'bedrock:anthropic.claude-3-sonnet-20240229-v1:0',
+        'bedrock:us.anthropic.claude-3-sonnet-20240229-v1:0',
+        'bedrock:anthropic.claude-3-haiku-20240307-v1:0',
+        'bedrock:us.anthropic.claude-3-haiku-20240307-v1:0',
+        'bedrock:anthropic.claude-3-opus-20240229-v1:0',
+        'bedrock:us.anthropic.claude-3-opus-20240229-v1:0',
+        'bedrock:anthropic.claude-3-5-sonnet-20240620-v1:0',
+        'bedrock:us.anthropic.claude-3-5-sonnet-20240620-v1:0',
+        'bedrock:anthropic.claude-3-7-sonnet-20250219-v1:0',
+        'bedrock:us.anthropic.claude-3-7-sonnet-20250219-v1:0',
+        'bedrock:anthropic.claude-opus-4-20250514-v1:0',
+        'bedrock:us.anthropic.claude-opus-4-20250514-v1:0',
+        'bedrock:anthropic.claude-sonnet-4-20250514-v1:0',
+        'bedrock:us.anthropic.claude-sonnet-4-20250514-v1:0',
+        'bedrock:cohere.command-text-v14',
+        'bedrock:cohere.command-r-v1:0',
+        'bedrock:cohere.command-r-plus-v1:0',
+        'bedrock:cohere.command-light-text-v14',
+        'bedrock:meta.llama3-8b-instruct-v1:0',
+        'bedrock:meta.llama3-70b-instruct-v1:0',
+        'bedrock:meta.llama3-1-8b-instruct-v1:0',
+        'bedrock:us.meta.llama3-1-8b-instruct-v1:0',
+        'bedrock:meta.llama3-1-70b-instruct-v1:0',
+        'bedrock:us.meta.llama3-1-70b-instruct-v1:0',
+        'bedrock:meta.llama3-1-405b-instruct-v1:0',
+        'bedrock:us.meta.llama3-2-11b-instruct-v1:0',
+        'bedrock:us.meta.llama3-2-90b-instruct-v1:0',
+        'bedrock:us.meta.llama3-2-1b-instruct-v1:0',
+        'bedrock:us.meta.llama3-2-3b-instruct-v1:0',
+        'bedrock:us.meta.llama3-3-70b-instruct-v1:0',
+        'bedrock:mistral.mistral-7b-instruct-v0:2',
+        'bedrock:mistral.mixtral-8x7b-instruct-v0:1',
+        'bedrock:mistral.mistral-large-2402-v1:0',
+        'bedrock:mistral.mistral-large-2407-v1:0',
+        'claude-2.0',
+        'claude-2.1',
+        'claude-3-5-haiku-20241022',
+        'claude-3-5-haiku-latest',
+        'claude-3-5-sonnet-20240620',
+        'claude-3-5-sonnet-20241022',
+        'claude-3-5-sonnet-latest',
+        'claude-3-7-sonnet-20250219',
+        'claude-3-7-sonnet-latest',
+        'claude-3-haiku-20240307',
+        'claude-3-opus-20240229',
+        'claude-3-opus-latest',
+        'claude-3-sonnet-20240229',
+        'claude-4-opus-20250514',
+        'claude-4-sonnet-20250514',
+        'claude-opus-4-0',
+        'claude-opus-4-20250514',
+        'claude-sonnet-4-0',
+        'claude-sonnet-4-20250514',
+        'cohere:c4ai-aya-expanse-32b',
+        'cohere:c4ai-aya-expanse-8b',
+        'cohere:command',
+        'cohere:command-light',
+        'cohere:command-light-nightly',
+        'cohere:command-nightly',
+        'cohere:command-r',
+        'cohere:command-r-03-2024',
+        'cohere:command-r-08-2024',
+        'cohere:command-r-plus',
+        'cohere:command-r-plus-04-2024',
+        'cohere:command-r-plus-08-2024',
+        'cohere:command-r7b-12-2024',
+        'deepseek:deepseek-chat',
+        'deepseek:deepseek-reasoner',
+        'google-gla:gemini-1.5-flash',
+        'google-gla:gemini-1.5-flash-8b',
+        'google-gla:gemini-1.5-pro',
+        'google-gla:gemini-1.0-pro',
+        'google-gla:gemini-2.0-flash',
+        'google-gla:gemini-2.0-flash-lite-preview-02-05',
+        'google-gla:gemini-2.0-pro-exp-02-05',
+        'google-gla:gemini-2.5-flash-preview-05-20',
+        'google-gla:gemini-2.5-pro-exp-03-25',
+        'google-gla:gemini-2.5-pro-preview-05-06',
+        'google-vertex:gemini-1.5-flash',
+        'google-vertex:gemini-1.5-flash-8b',
+        'google-vertex:gemini-1.5-pro',
+        'google-vertex:gemini-1.0-pro',
+        'google-vertex:gemini-2.0-flash',
+        'google-vertex:gemini-2.0-flash-lite-preview-02-05',
+        'google-vertex:gemini-2.0-pro-exp-02-05',
+        'google-vertex:gemini-2.5-flash-preview-05-20',
+        'google-vertex:gemini-2.5-pro-exp-03-25',
+        'google-vertex:gemini-2.5-pro-preview-05-06',
+        'gpt-3.5-turbo',
+        'gpt-3.5-turbo-0125',
+        'gpt-3.5-turbo-0301',
+        'gpt-3.5-turbo-0613',
+        'gpt-3.5-turbo-1106',
+        'gpt-3.5-turbo-16k',
+        'gpt-3.5-turbo-16k-0613',
+        'gpt-4',
+        'gpt-4-0125-preview',
+        'gpt-4-0314',
+        'gpt-4-0613',
+        'gpt-4-1106-preview',
+        'gpt-4-32k',
+        'gpt-4-32k-0314',
+        'gpt-4-32k-0613',
+        'gpt-4-turbo',
+        'gpt-4-turbo-2024-04-09',
+        'gpt-4-turbo-preview',
+        'gpt-4-vision-preview',
+        'gpt-4.1',
+        'gpt-4.1-2025-04-14',
+        'gpt-4.1-mini',
+        'gpt-4.1-mini-2025-04-14',
+        'gpt-4.1-nano',
+        'gpt-4.1-nano-2025-04-14',
+        'gpt-4o',
+        'gpt-4o-2024-05-13',
+        'gpt-4o-2024-08-06',
+        'gpt-4o-2024-11-20',
+        'gpt-4o-audio-preview',
+        'gpt-4o-audio-preview-2024-10-01',
+        'gpt-4o-audio-preview-2024-12-17',
+        'gpt-4o-mini',
+        'gpt-4o-mini-2024-07-18',
+        'gpt-4o-mini-audio-preview',
+        'gpt-4o-mini-audio-preview-2024-12-17',
+        'gpt-4o-mini-search-preview',
+        'gpt-4o-mini-search-preview-2025-03-11',
+        'gpt-4o-search-preview',
+        'gpt-4o-search-preview-2025-03-11',
+        'groq:distil-whisper-large-v3-en',
+        'groq:gemma2-9b-it',
+        'groq:llama-3.3-70b-versatile',
+        'groq:llama-3.1-8b-instant',
+        'groq:llama-guard-3-8b',
+        'groq:llama3-70b-8192',
+        'groq:llama3-8b-8192',
+        'groq:whisper-large-v3',
+        'groq:whisper-large-v3-turbo',
+        'groq:playai-tts',
+        'groq:playai-tts-arabic',
+        'groq:qwen-qwq-32b',
+        'groq:mistral-saba-24b',
+        'groq:qwen-2.5-coder-32b',
+        'groq:qwen-2.5-32b',
+        'groq:deepseek-r1-distill-qwen-32b',
+        'groq:deepseek-r1-distill-llama-70b',
+        'groq:llama-3.3-70b-specdec',
+        'groq:llama-3.2-1b-preview',
+        'groq:llama-3.2-3b-preview',
+        'groq:llama-3.2-11b-vision-preview',
+        'groq:llama-3.2-90b-vision-preview',
+        'heroku:claude-3-5-haiku',
+        'heroku:claude-3-5-sonnet-latest',
+        'heroku:claude-3-7-sonnet',
+        'heroku:claude-4-sonnet',
+        'heroku:claude-3-haiku',
+        'mistral:codestral-latest',
+        'mistral:mistral-large-latest',
+        'mistral:mistral-moderation-latest',
+        'mistral:mistral-small-latest',
+        'o1',
+        'o1-2024-12-17',
+        'o1-mini',
+        'o1-mini-2024-09-12',
+        'o1-preview',
+        'o1-preview-2024-09-12',
+        'o3',
+        'o3-2025-04-16',
+        'o3-mini',
+        'o3-mini-2025-01-31',
+        'openai:chatgpt-4o-latest',
+        'openai:gpt-3.5-turbo',
+        'openai:gpt-3.5-turbo-0125',
+        'openai:gpt-3.5-turbo-0301',
+        'openai:gpt-3.5-turbo-0613',
+        'openai:gpt-3.5-turbo-1106',
+        'openai:gpt-3.5-turbo-16k',
+        'openai:gpt-3.5-turbo-16k-0613',
+        'openai:gpt-4',
+        'openai:gpt-4-0125-preview',
+        'openai:gpt-4-0314',
+        'openai:gpt-4-0613',
+        'openai:gpt-4-1106-preview',
+        'openai:gpt-4-32k',
+        'openai:gpt-4-32k-0314',
+        'openai:gpt-4-32k-0613',
+        'openai:gpt-4-turbo',
+        'openai:gpt-4-turbo-2024-04-09',
+        'openai:gpt-4-turbo-preview',
+        'openai:gpt-4-vision-preview',
+        'openai:gpt-4.1',
+        'openai:gpt-4.1-2025-04-14',
+        'openai:gpt-4.1-mini',
+        'openai:gpt-4.1-mini-2025-04-14',
+        'openai:gpt-4.1-nano',
+        'openai:gpt-4.1-nano-2025-04-14',
+        'openai:gpt-4o',
+        'openai:gpt-4o-2024-05-13',
+        'openai:gpt-4o-2024-08-06',
+        'openai:gpt-4o-2024-11-20',
+        'openai:gpt-4o-audio-preview',
+        'openai:gpt-4o-audio-preview-2024-10-01',
+        'openai:gpt-4o-audio-preview-2024-12-17',
+        'openai:gpt-4o-mini',
+        'openai:gpt-4o-mini-2024-07-18',
+        'openai:gpt-4o-mini-audio-preview',
+        'openai:gpt-4o-mini-audio-preview-2024-12-17',
+        'openai:gpt-4o-mini-search-preview',
+        'openai:gpt-4o-mini-search-preview-2025-03-11',
+        'openai:gpt-4o-search-preview',
+        'openai:gpt-4o-search-preview-2025-03-11',
+        'openai:o1',
+        'openai:o1-2024-12-17',
+        'openai:o1-mini',
+        'openai:o1-mini-2024-09-12',
+        'openai:o1-preview',
+        'openai:o1-preview-2024-09-12',
+        'openai:o3',
+        'openai:o3-2025-04-16',
+        'openai:o3-mini',
+        'openai:o3-mini-2025-01-31',
+        'openai:o4-mini',
+        'openai:o4-mini-2025-04-16',
+        'test',
+    ],
+)
 """Known model names that can be used with the `model` parameter of [`Agent`][pydantic_ai.Agent].
 
 `KnownModelName` is provided as a concise way to specify a model.
@@ -220,15 +294,17 @@ KnownModelName = Literal[
 
 @dataclass
 class ModelRequestParameters:
-    """Configuration for an agent's request to a model, specifically related to tools and result handling."""
+    """Configuration for an agent's request to a model, specifically related to tools and output handling."""
 
-    function_tools: list[ToolDefinition]
-    allow_text_result: bool
-    result_tools: list[ToolDefinition]
+    function_tools: list[ToolDefinition] = field(default_factory=list)
+    allow_text_output: bool = True
+    output_tools: list[ToolDefinition] = field(default_factory=list)
 
 
 class Model(ABC):
     """Abstract class for a model."""
+
+    _profile: ModelProfileSpec | None = None
 
     @abstractmethod
     async def request(
@@ -236,7 +312,7 @@ class Model(ABC):
         messages: list[ModelMessage],
         model_settings: ModelSettings | None,
         model_request_parameters: ModelRequestParameters,
-    ) -> tuple[ModelResponse, Usage]:
+    ) -> ModelResponse:
         """Make a request to the model."""
         raise NotImplementedError()
 
@@ -254,11 +330,39 @@ class Model(ABC):
         # noinspection PyUnreachableCode
         yield  # pragma: no cover
 
+    def customize_request_parameters(self, model_request_parameters: ModelRequestParameters) -> ModelRequestParameters:
+        """Customize the request parameters for the model.
+
+        This method can be overridden by subclasses to modify the request parameters before sending them to the model.
+        In particular, this method can be used to make modifications to the generated tool JSON schemas if necessary
+        for vendor/model-specific reasons.
+        """
+        if transformer := self.profile.json_schema_transformer:
+            model_request_parameters = replace(
+                model_request_parameters,
+                function_tools=[_customize_tool_def(transformer, t) for t in model_request_parameters.function_tools],
+                output_tools=[_customize_tool_def(transformer, t) for t in model_request_parameters.output_tools],
+            )
+
+        return model_request_parameters
+
     @property
     @abstractmethod
     def model_name(self) -> str:
         """The model name."""
         raise NotImplementedError()
+
+    @cached_property
+    def profile(self) -> ModelProfile:
+        """The model profile."""
+        _profile = self._profile
+        if callable(_profile):
+            _profile = _profile(self.model_name)
+
+        if _profile is None:
+            return DEFAULT_PROFILE
+
+        return _profile
 
     @property
     @abstractmethod
@@ -275,6 +379,49 @@ class Model(ABC):
     @property
     def base_url(self) -> str | None:
         """The base URL for the provider API, if available."""
+        return None
+
+    @staticmethod
+    def _get_instructions(messages: list[ModelMessage]) -> str | None:
+        """Get instructions from the first ModelRequest found when iterating messages in reverse.
+
+        In the case that a "mock" request was generated to include a tool-return part for a result tool,
+        we want to use the instructions from the second-to-most-recent request (which should correspond to the
+        original request that generated the response that resulted in the tool-return part).
+        """
+        last_two_requests: list[ModelRequest] = []
+        for message in reversed(messages):
+            if isinstance(message, ModelRequest):
+                last_two_requests.append(message)
+                if len(last_two_requests) == 2:
+                    break
+                if message.instructions is not None:
+                    return message.instructions
+
+        # If we don't have two requests, and we didn't already return instructions, there are definitely not any:
+        if len(last_two_requests) != 2:
+            return None
+
+        most_recent_request = last_two_requests[0]
+        second_most_recent_request = last_two_requests[1]
+
+        # If we've gotten this far and the most recent request consists of only tool-return parts or retry-prompt parts,
+        # we use the instructions from the second-to-most-recent request. This is necessary because when handling
+        # result tools, we generate a "mock" ModelRequest with a tool-return part for it, and that ModelRequest will not
+        # have the relevant instructions from the agent.
+
+        # While it's possible that you could have a message history where the most recent request has only tool returns,
+        # I believe there is no way to achieve that would _change_ the instructions without manually crafting the most
+        # recent message. That might make sense in principle for some usage pattern, but it's enough of an edge case
+        # that I think it's not worth worrying about, since you can work around this by inserting another ModelRequest
+        # with no parts at all immediately before the request that has the tool calls (that works because we only look
+        # at the two most recent ModelRequests here).
+
+        # If you have a use case where this causes pain, please open a GitHub issue and we can discuss alternatives.
+
+        if all(p.part_kind == 'tool-return' or p.part_kind == 'retry-prompt' for p in most_recent_request.parts):
+            return second_most_recent_request.instructions
+
         return None
 
 
@@ -308,7 +455,10 @@ class StreamedResponse(ABC):
     def get(self) -> ModelResponse:
         """Build a [`ModelResponse`][pydantic_ai.messages.ModelResponse] from the data received from the stream so far."""
         return ModelResponse(
-            parts=self._parts_manager.get_parts(), model_name=self.model_name, timestamp=self.timestamp
+            parts=self._parts_manager.get_parts(),
+            model_name=self.model_name,
+            timestamp=self.timestamp,
+            usage=self.usage(),
         )
 
     def usage(self) -> Usage:
@@ -368,7 +518,7 @@ def override_allow_model_requests(allow_model_requests: bool) -> Iterator[None]:
         ALLOW_MODEL_REQUESTS = old_value  # pyright: ignore[reportConstantRedefinition]
 
 
-def infer_model(model: Model | KnownModelName) -> Model:
+def infer_model(model: Model | KnownModelName | str) -> Model:
     """Infer the model from the name."""
     if isinstance(model, Model):
         return model
@@ -392,14 +542,13 @@ def infer_model(model: Model | KnownModelName) -> Model:
             raise UserError(f'Unknown model: {model}')
 
     if provider == 'vertexai':
-        provider = 'google-vertex'
+        provider = 'google-vertex'  # pragma: no cover
 
     if provider == 'cohere':
         from .cohere import CohereModel
 
-        # TODO(Marcelo): Missing provider API.
-        return CohereModel(model_name)
-    elif provider in ('deepseek', 'openai'):
+        return CohereModel(model_name, provider=provider)
+    elif provider in ('openai', 'deepseek', 'azure', 'openrouter', 'grok', 'fireworks', 'together', 'heroku'):
         from .openai import OpenAIModel
 
         return OpenAIModel(model_name, provider=provider)
@@ -410,50 +559,56 @@ def infer_model(model: Model | KnownModelName) -> Model:
     elif provider == 'groq':
         from .groq import GroqModel
 
-        # TODO(Marcelo): Missing provider API.
-        return GroqModel(model_name)
+        return GroqModel(model_name, provider=provider)
     elif provider == 'mistral':
         from .mistral import MistralModel
 
-        # TODO(Marcelo): Missing provider API.
-        return MistralModel(model_name)
+        return MistralModel(model_name, provider=provider)
     elif provider == 'anthropic':
         from .anthropic import AnthropicModel
 
-        # TODO(Marcelo): Missing provider API.
-        return AnthropicModel(model_name)
+        return AnthropicModel(model_name, provider=provider)
     elif provider == 'bedrock':
         from .bedrock import BedrockConverseModel
 
-        return BedrockConverseModel(model_name)
+        return BedrockConverseModel(model_name, provider=provider)
     else:
-        raise UserError(f'Unknown model: {model}')
+        raise UserError(f'Unknown model: {model}')  # pragma: no cover
 
 
-def cached_async_http_client(timeout: int = 600, connect: int = 5) -> httpx.AsyncClient:
-    """Cached HTTPX async client so multiple agents and calls can share the same client.
+def cached_async_http_client(*, provider: str | None = None, timeout: int = 600, connect: int = 5) -> httpx.AsyncClient:
+    """Cached HTTPX async client that creates a separate client for each provider.
+
+    The client is cached based on the provider parameter. If provider is None, it's used for non-provider specific
+    requests (like downloading images). Multiple agents and calls can share the same client when they use the same provider.
 
     There are good reasons why in production you should use a `httpx.AsyncClient` as an async context manager as
     described in [encode/httpx#2026](https://github.com/encode/httpx/pull/2026), but when experimenting or showing
-    examples, it's very useful not to, this allows multiple Agents to use a single client.
+    examples, it's very useful not to.
 
     The default timeouts match those of OpenAI,
     see <https://github.com/openai/openai-python/blob/v1.54.4/src/openai/_constants.py#L9>.
     """
-    client = _cached_async_http_client(timeout=timeout, connect=connect)
+    client = _cached_async_http_client(provider=provider, timeout=timeout, connect=connect)
     if client.is_closed:
         # This happens if the context manager is used, so we need to create a new client.
         _cached_async_http_client.cache_clear()
-        client = _cached_async_http_client(timeout=timeout, connect=connect)
+        client = _cached_async_http_client(provider=provider, timeout=timeout, connect=connect)
     return client
 
 
 @cache
-def _cached_async_http_client(timeout: int = 600, connect: int = 5) -> httpx.AsyncClient:
+def _cached_async_http_client(provider: str | None, timeout: int = 600, connect: int = 5) -> httpx.AsyncClient:
     return httpx.AsyncClient(
+        transport=_cached_async_http_transport(),
         timeout=httpx.Timeout(timeout=timeout, connect=connect),
         headers={'User-Agent': get_user_agent()},
     )
+
+
+@cache
+def _cached_async_http_transport() -> httpx.AsyncHTTPTransport:
+    return httpx.AsyncHTTPTransport()
 
 
 @cache
@@ -462,3 +617,11 @@ def get_user_agent() -> str:
     from .. import __version__
 
     return f'pydantic-ai/{__version__}'
+
+
+def _customize_tool_def(transformer: type[JsonSchemaTransformer], t: ToolDefinition):
+    schema_transformer = transformer(t.parameters_json_schema, strict=t.strict)
+    parameters_json_schema = schema_transformer.walk()
+    if t.strict is None:
+        t = replace(t, strict=schema_transformer.is_strict_compatible)
+    return replace(t, parameters_json_schema=parameters_json_schema)

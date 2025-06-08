@@ -4,7 +4,10 @@ import os
 
 import httpx
 
+from pydantic_ai.exceptions import UserError
 from pydantic_ai.models import cached_async_http_client
+from pydantic_ai.profiles import ModelProfile
+from pydantic_ai.profiles.google import google_model_profile
 from pydantic_ai.providers import Provider
 
 
@@ -23,6 +26,9 @@ class GoogleGLAProvider(Provider[httpx.AsyncClient]):
     def client(self) -> httpx.AsyncClient:
         return self._client
 
+    def model_profile(self, model_name: str) -> ModelProfile | None:
+        return google_model_profile(model_name)
+
     def __init__(self, api_key: str | None = None, http_client: httpx.AsyncClient | None = None) -> None:
         """Create a new Google GLA provider.
 
@@ -32,13 +38,13 @@ class GoogleGLAProvider(Provider[httpx.AsyncClient]):
             http_client: An existing `httpx.AsyncClient` to use for making HTTP requests.
         """
         api_key = api_key or os.environ.get('GEMINI_API_KEY')
-        if api_key is None:
-            raise ValueError(
+        if not api_key:
+            raise UserError(
                 'Set the `GEMINI_API_KEY` environment variable or pass it via `GoogleGLAProvider(api_key=...)`'
                 'to use the Google GLA provider.'
             )
 
-        self._client = http_client or cached_async_http_client()
+        self._client = http_client or cached_async_http_client(provider='google-gla')
         self._client.base_url = self.base_url
         # https://cloud.google.com/docs/authentication/api-keys-use#using-with-rest
         self._client.headers['X-Goog-Api-Key'] = api_key

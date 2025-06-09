@@ -48,7 +48,7 @@
 #
 #     state: Maybe[Any] = None  # might be better to make this non-Maybe and only create instances when you have this
 #
-#     active_reducers: dict[tuple[JoinId, NodeRunId], Reducer[Any, Any, Any, Any]] = field(default_factory=dict)
+#     active_reducers: dict[tuple[JoinId, NodeRunId], Reducer[Any, Any, Any]] = field(default_factory=dict)
 #     requested_tasks: dict[TaskId, GraphTask] = field(default_factory=dict)
 #     result: Maybe[Any] = field(default=None)
 #
@@ -111,12 +111,12 @@
 #     @asynccontextmanager
 #     async def get_reducer(
 #         self, join_id: JoinId, fork_run_id: NodeRunId
-#     ) -> AsyncIterator[Reducer[StateT, DepsT, Any, Any] | None]:
+#     ) -> AsyncIterator[Reducer[DepsT, Any, Any] | None]:
 #         async with self._reducer_lock(fork_run_id):
 #             yield self._active_reducers.get((join_id, fork_run_id))
 #
 #     async def set_reducer(
-#         self, join_id: JoinId, fork_run_id: NodeRunId, fork_thread_index: int, reducer: Reducer[StateT, DepsT, Any, Any]
+#         self, join_id: JoinId, fork_run_id: NodeRunId, fork_thread_index: int, reducer: Reducer[DepsT, Any, Any]
 #     ) -> None:
 #         self._active_reducers[(join_id, fork_run_id)] = reducer
 #
@@ -175,7 +175,7 @@
 #
 #     async def _get_reducers_with_fork_run_id(
 #         self, fork_run_ids: Sequence[NodeRunId]
-#     ) -> list[tuple[tuple[JoinId, NodeRunId], Reducer[StateT, DepsT, Any, Any]]]:
+#     ) -> list[tuple[tuple[JoinId, NodeRunId], Reducer[DepsT, Any, Any]]]:
 #         # This is a helper method to get all reducers for a specific fork run id
 #         # Note: should return a copy of any dicts etc. to prevent errors due to modifications during iteration
 #         return [(k, r) for k, r in self._active_reducers.items() if k[1] in fork_run_ids]

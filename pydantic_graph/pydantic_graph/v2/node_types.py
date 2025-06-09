@@ -10,7 +10,7 @@ from pydantic_graph.v2.node import EndNode, Fork, StartNode
 from pydantic_graph.v2.step import Step
 
 type MiddleNode[StateT, DepsT, InputT, OutputT] = (
-    Step[StateT, DepsT, InputT, OutputT] | Join[StateT, DepsT, InputT, OutputT] | Fork[InputT, OutputT]
+    Step[StateT, DepsT, InputT, OutputT] | Join[DepsT, InputT, OutputT] | Fork[InputT, OutputT]
 )
 type SourceNode[StateT, DepsT, OutputT] = MiddleNode[StateT, DepsT, Any, OutputT] | StartNode[OutputT]
 type DestinationNode[StateT, DepsT, InputT] = (

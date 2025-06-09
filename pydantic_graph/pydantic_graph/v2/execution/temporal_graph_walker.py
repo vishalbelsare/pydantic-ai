@@ -67,7 +67,7 @@ class GraphWalker[StateT, DepsT, InputT, OutputT]:
             tasks_by_id[t.task_id] = t
             pending.add(asyncio.create_task(self.handle_task(t), name=t.task_id))
 
-        active_reducers: dict[tuple[JoinId, NodeRunId], Reducer[Any, Any, Any, Any]] = {}
+        active_reducers: dict[tuple[JoinId, NodeRunId], Reducer[Any, Any, Any]] = {}
 
         while pending:
             done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
@@ -88,12 +88,12 @@ class GraphWalker[StateT, DepsT, InputT, OutputT]:
                         assert isinstance(join_node, Join)
                         # TODO: Make it so reducers don't use state or deps, otherwise they have to use activities
                         #  (It might be possible to make it work with deps..)
-                        reducer = join_node.create_reducer(ReducerContext(None, None, result.inputs))
+                        reducer = join_node.create_reducer(ReducerContext(None, result.inputs))
                         active_reducers[(result.join_id, fork_run_id)] = reducer
                     else:
                         # TODO: Make it so reducers don't use state or deps, otherwise they have to use activities
                         #  (It might be possible to make it work with deps..)
-                        reducer.reduce(ReducerContext(None, None, result.inputs))
+                        reducer.reduce(ReducerContext(None, result.inputs))
                 else:
                     for new_task in result:
                         _start_task(new_task)
@@ -104,7 +104,7 @@ class GraphWalker[StateT, DepsT, InputT, OutputT]:
                     reducer = active_reducers.pop((join_id, fork_run_id))
 
                     # TODO: Remove state/deps from ReducerContext if possible. (At least state)
-                    ctx = ReducerContext(None, None, None)
+                    ctx = ReducerContext(None, None)
                     output = reducer.finalize(ctx)
                     join_node = self.graph.nodes[join_id]
                     assert isinstance(join_node, Join)  # We could drop this but if it fails it means there is a bug.

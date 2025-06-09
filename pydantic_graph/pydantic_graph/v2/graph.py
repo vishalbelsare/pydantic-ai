@@ -74,23 +74,23 @@ def step[StateT, DepsT, InputT, OutputT](
 def join[StateT, DepsT, InputT, OutputT](
     *,
     node_id: str | None = None,
-) -> Callable[[type[Reducer[StateT, DepsT, InputT, OutputT]]], Join[StateT, DepsT, InputT, OutputT]]: ...
+) -> Callable[[type[Reducer[DepsT, InputT, OutputT]]], Join[DepsT, InputT, OutputT]]: ...
 @overload
 def join[StateT, DepsT, InputT, OutputT](
-    reducer_type: type[Reducer[StateT, DepsT, InputT, OutputT]],
+    reducer_type: type[Reducer[DepsT, InputT, OutputT]],
     *,
     node_id: str | None = None,
-) -> Join[StateT, DepsT, InputT, OutputT]: ...
+) -> Join[DepsT, InputT, OutputT]: ...
 def join[StateT, DepsT](
-    reducer_type: type[Reducer[StateT, DepsT, Any, Any]] | None = None,
+    reducer_type: type[Reducer[DepsT, Any, Any]] | None = None,
     *,
     node_id: str | None = None,
-) -> Join[StateT, DepsT, Any, Any] | Callable[[type[Reducer[StateT, DepsT, Any, Any]]], Join[StateT, DepsT, Any, Any]]:
+) -> Join[DepsT, Any, Any] | Callable[[type[Reducer[DepsT, Any, Any]]], Join[DepsT, Any, Any]]:
     if reducer_type is None:
 
         def decorator(
-            reducer_type: type[Reducer[StateT, DepsT, Any, Any]],
-        ) -> Join[StateT, DepsT, Any, Any]:
+            reducer_type: type[Reducer[DepsT, Any, Any]],
+        ) -> Join[DepsT, Any, Any]:
             return join(reducer_type=reducer_type, node_id=node_id)
 
         return decorator
@@ -98,7 +98,7 @@ def join[StateT, DepsT](
     # TODO: Ideally we'd be able to infer this from the parent frame variable assignment or similar
     node_id = node_id or get_callable_name(reducer_type)
 
-    return Join[StateT, DepsT, Any, Any](
+    return Join[DepsT, Any, Any](
         id=JoinId(NodeId(node_id)),
         reducer_type=reducer_type,
     )
@@ -168,23 +168,20 @@ class GraphBuilder[StateT, DepsT, GraphInputT, GraphOutputT]:
         self,
         *,
         node_id: str | None = None,
-    ) -> Callable[[type[Reducer[StateT, DepsT, InputT, OutputT]]], Join[StateT, DepsT, InputT, OutputT]]: ...
+    ) -> Callable[[type[Reducer[DepsT, InputT, OutputT]]], Join[DepsT, InputT, OutputT]]: ...
     @overload
     def join[InputT, OutputT](
         self,
-        reducer_factory: type[Reducer[StateT, DepsT, InputT, OutputT]],
+        reducer_factory: type[Reducer[DepsT, InputT, OutputT]],
         *,
         node_id: str | None = None,
-    ) -> Join[StateT, DepsT, InputT, OutputT]: ...
+    ) -> Join[DepsT, InputT, OutputT]: ...
     def join(
         self,
-        reducer_factory: type[Reducer[StateT, DepsT, Any, Any]] | None = None,
+        reducer_factory: type[Reducer[DepsT, Any, Any]] | None = None,
         *,
         node_id: str | None = None,
-    ) -> (
-        Join[StateT, DepsT, Any, Any]
-        | Callable[[type[Reducer[StateT, DepsT, Any, Any]]], Join[StateT, DepsT, Any, Any]]
-    ):
+    ) -> Join[DepsT, Any, Any] | Callable[[type[Reducer[DepsT, Any, Any]]], Join[DepsT, Any, Any]]:
         if reducer_factory is None:
             return join(node_id=node_id)
         else:

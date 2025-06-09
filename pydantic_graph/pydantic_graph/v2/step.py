@@ -19,6 +19,7 @@ class StateManager[StateT](ABC):
         raise NotImplementedError
         yield
 
+
 # TODO: Should StepContext be passed to joins/forks/decisions? Like, unified with ReducerContext etc.?
 # TODO: Make InputT default to object so it can be dropped when not relevant?
 class StepContext[StateT, DepsT, InputT]:

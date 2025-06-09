@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections import defaultdict
 from collections.abc import Iterable
 from dataclasses import dataclass, field
-from typing import Any, Callable, Never, cast, get_args, get_origin, overload
+from typing import Any, Callable, Never, overload
 
 from pydantic_graph.v2.decision import Decision, DecisionBranchBuilder
 from pydantic_graph.v2.id_types import ForkId, JoinId, NodeId
@@ -30,7 +30,7 @@ from pydantic_graph.v2.paths import (
     SpreadMarker,
 )
 from pydantic_graph.v2.step import Step, StepCallProtocol
-from pydantic_graph.v2.util import TypeExpression, TypeOrTypeExpression, get_callable_name
+from pydantic_graph.v2.util import TypeOrTypeExpression, get_callable_name, unpack_type_expression
 
 
 # Node building:
@@ -313,15 +313,11 @@ class GraphBuilder[StateT, DepsT, GraphInputT, GraphOutputT]:
         nodes, edges_by_source = _normalize_forks(nodes, edges_by_source)
         parent_forks = _collect_dominating_forks(nodes, edges_by_source)
 
-        output_type = cast(type[GraphOutputT], self.output_type)
-        if get_origin(output_type) is TypeExpression:
-            output_type = get_args(output_type)[0]
-
         return Graph[StateT, DepsT, GraphInputT, GraphOutputT](
-            state_type=self.state_type,
-            deps_type=self.deps_type,
-            input_type=self.input_type,
-            output_type=output_type,
+            state_type=unpack_type_expression(self.state_type),
+            deps_type=unpack_type_expression(self.deps_type),
+            input_type=unpack_type_expression(self.input_type),
+            output_type=unpack_type_expression(self.output_type),
             nodes=nodes,
             edges_by_source=edges_by_source,
             parent_forks=parent_forks,
@@ -434,10 +430,10 @@ def _collect_dominating_forks(
 
 @dataclass(repr=False)
 class Graph[StateT, DepsT, InputT, OutputT]:
-    state_type: TypeOrTypeExpression[StateT]
-    deps_type: TypeOrTypeExpression[DepsT]
-    input_type: TypeOrTypeExpression[InputT]
-    output_type: TypeOrTypeExpression[OutputT]
+    state_type: type[StateT]
+    deps_type: type[DepsT]
+    input_type: type[InputT]
+    output_type: type[OutputT]
 
     nodes: dict[NodeId, AnyNode]
     edges_by_source: dict[NodeId, list[Path]]

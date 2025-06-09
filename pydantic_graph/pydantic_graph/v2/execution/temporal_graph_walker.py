@@ -20,7 +20,8 @@ from pydantic_graph.v2.node import (
 )
 from pydantic_graph.v2.node_types import AnyNode
 from pydantic_graph.v2.paths import BroadcastMarker, DestinationMarker, LabelMarker, Path, SpreadMarker, TransformMarker
-from pydantic_graph.v2.step import StateManager, Step, StepContext
+from pydantic_graph.v2.state import StateManager
+from pydantic_graph.v2.step import Step, StepContext
 from pydantic_graph.v2.util import TypeExpression
 
 

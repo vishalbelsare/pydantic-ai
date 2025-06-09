@@ -1,12 +1,12 @@
 from dataclasses import dataclass
 from functools import cached_property
-from typing import Any, Callable, cast, get_args, get_origin, overload
+from typing import Any, Callable, overload
 
 from pydantic import TypeAdapter
 from pydantic_core import to_json
 from pydantic_graph.v2.id_types import NodeId
 from pydantic_graph.v2.step import StepContext
-from pydantic_graph.v2.util import TypeExpression
+from pydantic_graph.v2.util import TypeOrTypeExpression, unpack_type_expression
 
 from pydantic_ai import Agent, models
 
@@ -23,8 +23,8 @@ class Prompt[InputT, OutputT]:
     def __init__(
         self,
         *,
-        input_type: type[InputT],
-        output_type: type[TypeExpression[OutputT]] | type[OutputT],
+        input_type: TypeOrTypeExpression[InputT],
+        output_type: TypeOrTypeExpression[OutputT],
         prompt: str,
         model: models.Model | models.KnownModelName | str = 'openai:gpt-4o',
     ) -> None: ...
@@ -32,8 +32,8 @@ class Prompt[InputT, OutputT]:
     def __init__[IntermediateT](
         self,
         *,
-        input_type: type[InputT],
-        output_type: type[TypeExpression[IntermediateT]] | type[IntermediateT],
+        input_type: TypeOrTypeExpression[InputT],
+        output_type: TypeOrTypeExpression[IntermediateT],
         output_transform: Callable[[InputT, IntermediateT], OutputT],
         prompt: str,
         model: models.Model | models.KnownModelName | str = 'openai:gpt-4o',
@@ -41,14 +41,14 @@ class Prompt[InputT, OutputT]:
     def __init__(
         self,
         *,
-        input_type: type[InputT],
-        output_type: type[Any],
+        input_type: TypeOrTypeExpression[InputT],
+        output_type: TypeOrTypeExpression[Any],
         output_transform: Callable[[InputT, Any], OutputT] | None = None,
         prompt: str,
         model: models.Model | models.KnownModelName | str = 'openai:gpt-4o',
     ):
-        self.input_type = input_type
-        self.output_type = output_type
+        self.input_type = unpack_type_expression(input_type)
+        self.output_type = unpack_type_expression(output_type)
         self.output_transform = output_transform
         self.prompt = prompt
         self.model = model
@@ -67,12 +67,9 @@ class Prompt[InputT, OutputT]:
                 self.prompt,
             ]
         )
-        output_type = self.output_type
-        if get_origin(output_type) is TypeExpression:
-            output_type = get_args(self.output_type)[0]
         return Agent(
             model=self.model,
-            output_type=cast(type[OutputT], output_type),
+            output_type=self.output_type,
             instructions=instructions,
         )
 

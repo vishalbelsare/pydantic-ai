@@ -5,10 +5,11 @@ from dataclasses import dataclass
 from types import NoneType
 from typing import Any, Literal
 
-from pydantic_graph.v2.execution.in_memory import InMemoryGraphRunner
-from pydantic_graph.v2.graph import GraphBuilder, TypeExpression
+from pydantic_graph.v2.execution.in_memory import InMemoryGraphRunner, InMemoryStateManagerFactory
+from pydantic_graph.v2.graph import GraphBuilder
 from pydantic_graph.v2.join import NullReducer
 from pydantic_graph.v2.step import StepContext
+from pydantic_graph.v2.util import TypeExpression
 
 
 @dataclass
@@ -149,8 +150,8 @@ print('----------')
 
 
 async def main():
-    executor = InMemoryGraphRunner(graph)
-    state, result = await executor.run(state=MyState(), deps=None, inputs=None)
+    runner = InMemoryGraphRunner(graph, state_manager_factory=InMemoryStateManagerFactory())
+    state, result = await runner.run(state=MyState(), deps=None, inputs=None)
 
     print('-')
     print(f'{result=}')

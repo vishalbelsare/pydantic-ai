@@ -1,23 +1,11 @@
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Awaitable
 from contextlib import asynccontextmanager
 from typing import Protocol
 
 from pydantic_graph.v2.id_types import NodeId
-
-
-class StateManager[StateT](ABC):
-    @abstractmethod
-    async def get_immutable_state(self) -> StateT:
-        raise NotImplementedError
-
-    @abstractmethod
-    @asynccontextmanager
-    async def get_mutable_state(self) -> AsyncIterator[StateT]:
-        raise NotImplementedError
-        yield
+from pydantic_graph.v2.state import StateManager
 
 
 # TODO: Should StepContext be passed to joins/forks/decisions? Like, unified with ReducerContext etc.?

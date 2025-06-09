@@ -11,7 +11,7 @@ from typing_extensions import Literal
 from pydantic_graph.v2.decision import Decision
 from pydantic_graph.v2.execution.graph_task import GraphTask
 from pydantic_graph.v2.graph import Graph
-from pydantic_graph.v2.id_types import ForkStack, ForkStackItem, JoinId, NodeId, NodeRunId, TaskId
+from pydantic_graph.v2.id_types import ForkStack, ForkStackItem, GraphRunId, JoinId, NodeId, NodeRunId, TaskId
 from pydantic_graph.v2.join import Join, Reducer, ReducerContext
 from pydantic_graph.v2.node import (
     EndNode,
@@ -20,8 +20,9 @@ from pydantic_graph.v2.node import (
 )
 from pydantic_graph.v2.node_types import AnyNode
 from pydantic_graph.v2.paths import BroadcastMarker, DestinationMarker, LabelMarker, Path, SpreadMarker, TransformMarker
-from pydantic_graph.v2.step import StateManager, Step, StepContext
-from pydantic_graph.v2.util import TypeExpression
+from pydantic_graph.v2.state import StateManager, StateManagerFactory
+from pydantic_graph.v2.step import Step, StepContext
+from pydantic_graph.v2.util import unpack_type_expression
 
 
 @dataclass
@@ -36,41 +37,36 @@ class JoinItem:
     fork_stack: ForkStack
 
 
-@dataclass(init=False)
 class GraphWalker[StateT, DepsT, InputT, OutputT]:
-    graph: Graph[StateT, DepsT, InputT, OutputT]
-    state_manager: StateManager[StateT]
-    deps: DepsT
-
+    # TODO: If we can make graphs serializable, we can make the graph itself a dynamic argument to the workflow
     # TODO: Need to figure out how to turn this into something that works as a temporal workflow.
-    # Probably need to make it so the state, deps, and inputs are passed to `run`.
-    # Then, need to move the `_handle_node` method to a standalone method that can be used as an activity.
-    # In the short term, it probably makes the most sense for the graph to be an attribute of both
-    # and part of the registered activities etc., but eventually it should be possible for it to be dynamic...
+    #  Probably need to move the `_handle_node` method to a standalone method that can be used as an activity.
+    #  In the short term, it probably makes the most sense for the graph to be hard-coded into the workflow
+    #  and registered activities etc., but I think it should be possible for it to be dynamic if it is serializable
     def __init__(
         self,
         graph: Graph[StateT, DepsT, InputT, OutputT],
-        state_manager: StateManager[StateT],
-        deps: DepsT,
+        state_manager_factory: StateManagerFactory,
     ):
         self.graph = graph
-        self.state_manager = state_manager
-        self.deps = deps
+        self.state_manager_factory = state_manager_factory
 
-    async def run(self, inputs: InputT) -> OutputT:
-        initial_fork_stack: ForkStack = (ForkStackItem(StartNode.id, NodeRunId(str(uuid.uuid4())), 0),)
+    async def run(self, state: StateT, deps: DepsT, inputs: InputT) -> tuple[StateManager[StateT], OutputT]:
+        run_id = GraphRunId(str(uuid.uuid4()))
+        initial_fork_stack: ForkStack = (ForkStackItem(StartNode.id, NodeRunId(run_id), 0),)
+        state_manager = self.state_manager_factory.get_instance(self.graph.state_type, run_id, state)
 
         start_task = GraphTask(node_id=StartNode.id, inputs=inputs, fork_stack=initial_fork_stack)
 
         tasks_by_id = {start_task.task_id: start_task}
         pending: set[asyncio.Task[EndMarker | JoinItem | Sequence[GraphTask]]] = {
-            asyncio.create_task(self.handle_task(start_task), name=start_task.task_id)
+            asyncio.create_task(self.handle_task(start_task, state_manager, deps), name=start_task.task_id)
         }
 
         def _start_task(t: GraphTask) -> None:
             """Helper function to start a new task while doing all necessary tracking."""
             tasks_by_id[t.task_id] = t
-            pending.add(asyncio.create_task(self.handle_task(t), name=t.task_id))
+            pending.add(asyncio.create_task(self.handle_task(t, state_manager, deps), name=t.task_id))
 
         active_reducers: dict[tuple[JoinId, NodeRunId], Reducer[Any, Any, Any]] = {}
 
@@ -82,7 +78,7 @@ class GraphWalker[StateT, DepsT, InputT, OutputT]:
                 if isinstance(result, EndMarker):
                     for t in pending:
                         t.cancel()
-                    return result.value
+                    return state_manager, result.value
 
                 if isinstance(result, JoinItem):
                     parent_fork_id = self.graph.get_parent_fork(result.join_id).fork_id
@@ -91,13 +87,13 @@ class GraphWalker[StateT, DepsT, InputT, OutputT]:
                     if reducer is None:
                         join_node = self.graph.nodes[result.join_id]
                         assert isinstance(join_node, Join)
-                        # TODO: Make it so reducers don't use state or deps, otherwise they have to use activities
-                        #  (It might be possible to make it work with deps..)
+                        # Note: if we wanted to access `state` in the ReducerContext, we'd need reducing to be an activity in temporal
+                        # That might be reasonable, but things seem simpler like this, and it seems maybe unnecessary
                         reducer = join_node.create_reducer(ReducerContext(None, result.inputs))
                         active_reducers[(result.join_id, fork_run_id)] = reducer
                     else:
-                        # TODO: Make it so reducers don't use state or deps, otherwise they have to use activities
-                        #  (It might be possible to make it work with deps..)
+                        # Note: if we wanted to access `state` in the ReducerContext, we'd need reducing to be an activity in temporal
+                        # That might be reasonable, but things seem simpler like this, and it seems maybe unnecessary
                         reducer.reduce(ReducerContext(None, result.inputs))
                 else:
                     for new_task in result:
@@ -108,7 +104,6 @@ class GraphWalker[StateT, DepsT, InputT, OutputT]:
                 ):
                     reducer = active_reducers.pop((join_id, fork_run_id))
 
-                    # TODO: Remove state/deps from ReducerContext if possible. (At least state)
                     ctx = ReducerContext(None, None)
                     output = reducer.finalize(ctx)
                     join_node = self.graph.nodes[join_id]
@@ -120,18 +115,23 @@ class GraphWalker[StateT, DepsT, InputT, OutputT]:
             'Graph run completed, but no result was produced. This is either a bug in the graph or a bug in the graph runner.'
         )
 
-    async def handle_task(self, task: GraphTask) -> Sequence[GraphTask] | JoinItem | EndMarker:
-        return await self._handle_node(task.node_id, task.inputs, task.fork_stack)
+    async def handle_task(
+        self, task: GraphTask, state_manager: StateManager[StateT], deps: DepsT
+    ) -> Sequence[GraphTask] | JoinItem | EndMarker:
+        return await self._handle_node(task.node_id, task.inputs, task.fork_stack, state_manager, deps)
 
     # TODO: I believe the following function is what should be the activity in the temporal graph walker.
+    # To do that, it should have a single dataclass as inputs. We'll need a way to ensure deserialization works.
+    # To get serialization/deserialization to work, I think we probably need some way to "dynamically" build the
+    # workflow class where we specify the types.
     async def _handle_node(
-        self, node_id: NodeId, inputs: Any, fork_stack: ForkStack
+        self, node_id: NodeId, inputs: Any, fork_stack: ForkStack, state_manager: StateManager[StateT], deps: DepsT
     ) -> Sequence[GraphTask] | JoinItem | EndMarker:
         node = self.graph.nodes[node_id]
         if isinstance(node, (StartNode, Fork)):
             return self._handle_edges(node, inputs, fork_stack)
         elif isinstance(node, Step):
-            step_context = StepContext[StateT, DepsT, Any](self.state_manager, self.deps, inputs)
+            step_context = StepContext[StateT, DepsT, Any](state_manager, deps, inputs)
             output = await node.call(step_context)
             return self._handle_edges(node, output, fork_stack)
         elif isinstance(node, Join):
@@ -151,9 +151,7 @@ class GraphWalker[StateT, DepsT, InputT, OutputT]:
             if match_tester is not None:
                 inputs_match = match_tester(inputs)
             else:
-                branch_source = branch.source
-                if get_origin(branch_source) is TypeExpression:
-                    branch_source = get_args(branch_source)[0]
+                branch_source = unpack_type_expression(branch.source)
 
                 if branch_source in {Any, object}:
                     inputs_match = True

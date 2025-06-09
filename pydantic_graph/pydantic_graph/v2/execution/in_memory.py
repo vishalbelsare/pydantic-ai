@@ -10,7 +10,8 @@ from anyio import Lock
 from pydantic_graph.v2.execution.graph_runner import GraphRunner
 from pydantic_graph.v2.execution.graph_walker import GraphWalker
 from pydantic_graph.v2.graph import Graph
-from pydantic_graph.v2.step import StateManager
+from pydantic_graph.v2.id_types import GraphRunId
+from pydantic_graph.v2.state import StateManager, StateManagerFactory
 
 
 @dataclass
@@ -36,9 +37,17 @@ class _InMemoryStateManager[StateT](StateManager[StateT]):
         self._state = state
 
 
+class InMemoryStateManagerFactory(StateManagerFactory):
+    def get_instance[StateT](
+        self, state_type: type[StateT], run_id: GraphRunId, initial_value: StateT
+    ) -> StateManager[StateT]:
+        return _InMemoryStateManager[StateT](initial_value)
+
+
 @dataclass
 class InMemoryGraphRunner[StateT, DepsT, InputT, OutputT](GraphRunner[StateT, DepsT, InputT, OutputT]):
     graph: Graph[StateT, DepsT, InputT, OutputT]
+    state_manager_factory: InMemoryStateManagerFactory
 
     async def run(
         self,
@@ -46,7 +55,7 @@ class InMemoryGraphRunner[StateT, DepsT, InputT, OutputT](GraphRunner[StateT, De
         deps: DepsT,
         inputs: InputT,
     ) -> tuple[StateT, OutputT]:
-        state_manager = _InMemoryStateManager[StateT](state)
-        result = await GraphWalker(self.graph, state_manager, deps).run(inputs)
+        graph_walker = GraphWalker(self.graph, self.state_manager_factory)
+        state_manager, result = await graph_walker.run(state, deps, inputs)
         state = await state_manager.get_immutable_state()
         return state, result

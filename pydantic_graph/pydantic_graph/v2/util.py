@@ -1,6 +1,6 @@
 import inspect
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast, get_args, get_origin
 
 
 class TypeExpression[T]:
@@ -19,6 +19,12 @@ type TypeOrTypeExpression[T] = type[TypeExpression[T]] | type[T]
 
 The correct type should get inferred either way.
 """
+
+
+def unpack_type_expression[T](type_: TypeOrTypeExpression[T]) -> type[T]:
+    if get_origin(type_) is TypeExpression:
+        return get_args(type_)[0]
+    return cast(type[T], type_)
 
 
 @dataclass

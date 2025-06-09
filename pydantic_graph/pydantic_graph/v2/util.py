@@ -36,11 +36,12 @@ type Maybe[T] = Some[T] | None  # like optional, but you can tell the difference
 
 
 def get_callable_name(callable_: Any) -> str:
-    # TODO: Do we need to extend this logic?
+    """Get the name to use for a callable."""
+    # TODO(P2): Do we need to extend this logic? E.g., for instances of classes defining `__call__`?
     return getattr(callable_, '__name__', str(callable_))
 
 
-# TODO: Need to use or remove this
+# TODO(P3): Use or remove this
 def infer_name(obj: Any, *, depth: int) -> str | None:
     """Infer the name of `obj` from the call frame.
 

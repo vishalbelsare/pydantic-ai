@@ -159,6 +159,6 @@ class MermaidGraph:
             if edge.label:
                 edge_line += f': {edge.label}'
             lines.append(edge_line)
-            # TODO: Support node notes/highlighting
+            # TODO(P2): Support node notes/highlighting
 
         return '\n'.join(lines)

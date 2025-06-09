@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 
 @dataclass
 class TransformMarker:
-    # TODO: Transforms need to be serializable so graphs can be serialized
+    # TODO(P2): Transforms need to be serializable so graphs can be serialized
     #  I'm not sure _exactly_ what the requirement is, but basically we need to have IDs here
     #  It's probably easiest to make transforms just be "anonymous" steps and then replace this with DestinationMarker
     transform: TransformFunction[Any, Any, Any, Any]
@@ -61,12 +61,9 @@ class Path:
         return Path(self.items[1:])
 
 
-# @dataclass  # TODO: Change this back to a dataclass if we can do so without variance issues
+@dataclass
 class PathBuilder[StateT, DepsT, OutputT]:
     working_items: Sequence[PathItem]
-
-    def __init__(self, working_items: Sequence[PathItem]):
-        self.working_items = working_items
 
     @property
     def last_fork(self) -> BroadcastMarker | SpreadMarker | None:

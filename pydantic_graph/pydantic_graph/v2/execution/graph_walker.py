@@ -38,8 +38,8 @@ class JoinItem:
 
 
 class GraphWalker[StateT, DepsT, InputT, OutputT]:
-    # TODO: If we can make graphs serializable, we can make the graph itself a dynamic argument to the workflow
-    # TODO: Need to figure out how to turn this into something that works as a temporal workflow.
+    # TODO(P3): If we can make graphs serializable, we can make the graph itself a dynamic argument to the workflow
+    # TODO(P1): Need to figure out how to turn this into something that works as a temporal workflow.
     #  Probably need to move the `_handle_node` method to a standalone method that can be used as an activity.
     #  In the short term, it probably makes the most sense for the graph to be hard-coded into the workflow
     #  and registered activities etc., but I think it should be possible for it to be dynamic if it is serializable
@@ -120,7 +120,7 @@ class GraphWalker[StateT, DepsT, InputT, OutputT]:
     ) -> Sequence[GraphTask] | JoinItem | EndMarker:
         return await self._handle_node(task.node_id, task.inputs, task.fork_stack, state_manager, deps)
 
-    # TODO: I believe the following function is what should be the activity in the temporal graph walker.
+    # TODO(P1): I believe the following function is what should be the activity in the temporal graph walker.
     # To do that, it should have a single dataclass as inputs. We'll need a way to ensure deserialization works.
     # To get serialization/deserialization to work, I think we probably need some way to "dynamically" build the
     # workflow class where we specify the types.
@@ -186,7 +186,7 @@ class GraphWalker[StateT, DepsT, InputT, OutputT]:
         elif isinstance(item, BroadcastMarker):
             return [GraphTask(item.fork_id, inputs, fork_stack)]
         elif isinstance(item, TransformMarker):
-            # TODO: Transforms need to become (anonymous) nodes so that we can do this as a node.
+            # TODO(P1): Transforms need to become (anonymous) nodes so that we can do this as a node.
             raise NotImplementedError
             # state = await self.run_api.get_immutable_state()
             # ctx = TransformContext(state, self.deps, inputs)

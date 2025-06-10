@@ -41,7 +41,7 @@ class ParentForkFinder[T: Hashable]:
         visited: set[str] = set()
         cur = join_id  # start at J and walk up the immediate dominator chain
 
-        # TODO(P1): Make it a node-configuration option to choose the closest _or_ the farthest. Or manually specified(?)
+        # TODO(P2): Make it a node-configuration option to choose the closest _or_ the farthest. Or manually specified(?)
         parent_fork: ParentFork[T] | None = None
         while True:
             cur = self._immediate_dominator(cur)

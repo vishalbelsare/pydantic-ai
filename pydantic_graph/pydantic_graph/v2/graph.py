@@ -95,7 +95,7 @@ def join[StateT, DepsT](
 
         return decorator
 
-    # TODO: Ideally we'd be able to infer this from the parent frame variable assignment or similar
+    # TODO(P3): Ideally we'd be able to infer this from the parent frame variable assignment or similar
     node_id = node_id or get_callable_name(reducer_type)
 
     return Join[DepsT, Any, Any](
@@ -233,7 +233,7 @@ class GraphBuilder[StateT, DepsT, GraphInputT, GraphOutputT]:
             builder = builder.label(post_spread_label)
         self.add(builder.to(spread_to))
 
-    # TODO: Support adding subgraphs ... not sure exactly what that looks like yet..
+    # TODO(P2): Support adding subgraphs ... not sure exactly what that looks like yet..
     #  probably similar to a step, but with some tweaks
 
     def edge_from[SourceOutputT](
@@ -301,12 +301,12 @@ class GraphBuilder[StateT, DepsT, GraphInputT, GraphOutputT]:
 
     # Graph building
     def build(self) -> Graph[StateT, DepsT, GraphInputT, GraphOutputT]:
-        # TODO: Warn/error if there is no start node / edges, or end node / edges
-        # TODO: Warn/error if the graph is not connected
-        # TODO: Warn/error if any non-End node is a dead end
-        # TODO: Error if the graph does not meet the every-join-has-a-parent-fork requirement (otherwise can't know when to proceed past joins)
-        # TODO: Allow the user to specify the parent forks; only infer them if _not_ specified
-        # TODO: Verify that any user-specified parent forks are _actually_ valid parent forks, and if not, generate a helpful error message
+        # TODO(P2): Warn/error if there is no start node / edges, or end node / edges
+        # TODO(P2): Warn/error if the graph is not connected
+        # TODO(P2): Warn/error if any non-End node is a dead end
+        # TODO(P2): Error if the graph does not meet the every-join-has-a-parent-fork requirement (otherwise can't know when to proceed past joins)
+        # TODO(P2): Allow the user to specify the parent forks; only infer them if _not_ specified
+        # TODO(P2): Verify that any user-specified parent forks are _actually_ valid parent forks, and if not, generate a helpful error message
         # TODO(P3): Consider doing a deepcopy here to prevent modifications to the underlying nodes and edges
         nodes = self._nodes
         edges_by_source = self._edges_by_source

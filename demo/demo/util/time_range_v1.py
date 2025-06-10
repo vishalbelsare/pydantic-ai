@@ -7,8 +7,8 @@ from typing_extensions import TypedDict
 
 
 class TimeRangeBuilderSuccess(BaseModel):
-    min_timestamp: datetime.datetime
-    max_timestamp: datetime.datetime
+    min_timestamp_with_offset: datetime.datetime
+    max_timestamp_with_offset: datetime.datetime
     explanation: str | None
 
 

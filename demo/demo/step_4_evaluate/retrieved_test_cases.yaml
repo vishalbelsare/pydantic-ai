@@ -2,70 +2,57 @@
 cases:
 - name: success_1
   inputs:
-    prompt: yesterday 7 AM to 7 PM
-    now: '2025-03-21T17:29:42.226539Z'
+    prompt: Check logs from 2 hours ago
+    now: '2025-06-04T18:15:47.404053Z'
   metadata: {}
   expected_output:
-    min_timestamp: '2025-03-20T07:00:00-06:00'
-    max_timestamp: '2025-03-20T19:00:00-06:00'
-    explanation: The time range is from 7 AM to 7 PM on the previous day (March 20,
-      2025), based on the current date and time March 21, 2025, 11:29:42 AM MDT.
-  evaluators:
-    - IsInstance: TimeRangeBuilderSuccess
-
+    min_timestamp_with_offset: '2023-10-28T07:30:00Z'
+    max_timestamp_with_offset: '2023-10-28T07:40:00Z'
+    explanation: I selected a 10 minute window around the specified time of 2 hours
+      ago, which was 07:30 UTC.
 - name: success_2
   inputs:
-    prompt: 7 AM to 2 PM on Monday
-    now: '2025-03-21T17:29:14.385237Z'
+    prompt: I want to see logs from 2021-05-08
+    now: '2025-06-04T18:15:47.402095Z'
   metadata: {}
   expected_output:
-    min_timestamp: '2025-03-24T07:00:00-06:00'
-    max_timestamp: '2025-03-24T14:00:00-06:00'
-    explanation: The time range is from 7 AM to 2 PM on the upcoming Monday, which
-      is March 24, 2025. The times are converted to the Mountain Daylight Time (MDT)
-      zone.
-  evaluators: []
+    min_timestamp_with_offset: '2021-05-08T00:00:00Z'
+    max_timestamp_with_offset: '2021-05-08T23:59:59Z'
+    explanation: The time range covers the entire day of May 8, 2021, from the beginning
+      to the end of the day in UTC.
 - name: success_3
   inputs:
-    prompt: when daylight savings changed
-    now: '2025-03-21T17:29:25.630232Z'
+    prompt: Check logs from yesterday but also last year
+    now: '2025-06-04T18:15:47.409423Z'
   metadata: {}
   expected_output:
-    min_timestamp: '2025-03-09T02:00:00'
-    max_timestamp: '2025-11-02T02:00:00'
-    explanation: In 2025, daylight saving time started on March 9th and will end on
-      November 2nd. The time at which it changes is typically 2:00 AM local time.
-  evaluators:
-    - LlmJudge: the generated time interval should not be longer than a couple hours
-
+    min_timestamp_with_offset: '2023-10-27T00:00:00Z'
+    max_timestamp_with_offset: '2023-10-27T23:59:59Z'
+    explanation: This time range covers the entire day of yesterday.
 - name: error_1
   inputs:
-    prompt: all data from when the test environment was deployed until now
-    now: '2025-03-21T17:29:08.624018Z'
+    prompt: Check logs from 2025, but make sure they are also from 2020
+    now: '2025-06-04T18:15:47.407097Z'
   metadata: {}
   expected_output:
-    error_message: The exact deployment date of the test environment is not specified,
-      so I'm unable to define an exact starting point for the time range. Please provide
-      the deployment date or a more specific description.
-  evaluators: []
+    error_message: It's not possible to generate a time range that includes both 2020
+      and 2025 as these are distinct years. Please specify a single year or adjust
+      the request to a specific range within one of these years.
 - name: error_2
   inputs:
-    prompt: the spike at 4:17 PM local on Mar 3
-    now: '2025-03-21T17:29:39.636468Z'
+    prompt: Check logs from January 3050
+    now: '2025-06-04T18:15:47.408916Z'
   metadata: {}
   expected_output:
-    error_message: The request does not specify a clear time range with both a start
-      and end time. It refers to a specific event rather than a duration. Please provide
-      a time span or range for accurate results.
-  evaluators: []
+    error_message: The request is for a future date (January 3050), which cannot be
+      processed as it is beyond the current date and time.
 - name: error_3
   inputs:
-    prompt: all data from when the test environment was deployed until now
-    now: '2025-03-21T17:26:31.197076Z'
+    prompt: Show me some logs
+    now: '2025-06-04T18:15:47.407724Z'
   metadata: {}
   expected_output:
-    error_message: The request is ambiguous because there is no information available
-      on when the test environment was deployed. Please provide a specific deployment
-      date.
-  evaluators: []
-evaluators: []
+    error_message: The request 'Show me some logs' is too vague to determine a specific
+      time range. Please provide more details about the time period you're interested
+      in, such as 'logs from yesterday', 'logs from last week', or a specific date
+      or time frame.

@@ -18,11 +18,13 @@ logfire.configure(
     service_version="v3",
     advanced=logfire.AdvancedOptions(base_url="http://localhost:8000"),
 )
+logfire.instrument_pydantic_ai()
+logfire.instrument_httpx(capture_all=True)
 
 
 class TimeRangeBuilderSuccess(BaseModel):
-    min_timestamp: datetime
-    max_timestamp: datetime
+    min_timestamp_with_offset: datetime
+    max_timestamp_with_offset: datetime
     explanation: str | None
 
 
@@ -44,7 +46,6 @@ time_range_agent = Agent[TimeRangeDeps, TimeRangeResponse](
     deps_type=TimeRangeDeps,
     system_prompt="Convert the user's request into a structured time range.",
     retries=1,
-    instrument=True,
 )
 
 

@@ -5,7 +5,7 @@ from typing import Any
 from logfire.experimental.query_client import AsyncLogfireQueryClient
 from pydantic import TypeAdapter
 from pydantic_evals.dataset import Case, Dataset
-from pydantic_evals.evaluators.common import LLMJudge, IsInstance
+from pydantic_evals.evaluators.common import IsInstance, LLMJudge
 
 from demo.step_4_evaluate.app_v4_agent_updated import TimeRangeInputs, TimeRangeResponse
 from demo.util.tokens import get_app_read_token
@@ -45,10 +45,13 @@ def get_cases(
     name_prefix: str, data: list[dict[str, Any]]
 ) -> list[Case[TimeRangeInputs, TimeRangeResponse, dict[str, Any]]]:
     dataset_rows: list[Case[TimeRangeInputs, TimeRangeResponse, dict[str, Any]]] = []
+    inputs_adapter = TypeAdapter(TimeRangeInputs)
     for i, row in enumerate(data, 1):
         dataset_row = Case[TimeRangeInputs, TimeRangeResponse, dict[str, Any]](
             name=f"{name_prefix}_{i}",
-            inputs=TimeRangeInputs(prompt=row["prompt"], now=row["now"]),
+            inputs=inputs_adapter.validate_python(
+                dict(prompt=row["prompt"], now=row["now"])
+            ),
             metadata={},
             expected_output=response_adapter.validate_python(row["expected_output"]),
         )
@@ -73,9 +76,7 @@ async def main():
     # dataset = TimeRangeDataset(cases=[], evaluators=[])
     dataset = TimeRangeDataset(cases=success_rows + error_rows, evaluators=[])
     dataset_path = Path(__file__).parent / "retrieved_test_cases.yaml"
-    dataset.to_file(
-        dataset_path, custom_evaluator_types=[LLMJudge, IsInstance]
-    )
+    dataset.to_file(dataset_path, custom_evaluator_types=[LLMJudge, IsInstance])
 
 
 asyncio.run(main())

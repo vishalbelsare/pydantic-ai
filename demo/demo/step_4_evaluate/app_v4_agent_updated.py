@@ -20,11 +20,14 @@ logfire.configure(
     service_version="v4",
     advanced=logfire.AdvancedOptions(base_url="http://localhost:8000"),
 )
+logfire.instrument_pydantic_ai()
+logfire.instrument_httpx(capture_all=True)
+
 
 
 class TimeRangeBuilderSuccess(BaseModel):
-    min_timestamp: datetime
-    max_timestamp: datetime
+    min_timestamp_with_offset: datetime
+    max_timestamp_with_offset: datetime
     explanation: str | None
 
 
@@ -45,7 +48,6 @@ time_range_agent = Agent[TimeRangeDeps, TimeRangeResponse](
     result_type=TimeRangeResponse,  # type: ignore  # we can't yet annotate something as receiving a TypeForm
     deps_type=TimeRangeDeps,
     retries=1,
-    instrument=True,
 )
 
 
@@ -97,7 +99,7 @@ class TimeRangeInputs(TypedDict):
 async def run_infer_time_range(inputs: TimeRangeInputs) -> TimeRangeResponse:
     """Infer a time range from a user prompt."""
     deps = TimeRangeDeps(now=inputs["now"])
-    return (await time_range_agent.run(inputs["prompt"], deps=deps)).data
+    return (await time_range_agent.run(inputs["prompt"], deps=deps)).output
 
 
 if __name__ == "__main__":

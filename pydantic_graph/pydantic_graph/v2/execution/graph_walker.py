@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from collections.abc import Iterable, Sequence
+from collections.abc import Awaitable, Iterable, Sequence
 from dataclasses import dataclass
-from typing import Any, assert_never, get_args, get_origin
+from functools import partial
+from typing import Any, Callable, assert_never, get_args, get_origin
 
 from typing_extensions import Literal
 
@@ -37,20 +38,36 @@ class JoinItem:
     fork_stack: ForkStack
 
 
+# TODO(P2/3): We need to implement node-specific deserialization using type adapters so that when the temporal activity
+#  is called and gets "less-structured" data, since it won't know the relevant type, we can deserialize it as expected
+#  by the node.
+@dataclass
+class GraphActivityInputs[StateT, DepsT]:
+    node_id: NodeId
+    inputs: Any
+    fork_stack: ForkStack
+    state_manager: StateManager[StateT]
+    deps: DepsT
+
+
 class GraphWalker[StateT, DepsT, InputT, OutputT]:
-    # TODO(P3): If we can make graphs serializable, we can make the graph itself a dynamic argument to the workflow
-    # TODO(P1): Need to figure out how to turn this into something that works as a temporal workflow.
-    #  Probably need to move the `_handle_node` method to a standalone method that can be used as an activity.
-    #  In the short term, it probably makes the most sense for the graph to be hard-coded into the workflow
-    #  and registered activities etc., but I think it should be possible for it to be dynamic if it is serializable
     def __init__(
         self,
         graph: Graph[StateT, DepsT, InputT, OutputT],
         state_manager_factory: StateManagerFactory,
+        handle_graph_node: Callable[
+            [GraphActivityInputs[StateT, DepsT]], Awaitable[Sequence[GraphTask] | JoinItem | EndMarker]
+        ]
+        | None = None,
     ):
         self.graph = graph
         self.state_manager_factory = state_manager_factory
+        self.handle_graph_node = handle_graph_node or partial(handle_node, graph=graph)
 
+    # TODO: Need to implement some form of "iteration", and ensure that some pattern for stream handling works.
+    #  I think it will be fine with channels in deps in the in-memory case; in the temporal case, you'll just need to
+    #  pass the relevant channel-building configuration (e.g., for a redis streams connection or similar) through
+    #  (serializable) deps.
     async def run(self, state: StateT, deps: DepsT, inputs: InputT) -> tuple[StateManager[StateT], OutputT]:
         run_id = GraphRunId(str(uuid.uuid4()))
         initial_fork_stack: ForkStack = (ForkStackItem(StartNode.id, NodeRunId(run_id), 0),)
@@ -99,8 +116,8 @@ class GraphWalker[StateT, DepsT, InputT, OutputT]:
                     for new_task in result:
                         _start_task(new_task)
 
-                for join_id, fork_run_id, fork_stack in self._get_completed_fork_runs(
-                    source_task, tasks_by_id.values(), active_reducers.keys()
+                for join_id, fork_run_id, fork_stack in _get_completed_fork_runs(
+                    self.graph, source_task, tasks_by_id.values(), active_reducers.keys()
                 ):
                     reducer = active_reducers.pop((join_id, fork_run_id))
 
@@ -108,7 +125,7 @@ class GraphWalker[StateT, DepsT, InputT, OutputT]:
                     output = reducer.finalize(ctx)
                     join_node = self.graph.nodes[join_id]
                     assert isinstance(join_node, Join)  # We could drop this but if it fails it means there is a bug.
-                    new_tasks = self._handle_edges(join_node, output, fork_stack)
+                    new_tasks = _handle_edges(self.graph, join_node, output, fork_stack)
                     for new_task in new_tasks:
                         _start_task(new_task)
         raise RuntimeError(
@@ -118,118 +135,134 @@ class GraphWalker[StateT, DepsT, InputT, OutputT]:
     async def handle_task(
         self, task: GraphTask, state_manager: StateManager[StateT], deps: DepsT
     ) -> Sequence[GraphTask] | JoinItem | EndMarker:
-        return await self._handle_node(task.node_id, task.inputs, task.fork_stack, state_manager, deps)
+        inputs = GraphActivityInputs(task.node_id, task.inputs, task.fork_stack, state_manager, deps)
+        return await self.handle_graph_node(inputs)
 
-    # TODO(P1): I believe the following function is what should be the activity in the temporal graph walker.
-    # To do that, it should have a single dataclass as inputs. We'll need a way to ensure deserialization works.
-    # To get serialization/deserialization to work, I think we probably need some way to "dynamically" build the
-    # workflow class where we specify the types.
-    async def _handle_node(
-        self, node_id: NodeId, inputs: Any, fork_stack: ForkStack, state_manager: StateManager[StateT], deps: DepsT
-    ) -> Sequence[GraphTask] | JoinItem | EndMarker:
-        node = self.graph.nodes[node_id]
-        if isinstance(node, (StartNode, Fork)):
-            return self._handle_edges(node, inputs, fork_stack)
-        elif isinstance(node, Step):
-            step_context = StepContext[StateT, DepsT, Any](state_manager, deps, inputs)
-            output = await node.call(step_context)
-            return self._handle_edges(node, output, fork_stack)
-        elif isinstance(node, Join):
-            return JoinItem(node_id, inputs, fork_stack)
-        elif isinstance(node, Decision):
-            return self._handle_decision(node, inputs, fork_stack)
-        elif isinstance(node, EndNode):
-            return EndMarker(inputs)
+
+async def handle_node[StateT, DepsT](
+    activity_inputs: GraphActivityInputs[StateT, DepsT], graph: Graph[StateT, DepsT, Any, Any]
+) -> Sequence[GraphTask] | JoinItem | EndMarker:
+    node_id = activity_inputs.node_id
+    inputs = activity_inputs.inputs
+    fork_stack = activity_inputs.fork_stack
+    state_manager = activity_inputs.state_manager
+    deps = activity_inputs.deps
+
+    node = graph.nodes[node_id]
+    if isinstance(node, (StartNode, Fork)):
+        return _handle_edges(graph, node, inputs, fork_stack)
+    elif isinstance(node, Step):
+        step_context = StepContext[StateT, DepsT, Any](state_manager, deps, inputs)
+        output = await node.call(step_context)
+        return _handle_edges(graph, node, output, fork_stack)
+    elif isinstance(node, Join):
+        return JoinItem(node_id, inputs, fork_stack)
+    elif isinstance(node, Decision):
+        return _handle_decision(graph, node, inputs, fork_stack)
+    elif isinstance(node, EndNode):
+        return EndMarker(inputs)
+    else:
+        assert_never(node)
+
+
+def _handle_decision[StateT, DepsT](
+    graph: Graph[StateT, DepsT, Any, Any], decision: Decision[StateT, DepsT, Any], inputs: Any, fork_stack: ForkStack
+) -> Sequence[GraphTask]:
+    for branch in decision.branches:
+        match_tester = branch.matches
+        if match_tester is not None:
+            inputs_match = match_tester(inputs)
         else:
-            assert_never(node)
+            branch_source = unpack_type_expression(branch.source)
 
-    def _handle_decision(
-        self, decision: Decision[StateT, DepsT, Any], inputs: Any, fork_stack: ForkStack
-    ) -> Sequence[GraphTask]:
-        for branch in decision.branches:
-            match_tester = branch.matches
-            if match_tester is not None:
-                inputs_match = match_tester(inputs)
+            if branch_source in {Any, object}:
+                inputs_match = True
+            elif get_origin(branch_source) is Literal:
+                inputs_match = inputs in get_args(branch_source)
             else:
-                branch_source = unpack_type_expression(branch.source)
+                try:
+                    inputs_match = isinstance(inputs, branch_source)
+                except TypeError as e:
+                    raise RuntimeError(f'Decision branch source {branch_source} is not a valid type.') from e
 
-                if branch_source in {Any, object}:
-                    inputs_match = True
-                elif get_origin(branch_source) is Literal:
-                    inputs_match = inputs in get_args(branch_source)
-                else:
-                    try:
-                        inputs_match = isinstance(inputs, branch_source)
-                    except TypeError as e:
-                        raise RuntimeError(f'Decision branch source {branch_source} is not a valid type.') from e
+        if inputs_match:
+            return _handle_path(graph, branch.path, inputs, fork_stack)
 
-            if inputs_match:
-                return self._handle_path(branch.path, inputs, fork_stack)
+    raise RuntimeError(f'No branch matched inputs {inputs} for decision node {decision}.')
 
-        raise RuntimeError(f'No branch matched inputs {inputs} for decision node {decision}.')
 
-    def _handle_path(self, path: Path, inputs: Any, fork_stack: ForkStack) -> Sequence[GraphTask]:
-        if not path.items:
-            return []
+def _get_completed_fork_runs(
+    graph: Graph[Any, Any, Any, Any],
+    t: GraphTask,
+    active_tasks: Iterable[GraphTask],
+    reducers_keys: Iterable[tuple[JoinId, NodeRunId]],
+) -> list[tuple[JoinId, NodeRunId, ForkStack]]:
+    completed_fork_runs: list[tuple[JoinId, NodeRunId, ForkStack]] = []
 
-        item = path.items[0]
-        if isinstance(item, DestinationMarker):
-            return [GraphTask(item.destination_id, inputs, fork_stack)]
-        elif isinstance(item, SpreadMarker):
-            node_run_id = NodeRunId(str(uuid.uuid4()))
-            return [
-                GraphTask(
-                    item.fork_id, input_item, fork_stack + (ForkStackItem(item.fork_id, node_run_id, thread_index),)
-                )
-                for thread_index, input_item in enumerate(inputs)
-            ]
-        elif isinstance(item, BroadcastMarker):
-            return [GraphTask(item.fork_id, inputs, fork_stack)]
-        elif isinstance(item, TransformMarker):
-            # TODO(P1): Transforms need to become (anonymous) nodes so that we can do this as a node.
-            raise NotImplementedError
-            # state = await self.run_api.get_immutable_state()
-            # ctx = TransformContext(state, self.deps, inputs)
-            # inputs = item.transform(ctx)
-            # return self._handle_path(path.next_path, inputs, fork_stack)
-        elif isinstance(item, LabelMarker):
-            return self._handle_path(path.next_path, inputs, fork_stack)
-        else:
-            assert_never(item)
+    fork_run_indices = {fsi.node_run_id: i for i, fsi in enumerate(t.fork_stack)}
+    for join_id, fork_run_id in reducers_keys:
+        fork_run_index = fork_run_indices.get(fork_run_id)
+        if fork_run_index is None:
+            continue  # The fork_run_id is not in the current task's fork stack, so this task didn't complete it.
 
-    def _handle_edges(self, node: AnyNode, inputs: Any, fork_stack: ForkStack) -> Sequence[GraphTask]:
-        edges = self.graph.edges_by_source.get(node.id, [])
-        assert len(edges) == 1 or isinstance(node, Fork)  # this should have already been ensured during graph building
+        new_fork_stack = t.fork_stack[:fork_run_index]
+        # This reducer _may_ now be ready to finalize:
+        if _is_fork_run_completed(graph, active_tasks, join_id, fork_run_id):
+            completed_fork_runs.append((join_id, fork_run_id, new_fork_stack))
 
-        new_tasks: list[GraphTask] = []
-        for path in edges:
-            new_tasks.extend(self._handle_path(path, inputs, fork_stack))
-        return new_tasks
+    return completed_fork_runs
 
-    def _get_completed_fork_runs(
-        self, t: GraphTask, active_tasks: Iterable[GraphTask], reducers_keys: Iterable[tuple[JoinId, NodeRunId]]
-    ) -> list[tuple[JoinId, NodeRunId, ForkStack]]:
-        completed_fork_runs: list[tuple[JoinId, NodeRunId, ForkStack]] = []
 
-        fork_run_indices = {fsi.node_run_id: i for i, fsi in enumerate(t.fork_stack)}
-        for join_id, fork_run_id in reducers_keys:
-            fork_run_index = fork_run_indices.get(fork_run_id)
-            if fork_run_index is None:
-                continue  # The fork_run_id is not in the current task's fork stack, so this task didn't complete it.
+def _handle_path(
+    graph: Graph[Any, Any, Any, Any], path: Path, inputs: Any, fork_stack: ForkStack
+) -> Sequence[GraphTask]:
+    if not path.items:
+        return []
 
-            new_fork_stack = t.fork_stack[:fork_run_index]
-            # This reducer _may_ now be ready to finalize:
-            if self._is_fork_run_completed(active_tasks, join_id, fork_run_id):
-                completed_fork_runs.append((join_id, fork_run_id, new_fork_stack))
+    item = path.items[0]
+    if isinstance(item, DestinationMarker):
+        return [GraphTask(item.destination_id, inputs, fork_stack)]
+    elif isinstance(item, SpreadMarker):
+        node_run_id = NodeRunId(str(uuid.uuid4()))
+        return [
+            GraphTask(item.fork_id, input_item, fork_stack + (ForkStackItem(item.fork_id, node_run_id, thread_index),))
+            for thread_index, input_item in enumerate(inputs)
+        ]
+    elif isinstance(item, BroadcastMarker):
+        return [GraphTask(item.fork_id, inputs, fork_stack)]
+    elif isinstance(item, TransformMarker):
+        # TODO(P1): Transforms need to become (anonymous) nodes so that we can do this as a node.
+        raise NotImplementedError
+        # state = await self.run_api.get_immutable_state()
+        # ctx = TransformContext(state, self.deps, inputs)
+        # inputs = item.transform(ctx)
+        # return self._handle_path(path.next_path, inputs, fork_stack)
+    elif isinstance(item, LabelMarker):
+        return _handle_path(graph, path.next_path, inputs, fork_stack)
+    else:
+        assert_never(item)
 
-        return completed_fork_runs
 
-    def _is_fork_run_completed(self, tasks: Iterable[GraphTask], join_id: JoinId, fork_run_id: NodeRunId) -> bool:
-        # Check if any of the tasks in the graph have this fork_run_id in their fork_stack
-        # If this is the case, then the fork run is not yet completed
-        parent_fork = self.graph.get_parent_fork(join_id)
-        for t in tasks:
-            if fork_run_id in {x.node_run_id for x in t.fork_stack}:
-                if t.node_id in parent_fork.intermediate_nodes:
-                    return False
-        return True
+def _handle_edges(
+    graph: Graph[Any, Any, Any, Any], node: AnyNode, inputs: Any, fork_stack: ForkStack
+) -> Sequence[GraphTask]:
+    edges = graph.edges_by_source.get(node.id, [])
+    assert len(edges) == 1 or isinstance(node, Fork)  # this should have already been ensured during graph building
+
+    new_tasks: list[GraphTask] = []
+    for path in edges:
+        new_tasks.extend(_handle_path(graph, path, inputs, fork_stack))
+    return new_tasks
+
+
+def _is_fork_run_completed(
+    graph: Graph[Any, Any, Any, Any], tasks: Iterable[GraphTask], join_id: JoinId, fork_run_id: NodeRunId
+) -> bool:
+    # Check if any of the tasks in the graph have this fork_run_id in their fork_stack
+    # If this is the case, then the fork run is not yet completed
+    parent_fork = graph.get_parent_fork(join_id)
+    for t in tasks:
+        if fork_run_id in {x.node_run_id for x in t.fork_stack}:
+            if t.node_id in parent_fork.intermediate_nodes:
+                return False
+    return True

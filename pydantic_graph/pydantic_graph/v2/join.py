@@ -93,8 +93,8 @@ class Join[DepsT, InputT, OutputT]:
         """Create a reducer instance using the provided context."""
         return self._reducer_type(ctx)
 
-    # TODO: If we want the ability to snapshot graph-run state, we'll need a way to serialize/deserialize the
-    #  associated reducers, something like this:
+    # TODO(P3): If we want the ability to snapshot graph-run state, we'll need a way to
+    #  serialize/deserialize the associated reducers, something like this:
     # def serialize_reducer(self, instance: Reducer[Any, Any, Any]) -> bytes:
     #     return to_json(instance)
     #

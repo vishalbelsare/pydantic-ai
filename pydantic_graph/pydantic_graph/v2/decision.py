@@ -17,11 +17,11 @@ if TYPE_CHECKING:
 class Decision[StateT, DepsT, HandledT]:
     id: NodeId
     branches: list[DecisionBranch[Any]]
-    # TODO: Add a field for the label for the input edge
-    note: str | None  # TODO: Add a way to set this in the graph.add_decision method(?)
+    note: str | None
 
     def branch[S](self, branch: DecisionBranch[S]) -> Decision[StateT, DepsT, HandledT | S]:
-        # TODO: Add an overload that skips the need for `match`, and is just less flexible about the building
+        # TODO(P3): Add an overload that skips the need for `match`, and is just less flexible about the building.
+        #   I discussed this with Douwe but don't fully remember the details...
         return Decision(id=self.id, branches=self.branches + [branch], note=self.note)
 
     def _force_handled_contravariant(self, inputs: HandledT) -> None:

@@ -307,7 +307,7 @@ class GraphBuilder[StateT, DepsT, GraphInputT, GraphOutputT]:
         # TODO: Error if the graph does not meet the every-join-has-a-parent-fork requirement (otherwise can't know when to proceed past joins)
         # TODO: Allow the user to specify the parent forks; only infer them if _not_ specified
         # TODO: Verify that any user-specified parent forks are _actually_ valid parent forks, and if not, generate a helpful error message
-        # TODO: Consider doing a deepcopy here to prevent modifications to the underlying nodes and edges
+        # TODO(P3): Consider doing a deepcopy here to prevent modifications to the underlying nodes and edges
         nodes = self._nodes
         edges_by_source = self._edges_by_source
         nodes, edges_by_source = _normalize_forks(nodes, edges_by_source)
@@ -421,7 +421,7 @@ def _collect_dominating_forks(
     for join_id in join_ids:
         dominating_fork = finder.find_parent_fork(join_id)
         if dominating_fork is None:
-            # TODO: Print out the mermaid graph and explain the problem
+            # TODO(P3): Print out the mermaid graph and explain the problem
             raise ValueError(f'Join node {join_id} has no dominating fork')
         dominating_forks[join_id] = dominating_fork
 
@@ -452,7 +452,7 @@ class Graph[StateT, DepsT, InputT, OutputT]:
     def render(self, *, title: str | None = None, direction: StateDiagramDirection | None = None) -> str:
         return build_mermaid_graph(self).render(title=title, direction=direction)
 
-    # TODO: Should we re-add a `run` method that just uses a default global GraphRunner?
+    # TODO(P2): Should we re-add a `run` method that just uses a default global GraphRunner?
 
     def __repr__(self):
         return self.render()

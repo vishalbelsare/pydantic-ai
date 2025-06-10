@@ -8,7 +8,7 @@ from pydantic_graph.v2.id_types import NodeId
 from pydantic_graph.v2.state import StateManager
 
 
-# TODO: Make InputT default to object so it can be dropped when not relevant?
+# TODO(P3): Make InputT default to object so it can be dropped when not relevant?
 class StepContext[StateT, DepsT, InputT]:
     """The main reason this is not a dataclass is that we need it to be covariant in its type parameters."""
 

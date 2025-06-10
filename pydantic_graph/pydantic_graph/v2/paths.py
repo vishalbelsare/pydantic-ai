@@ -14,9 +14,9 @@ if TYPE_CHECKING:
 
 @dataclass
 class TransformMarker:
-    # TODO(P2): Transforms need to be serializable so graphs can be serialized
-    #  I'm not sure _exactly_ what the requirement is, but basically we need to have IDs here
-    #  It's probably easiest to make transforms just be "anonymous" steps and then replace this with DestinationMarker
+    # TODO(P1): Need to remove this class and turn transforms into (anonymous) nodes.
+    #  For the sake of supporting runtime-defined transforms in serializable graphs, we'll want to introduce some sort
+    #  of `TransformNode` or similar (like `Prompt`), but that can come later.
     transform: TransformFunction[Any, Any, Any, Any]
 
 
@@ -117,8 +117,12 @@ class EdgePath[StateT, DepsT]:
     destinations: list[AnyDestinationNode]  # can be referenced by DestinationMarker in `path.items`
 
 
-# @dataclass  # TODO: Change this back to a dataclass if we can do so without variance issues
 class EdgePathBuilder[StateT, DepsT, OutputT]:
+    """This can't be a dataclass due to variance issues.
+
+    It could probably be converted back to one once ReadOnly is available in typing_extensions.
+    """
+
     sources: Sequence[SourceNode[StateT, DepsT, Any]]
 
     def __init__(
@@ -138,7 +142,6 @@ class EdgePathBuilder[StateT, DepsT, OutputT]:
             return None
         return last_fork.fork_id
 
-    # TODO: does `to` make things invariant? If so, how can this be fixed?
     @overload
     def to(
         self, get_forks: Callable[[Self], Sequence[EdgePath[StateT, DepsT]]], /, *, fork_id: str | None = None

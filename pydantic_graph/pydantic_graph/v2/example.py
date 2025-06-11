@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from types import NoneType
 from typing import Any, Literal
 
-from pydantic_graph.v2.execution.in_memory import InMemoryGraphRunner, InMemoryStateManagerFactory
+from pydantic_graph.v2.execution.in_memory import InMemoryGraphRunner
 from pydantic_graph.v2.graph import GraphBuilder
 from pydantic_graph.v2.join import NullReducer
 from pydantic_graph.v2.step import StepContext
@@ -31,9 +31,9 @@ g = GraphBuilder(state_type=MyState, deps_type=NoneType, input_type=NoneType, ou
 @g.step
 async def choose_type(ctx: StepContext[MyState, object, object]) -> Literal['int', 'str']:
     chosen_type = int if random.random() < 0.5 else str
-    async with ctx.get_mutable_state() as state:
-        state.type_name = chosen_type.__name__
-        state.container = MyContainer(field_1=None, field_2=None, field_3=None)
+    state = ctx.state
+    state.type_name = chosen_type.__name__
+    state.container = MyContainer(field_1=None, field_2=None, field_3=None)
     return 'int' if chosen_type is int else 'str'
 
 
@@ -51,9 +51,8 @@ async def handle_str(ctx: StepContext[object, object, object]) -> None:
 async def handle_int_1(ctx: StepContext[MyState, object, object]) -> None:
     print('start int 1')
     await asyncio.sleep(1)
-    async with ctx.get_mutable_state() as state:
-        assert state.container is not None
-        state.container.field_1 = 1
+    assert ctx.state.container is not None
+    ctx.state.container.field_1 = 1
     print('end int 1')
 
 
@@ -61,9 +60,8 @@ async def handle_int_1(ctx: StepContext[MyState, object, object]) -> None:
 async def handle_int_2(ctx: StepContext[MyState, object, object]) -> None:
     print('start int 2')
     await asyncio.sleep(1)
-    async with ctx.get_mutable_state() as state:
-        assert state.container is not None
-        state.container.field_2 = 1
+    assert ctx.state.container is not None
+    ctx.state.container.field_2 = 1
     print('end int 2')
 
 
@@ -73,9 +71,8 @@ async def handle_int_3(
 ) -> list[int]:
     print('start int 3')
     await asyncio.sleep(1)
-    async with ctx.get_mutable_state() as state:
-        assert state.container is not None
-        output = state.container.field_3 = [1, 2, 3]
+    assert ctx.state.container is not None
+    output = ctx.state.container.field_3 = [1, 2, 3]
     print('end int 3')
     return output
 
@@ -84,9 +81,8 @@ async def handle_int_3(
 async def handle_str_1(ctx: StepContext[MyState, object, object]) -> None:
     print('start str 1')
     await asyncio.sleep(1)
-    async with ctx.get_mutable_state() as state:
-        assert state.container is not None
-        state.container.field_1 = 1
+    assert ctx.state.container is not None
+    ctx.state.container.field_1 = 1
     print('end str 1')
 
 
@@ -94,9 +90,8 @@ async def handle_str_1(ctx: StepContext[MyState, object, object]) -> None:
 async def handle_str_2(ctx: StepContext[MyState, object, object]) -> None:
     print('start str 2')
     await asyncio.sleep(1)
-    async with ctx.get_mutable_state() as state:
-        assert state.container is not None
-        state.container.field_2 = 1
+    assert ctx.state.container is not None
+    ctx.state.container.field_2 = 1
     print('end str 2')
 
 
@@ -106,9 +101,8 @@ async def handle_str_3(
 ) -> Iterable[str]:
     print('start str 3')
     await asyncio.sleep(1)
-    async with ctx.get_mutable_state() as state:
-        assert state.container is not None
-        output = state.container.field_3 = ['a', 'b', 'c']
+    assert ctx.state.container is not None
+    output = ctx.state.container.field_3 = ['a', 'b', 'c']
     print('end str 3')
     return output
 
@@ -118,10 +112,9 @@ async def handle_field_3_item(ctx: StepContext[MyState, object, int | str]) -> N
     inputs = ctx.inputs
     print(f'handle_field_3_item: {inputs}')
     await asyncio.sleep(0.25)
-    async with ctx.get_mutable_state() as state:
-        assert state.container is not None
-        assert state.container.field_3 is not None
-        state.container.field_3.append(inputs * 2)
+    assert ctx.state.container is not None
+    assert ctx.state.container.field_3 is not None
+    ctx.state.container.field_3.append(inputs * 2)
     await asyncio.sleep(0.25)
 
 
@@ -150,7 +143,7 @@ print('----------')
 
 
 async def main():
-    runner = InMemoryGraphRunner(graph, state_manager_factory=InMemoryStateManagerFactory())
+    runner = InMemoryGraphRunner(graph)
     state, result = await runner.run(state=MyState(), deps=None, inputs=None)
 
     print('-')

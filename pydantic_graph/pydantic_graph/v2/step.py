@@ -1,29 +1,23 @@
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Awaitable
-from contextlib import asynccontextmanager
+from collections.abc import Awaitable
 from typing import Protocol
 
 from pydantic_graph.v2.id_types import NodeId
-from pydantic_graph.v2.state import StateManager
 
 
 # TODO(P3): Make InputT default to object so it can be dropped when not relevant?
 class StepContext[StateT, DepsT, InputT]:
     """The main reason this is not a dataclass is that we need it to be covariant in its type parameters."""
 
-    def __init__(self, state_manager: StateManager[StateT], deps: DepsT, inputs: InputT):
-        self._state_manager = state_manager
+    def __init__(self, state: StateT, deps: DepsT, inputs: InputT):
+        self._state = state
         self._deps = deps
         self._inputs = inputs
 
-    @asynccontextmanager
-    async def get_mutable_state(self) -> AsyncIterator[StateT]:
-        async with self._state_manager.get_mutable_state() as state:
-            yield state
-
-    async def get_immutable_state(self) -> StateT:
-        return await self._state_manager.get_immutable_state()
+    @property
+    def state(self) -> StateT:
+        return self._state
 
     @property
     def deps(self) -> DepsT:

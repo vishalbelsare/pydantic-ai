@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING, Any
 from pydantic_graph.v2.execution.graph_task import GraphTask
 from pydantic_graph.v2.execution.graph_walker import EndMarker, GraphActivityInputs, GraphWalker, JoinItem, handle_node
 from pydantic_graph.v2.graph import Graph
-from pydantic_graph.v2.state import StateManagerFactory
 
 type ConcreteStateT = Any
 type ConcreteDepsT = Any
@@ -28,7 +27,6 @@ class GraphWorkflowInputs[StateT, DepsT]:
 #   Evaluators work.)
 def get_temporal_stuff[StateT, DepsT, InputsT, OutputT](
     graph: Graph[StateT, DepsT, InputsT, OutputT],
-    state_manager_factory: StateManagerFactory,
 ):
     if not TYPE_CHECKING:
         # Do this to ensure that we get the actual types that can be introspected for serialization/deserialization
@@ -46,8 +44,6 @@ def get_temporal_stuff[StateT, DepsT, InputsT, OutputT](
     class GraphWorkflow:
         # @workflow.run
         async def run(self, inputs: GraphWorkflowInputs[ConcreteStateT, ConcreteDepsT]):
-            return await GraphWalker(graph, state_manager_factory, handle_graph_node_activity).run(
-                inputs.state, inputs.deps, inputs.inputs
-            )
+            return await GraphWalker(graph, handle_graph_node_activity).run(inputs.state, inputs.deps, inputs.inputs)
 
     return handle_graph_node_activity, GraphWorkflow

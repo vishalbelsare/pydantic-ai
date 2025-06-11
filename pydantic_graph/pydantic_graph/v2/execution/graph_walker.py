@@ -21,7 +21,6 @@ from pydantic_graph.v2.node import (
 )
 from pydantic_graph.v2.node_types import AnyNode
 from pydantic_graph.v2.paths import BroadcastMarker, DestinationMarker, LabelMarker, Path, SpreadMarker, TransformMarker
-from pydantic_graph.v2.state import StateManager, StateManagerFactory
 from pydantic_graph.v2.step import Step, StepContext
 from pydantic_graph.v2.util import unpack_type_expression
 
@@ -46,7 +45,7 @@ class GraphActivityInputs[StateT, DepsT]:
     node_id: NodeId
     inputs: Any
     fork_stack: ForkStack
-    state_manager: StateManager[StateT]
+    state: StateT
     deps: DepsT
 
 
@@ -54,36 +53,33 @@ class GraphWalker[StateT, DepsT, InputT, OutputT]:
     def __init__(
         self,
         graph: Graph[StateT, DepsT, InputT, OutputT],
-        state_manager_factory: StateManagerFactory,
         handle_graph_node: Callable[
             [GraphActivityInputs[StateT, DepsT]], Awaitable[Sequence[GraphTask] | JoinItem | EndMarker]
         ]
         | None = None,
     ):
         self.graph = graph
-        self.state_manager_factory = state_manager_factory
         self.handle_graph_node = handle_graph_node or partial(handle_node, graph=graph)
 
     # TODO: Need to implement some form of "iteration", and ensure that some pattern for stream handling works.
     #  I think it will be fine with channels in deps in the in-memory case; in the temporal case, you'll just need to
     #  pass the relevant channel-building configuration (e.g., for a redis streams connection or similar) through
     #  (serializable) deps.
-    async def run(self, state: StateT, deps: DepsT, inputs: InputT) -> tuple[StateManager[StateT], OutputT]:
+    async def run(self, state: StateT, deps: DepsT, inputs: InputT) -> tuple[StateT, OutputT]:
         run_id = GraphRunId(str(uuid.uuid4()))
         initial_fork_stack: ForkStack = (ForkStackItem(StartNode.id, NodeRunId(run_id), 0),)
-        state_manager = self.state_manager_factory.get_instance(self.graph.state_type, run_id, state)
 
         start_task = GraphTask(node_id=StartNode.id, inputs=inputs, fork_stack=initial_fork_stack)
 
         tasks_by_id = {start_task.task_id: start_task}
         pending: set[asyncio.Task[EndMarker | JoinItem | Sequence[GraphTask]]] = {
-            asyncio.create_task(self.handle_task(start_task, state_manager, deps), name=start_task.task_id)
+            asyncio.create_task(self.handle_task(start_task, state, deps), name=start_task.task_id)
         }
 
         def _start_task(t: GraphTask) -> None:
             """Helper function to start a new task while doing all necessary tracking."""
             tasks_by_id[t.task_id] = t
-            pending.add(asyncio.create_task(self.handle_task(t, state_manager, deps), name=t.task_id))
+            pending.add(asyncio.create_task(self.handle_task(t, state, deps), name=t.task_id))
 
         active_reducers: dict[tuple[JoinId, NodeRunId], Reducer[Any, Any, Any]] = {}
 
@@ -95,7 +91,7 @@ class GraphWalker[StateT, DepsT, InputT, OutputT]:
                 if isinstance(result, EndMarker):
                     for t in pending:
                         t.cancel()
-                    return state_manager, result.value
+                    return state, result.value
 
                 if isinstance(result, JoinItem):
                     parent_fork_id = self.graph.get_parent_fork(result.join_id).fork_id
@@ -133,9 +129,9 @@ class GraphWalker[StateT, DepsT, InputT, OutputT]:
         )
 
     async def handle_task(
-        self, task: GraphTask, state_manager: StateManager[StateT], deps: DepsT
+        self, task: GraphTask, state: StateT, deps: DepsT
     ) -> Sequence[GraphTask] | JoinItem | EndMarker:
-        inputs = GraphActivityInputs(task.node_id, task.inputs, task.fork_stack, state_manager, deps)
+        inputs = GraphActivityInputs(task.node_id, task.inputs, task.fork_stack, state, deps)
         return await self.handle_graph_node(inputs)
 
 
@@ -145,14 +141,14 @@ async def handle_node[StateT, DepsT](
     node_id = activity_inputs.node_id
     inputs = activity_inputs.inputs
     fork_stack = activity_inputs.fork_stack
-    state_manager = activity_inputs.state_manager
+    state = activity_inputs.state
     deps = activity_inputs.deps
 
     node = graph.nodes[node_id]
     if isinstance(node, (StartNode, Fork)):
         return _handle_edges(graph, node, inputs, fork_stack)
     elif isinstance(node, Step):
-        step_context = StepContext[StateT, DepsT, Any](state_manager, deps, inputs)
+        step_context = StepContext[StateT, DepsT, Any](state, deps, inputs)
         output = await node.call(step_context)
         return _handle_edges(graph, node, output, fork_stack)
     elif isinstance(node, Join):

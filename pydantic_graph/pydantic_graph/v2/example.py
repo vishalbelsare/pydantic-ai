@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from types import NoneType
 from typing import Any, Literal
 
-from pydantic_graph.v2.execution.in_memory import InMemoryGraphRunner
+from pydantic_graph.v2.execution.graph_walker import GraphRunner
 from pydantic_graph.v2.graph import GraphBuilder
 from pydantic_graph.v2.join import NullReducer
 from pydantic_graph.v2.step import StepContext
@@ -143,7 +143,7 @@ print('----------')
 
 
 async def main():
-    runner = InMemoryGraphRunner(graph)
+    runner = GraphRunner(graph)
     state, result = await runner.run(state=MyState(), deps=None, inputs=None)
 
     print('-')

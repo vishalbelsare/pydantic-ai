@@ -141,6 +141,15 @@ graph = g.build()
 print(graph)
 print('----------')
 
+from temporalio import workflow
+
+@workflow.defn
+class MyWorkflow:
+    @workflow.run
+    async def run(self, state: MyState) -> MyState:
+        runner = GraphRunner(graph)
+        state, _ = await runner.run(state=MyState(), inputs=None)
+        return state
 
 async def main():
     runner = GraphRunner(graph)

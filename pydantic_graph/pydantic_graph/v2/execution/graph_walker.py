@@ -37,6 +37,7 @@ class JoinItem:
     fork_stack: ForkStack
 
 
+# TODO: This class should probably just get merged with Graph
 class GraphRunner[StateT, InputT, OutputT]:
     def __init__(self, graph: Graph[StateT, InputT, OutputT]):
         self.graph = graph

@@ -38,10 +38,17 @@ AnyStepFunction = StepFunction[Any, Any, Any]
 class Step[StateT, InputT, OutputT]:
     """The main reason this is not a dataclass is that we need appropriate variance in the type parameters."""
 
-    def __init__(self, id: NodeId, call: StepFunction[StateT, InputT, OutputT], user_label: str | None = None):
+    def __init__(
+        self,
+        id: NodeId,
+        call: StepFunction[StateT, InputT, OutputT],
+        user_label: str | None = None,
+        activity: bool = False,
+    ):
         self.id = id
         self._call = call
         self.user_label = user_label
+        self.activity = activity
 
     @property
     def call(self) -> StepFunction[StateT, InputT, OutputT]:

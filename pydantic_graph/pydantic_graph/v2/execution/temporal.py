@@ -1,117 +1,123 @@
-# from __future__ import annotations
-#
-# from dataclasses import dataclass
-# from typing import TYPE_CHECKING, Any, Sequence, cast
-#
-# from temporalio import activity, workflow
-#
-# from pydantic_graph.v2.execution.graph_task import GraphTask
-# from pydantic_graph.v2.execution.graph_walker import EndMarker, GraphRunner, JoinItem
-# from pydantic_graph.v2.graph import Graph
-# from pydantic_graph.v2.step import Step, StepContext
-#
-# type ConcreteStateT = Any
-# type ConcreteDepsT = Any
-#
-#
-# @dataclass
-# class GraphWorkflowInputs[StateT, DepsT]:
-#     state: StateT
-#     deps: DepsT
-#     inputs: Any
-#
-#
-# # TODO(P1): Need to confirm if this works as a temporal workflow...
-# # TODO(P3): Implement a version that supports a dynamic graph, which would be one of the inputs.
-# #   (This is dependent on being able to serialize/deserialize the graph, but I think that should be doable as long as
-# #   nodes can be serialized/deserialized by way of references to their underlying functions, similar to how
-# #   Evaluators work.)
-# def get_temporal_stuff[StateT, DepsT, InputsT, OutputT](
-#     graph: Graph[StateT, DepsT, InputsT, OutputT],
-# ):
-#     if not TYPE_CHECKING:
-#         # Do this to ensure that we get the actual types that can be introspected for serialization/deserialization
-#         ConcreteStateT = graph.state_type
-#         ConcreteDepsT = graph.deps_type
-#
-#     # TODO: Does anything besides a Step need to be automatically-converted into an activity? (I think not.)
-#     #   Note even steps don't _need_ to be converted, it just might make things a bit more convenient.
-#     activities: list[Any] = []
-#     for node in graph.nodes:
-#         if isinstance(node, Step) and node.is_activity:
-#             original_call = node.call
-#             # TODO: Need to track input and output types for the step so that we can get proper serialization/deserialization.
-#             #  Right now this will only work if the inputs and outputs of the step are trivially serializable.
-#             @activity.defn
-#             async def node_activity(ctx: StepContext[StateT, DepsT, Any]) -> Any:
-#                 return await workflow.execute_activity(original_call, ctx)
-#             node._call = node_activity
-#             activities.append(node_activity)
-#
-#     @workflow.defn
-#     class RunGraphWorkflow:
-#         @workflow.query
-#         def get_state(self) -> ConcreteStateT:
-#             return self.state
-#
-#         # TODO: This should probably use a wrapper dataclass as input
-#         @workflow.update
-#         def set_state(self, state: ConcreteStateT) -> None:
-#             # This makes it possible to do "interrupt" workflows within nodes while relying purely on state.
-#             self.state = state
-#
-#         @workflow.run
-#         async def run(self, inputs: GraphWorkflowInputs[ConcreteStateT, ConcreteDepsT]):
-#             # Weird that this is necessary...
-#             self.state = inputs.state
-#             self.deps = inputs.deps
-#             self.inputs = inputs.inputs
-#
-#             async with GraphRunner(graph).iter(self.state, self.deps, self.inputs) as graph_run:
-#                 async for event in graph_run:
-#                     if isinstance(event, EndMarker):
-#                         return self.state, event.value
-#
-#             raise RuntimeError('Graph run did not end with an EndMarker, which is unexpected.')
-#
-#     @workflow.defn
-#     class IterGraphWorkflow:
-#         @workflow.init
-#         def __init__(self, inputs: GraphWorkflowInputs[ConcreteStateT, ConcreteDepsT]):
-#             self.state = inputs.state
-#
-#             self._next = None
-#             self._next_is_ready = True
-#
-#         @workflow.query
-#         def get_state(self) -> ConcreteStateT:
-#             return self.state
-#
-#         # TODO: This should probably use a wrapper dataclass as input
-#         @workflow.update
-#         def set_state(self, state: ConcreteStateT) -> None:
-#             self.state = state
-#
-#         # TODO: This should probably use a wrapper dataclass as input
-#         @workflow.update
-#         def next(self, value: EndMarker[OutputT] | JoinItem | Sequence[GraphTask] | None) -> None:
-#             if value is not None:
-#                 self._next = value
-#             self._next_is_ready = True
-#
-#         @workflow.run
-#         async def run(self, inputs: GraphWorkflowInputs[ConcreteStateT, ConcreteDepsT]):
-#             # Weird that this is necessary...
-#             self.state = inputs.state
-#
-#             async with GraphRunner(graph).iter(self.state, inputs.deps, inputs.inputs) as graph_run:
-#                 while True:
-#                     await workflow.wait_condition(lambda: self.waiting_for_next)
-#                     self.waiting_for_next = False
-#                     try:
-#                         self._next = await graph_run.next(self._next)
-#                     except StopAsyncIteration:
-#                         assert isinstance(self._next, EndMarker), 'Graph run did not end with an EndMarker, which is unexpected.'
-#                         return state, cast(EndMarker[OutputT], self._next).value
-#
-#     return handle_graph_node_activity, RunGraphWorkflow, IterGraphWorkflow
+from __future__ import annotations
+
+from copy import copy
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any
+
+from temporalio import activity, workflow
+
+from pydantic_graph.v2.execution.graph_walker import EndMarker, GraphRunner
+from pydantic_graph.v2.graph import Graph
+from pydantic_graph.v2.step import Step
+
+
+def get_temporal_graph[StateT, InputsT, OutputT](
+    graph: Graph[StateT, InputsT, OutputT],
+) -> tuple[Graph[StateT, InputsT, OutputT], list[Any]]:
+    new_nodes = {k: copy(v) for k, v in graph.nodes.items()}
+    activities: list[Any] = []
+    for node in new_nodes.values():
+        if isinstance(node, Step) and node.activity:
+            node_activity = activity.defn(name=f'node:{node.id}')(node.call)
+
+            async def new_node_call(ctx: Any) -> Any:
+                return await workflow.execute_activity(node_activity, ctx)  # pyright: ignore[reportUnknownMemberType]
+
+            node._call = new_node_call  # pyright: ignore[reportPrivateUsage]
+            node.activity = False  # The call no longer needs to be converted into an activity
+            activities.append(node_activity)
+
+    new_graph = Graph(
+        state_type=graph.state_type,
+        input_type=graph.input_type,
+        output_type=graph.output_type,
+        nodes=new_nodes,
+        edges_by_source=graph.edges_by_source,
+        parent_forks=graph.parent_forks,
+    )
+    return new_graph, activities
+
+
+type ConcreteStateT = Any
+type ConcreteGraphInputT = Any
+type ConcreteGraphOutputT = Any
+
+
+@dataclass
+class GraphWorkflowInputs[StateT, InputT]:
+    state: StateT
+    inputs: InputT
+
+
+# TODO(P3): Implement a version that supports a dynamic graph, which would be one of the inputs.
+#  (This would depend on only making use of serializable nodes, e.g. dataclasses, along with an appropriate loader.)
+def get_simple_workflow[StateT, InputsT, OutputT](graph: Graph[StateT, InputsT, OutputT]):
+    if not TYPE_CHECKING:
+        # Do this to ensure that we get the actual types that can be introspected for serialization/deserialization
+        ConcreteStateT = graph.state_type
+        ConcreteGraphInputT = graph.input_type
+        ConcreteGraphOutputT = graph.output_type
+
+    # Some simple example workflows; you can do whatever you want with the graph
+    @workflow.defn
+    class RunGraphWorkflow:
+        @workflow.init
+        def __init__(self, inputs: GraphWorkflowInputs[ConcreteStateT, ConcreteGraphInputT]):
+            self.state = inputs.state
+            self.inputs = inputs.inputs
+
+        @workflow.run
+        async def run(self, inputs: GraphWorkflowInputs[ConcreteStateT, ConcreteGraphInputT]):
+            self.state = inputs.state
+            self.inputs = inputs.inputs
+
+            async with GraphRunner(graph).iter(self.state, self.inputs) as graph_run:
+                async for event in graph_run:
+                    if isinstance(event, EndMarker):
+                        return self.state, event.value
+
+            raise RuntimeError('Graph run did not end with an EndMarker, which is unexpected.')
+
+    return RunGraphWorkflow
+
+    # @workflow.defn
+    # class IterGraphWorkflow:
+    #     @workflow.init
+    #     def __init__(self, inputs: GraphWorkflowInputs[ConcreteStateT, ConcreteDepsT]):
+    #         self.state = inputs.state
+    #
+    #         self._next = None
+    #         self._next_is_ready = True
+    #
+    #     @workflow.query
+    #     def get_state(self) -> ConcreteStateT:
+    #         return self.state
+    #
+    #     # TODO: This should probably use a wrapper dataclass as input
+    #     @workflow.update
+    #     def set_state(self, state: ConcreteStateT) -> None:
+    #         self.state = state
+    #
+    #     # TODO: This should probably use a wrapper dataclass as input
+    #     @workflow.update
+    #     def next(self, value: EndMarker[OutputT] | JoinItem | Sequence[GraphTask] | None) -> None:
+    #         if value is not None:
+    #             self._next = value
+    #         self._next_is_ready = True
+    #
+    #     @workflow.run
+    #     async def run(self, inputs: GraphWorkflowInputs[ConcreteStateT, ConcreteDepsT]):
+    #         # Weird that this is necessary...
+    #         self.state = inputs.state
+    #
+    #         async with GraphRunner(graph).iter(self.state, inputs.deps, inputs.inputs) as graph_run:
+    #             while True:
+    #                 await workflow.wait_condition(lambda: self.waiting_for_next)
+    #                 self.waiting_for_next = False
+    #                 try:
+    #                     self._next = await graph_run.next(self._next)
+    #                 except StopAsyncIteration:
+    #                     assert isinstance(self._next, EndMarker), 'Graph run did not end with an EndMarker, which is unexpected.'
+    #                     return state, cast(EndMarker[OutputT], self._next).value
+
+    # return handle_graph_node_activity, RunGraphWorkflow, IterGraphWorkflow

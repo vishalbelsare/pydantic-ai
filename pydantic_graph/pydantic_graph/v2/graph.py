@@ -39,6 +39,7 @@ def step[StateT, InputT, OutputT](
     *,
     node_id: str | None = None,
     label: str | None = None,
+    activity: bool = False,
 ) -> Callable[[StepFunction[StateT, InputT, OutputT]], Step[StateT, InputT, OutputT]]: ...
 @overload
 def step[StateT, InputT, OutputT](
@@ -46,25 +47,27 @@ def step[StateT, InputT, OutputT](
     *,
     node_id: str | None = None,
     label: str | None = None,
+    activity: bool = False,
 ) -> Step[StateT, InputT, OutputT]: ...
 def step[StateT, InputT, OutputT](
     call: StepFunction[StateT, InputT, OutputT] | None = None,
     *,
     node_id: str | None = None,
     label: str | None = None,
+    activity: bool = False,
 ) -> Step[StateT, InputT, OutputT] | Callable[[StepFunction[StateT, InputT, OutputT]], Step[StateT, InputT, OutputT]]:
     if call is None:
 
         def decorator(
             func: StepFunction[StateT, InputT, OutputT],
         ) -> Step[StateT, InputT, OutputT]:
-            return step(call=func, node_id=node_id, label=label)
+            return step(call=func, node_id=node_id, label=label, activity=activity)
 
         return decorator
 
     node_id = node_id or get_callable_name(call)
 
-    return Step[StateT, InputT, OutputT](id=NodeId(node_id), call=call, user_label=label)
+    return Step[StateT, InputT, OutputT](id=NodeId(node_id), call=call, user_label=label, activity=activity)
 
 
 @overload

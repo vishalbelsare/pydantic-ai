@@ -25,11 +25,11 @@ class MyState:
     container: MyContainer[Any] | None = None
 
 
-g = GraphBuilder(state_type=MyState, deps_type=NoneType, input_type=NoneType, output_type=NoneType)
+g = GraphBuilder(state_type=MyState, input_type=NoneType, output_type=NoneType)
 
 
 @g.step
-async def choose_type(ctx: StepContext[MyState, object, object]) -> Literal['int', 'str']:
+async def choose_type(ctx: StepContext[MyState, object]) -> Literal['int', 'str']:
     chosen_type = int if random.random() < 0.5 else str
     state = ctx.state
     state.type_name = chosen_type.__name__
@@ -38,17 +38,17 @@ async def choose_type(ctx: StepContext[MyState, object, object]) -> Literal['int
 
 
 @g.step
-async def handle_int(ctx: StepContext[object, object, object]) -> None:
+async def handle_int(ctx: StepContext[object, object]) -> None:
     pass
 
 
 @g.step
-async def handle_str(ctx: StepContext[object, object, object]) -> None:
+async def handle_str(ctx: StepContext[object, object]) -> None:
     pass
 
 
 @g.step
-async def handle_int_1(ctx: StepContext[MyState, object, object]) -> None:
+async def handle_int_1(ctx: StepContext[MyState, object]) -> None:
     print('start int 1')
     await asyncio.sleep(1)
     assert ctx.state.container is not None
@@ -57,7 +57,7 @@ async def handle_int_1(ctx: StepContext[MyState, object, object]) -> None:
 
 
 @g.step
-async def handle_int_2(ctx: StepContext[MyState, object, object]) -> None:
+async def handle_int_2(ctx: StepContext[MyState, object]) -> None:
     print('start int 2')
     await asyncio.sleep(1)
     assert ctx.state.container is not None
@@ -67,7 +67,7 @@ async def handle_int_2(ctx: StepContext[MyState, object, object]) -> None:
 
 @g.step
 async def handle_int_3(
-    ctx: StepContext[MyState, object, object],
+    ctx: StepContext[MyState, object],
 ) -> list[int]:
     print('start int 3')
     await asyncio.sleep(1)
@@ -78,7 +78,7 @@ async def handle_int_3(
 
 
 @g.step
-async def handle_str_1(ctx: StepContext[MyState, object, object]) -> None:
+async def handle_str_1(ctx: StepContext[MyState, object]) -> None:
     print('start str 1')
     await asyncio.sleep(1)
     assert ctx.state.container is not None
@@ -87,7 +87,7 @@ async def handle_str_1(ctx: StepContext[MyState, object, object]) -> None:
 
 
 @g.step
-async def handle_str_2(ctx: StepContext[MyState, object, object]) -> None:
+async def handle_str_2(ctx: StepContext[MyState, object]) -> None:
     print('start str 2')
     await asyncio.sleep(1)
     assert ctx.state.container is not None
@@ -97,7 +97,7 @@ async def handle_str_2(ctx: StepContext[MyState, object, object]) -> None:
 
 @g.step
 async def handle_str_3(
-    ctx: StepContext[MyState, object, object],
+    ctx: StepContext[MyState, object],
 ) -> Iterable[str]:
     print('start str 3')
     await asyncio.sleep(1)
@@ -108,7 +108,7 @@ async def handle_str_3(
 
 
 @g.step(node_id='handle_field_3_item')
-async def handle_field_3_item(ctx: StepContext[MyState, object, int | str]) -> None:
+async def handle_field_3_item(ctx: StepContext[MyState, int | str]) -> None:
     inputs = ctx.inputs
     print(f'handle_field_3_item: {inputs}')
     await asyncio.sleep(0.25)
@@ -144,7 +144,7 @@ print('----------')
 
 async def main():
     runner = GraphRunner(graph)
-    state, result = await runner.run(state=MyState(), deps=None, inputs=None)
+    state, result = await runner.run(state=MyState(), inputs=None)
 
     print('-')
     print(f'{result=}')

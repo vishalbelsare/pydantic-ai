@@ -13,7 +13,7 @@ from pydantic_graph.v2.decision import Decision
 from pydantic_graph.v2.execution.graph_task import GraphTask
 from pydantic_graph.v2.graph import Graph
 from pydantic_graph.v2.id_types import ForkStack, ForkStackItem, GraphRunId, JoinId, NodeRunId, TaskId
-from pydantic_graph.v2.join import Join, Reducer, ReducerContext
+from pydantic_graph.v2.join import Join, Reducer
 from pydantic_graph.v2.node import (
     EndNode,
     Fork,
@@ -37,15 +37,15 @@ class JoinItem:
     fork_stack: ForkStack
 
 
-class GraphRunner[StateT, DepsT, InputT, OutputT]:
-    def __init__(self, graph: Graph[StateT, DepsT, InputT, OutputT]):
+class GraphRunner[StateT, InputT, OutputT]:
+    def __init__(self, graph: Graph[StateT, InputT, OutputT]):
         self.graph = graph
 
-    async def run(self, state: StateT, deps: DepsT, inputs: InputT) -> tuple[StateT, OutputT]:
-        async with self.iter(state, deps, inputs) as graph_run:
-            # TODO: This would probably be better using `async for _ in graph_run`, but this tests the `next` method,
-            #  which I'm less confident will be implemented correctly if not used on the critical path. We can change it
-            #  once we have tests, etc.
+    async def run(self, state: StateT, inputs: InputT) -> tuple[StateT, OutputT]:
+        async with self.iter(state, inputs) as graph_run:
+            # Note: This would probably be better using `async for _ in graph_run`, but this tests the `next` method,
+            # which I'm less confident will be implemented correctly if not used on the critical path. We can change it
+            # once we have tests, etc.
             event: Any = None
             while True:
                 try:
@@ -55,25 +55,24 @@ class GraphRunner[StateT, DepsT, InputT, OutputT]:
                     return state, cast(EndMarker[OutputT], event).value
 
     @asynccontextmanager
-    async def iter(self, state: StateT, deps: DepsT, inputs: InputT) -> AsyncIterator[GraphRun[StateT, DepsT, OutputT]]:
-        yield GraphRun[StateT, DepsT, OutputT](
+    async def iter(self, state: StateT, inputs: InputT) -> AsyncIterator[GraphRun[StateT, OutputT]]:
+        yield GraphRun[StateT, OutputT](
             graph=self.graph,
             initial_state=state,
-            deps=deps,
             inputs=inputs,
         )
 
 
-class GraphRun[StateT, DepsT, OutputT]:
+class GraphRun[StateT, OutputT]:
     def __init__(
         self,
-        graph: Graph[StateT, DepsT, Any, OutputT],
+        graph: Graph[StateT, Any, OutputT],
         initial_state: StateT,
-        deps: DepsT,
         inputs: Any,
     ):
+        self._graph = graph
         self._next: EndMarker[OutputT] | JoinItem | Sequence[GraphTask] | None = None
-        self._iterator = _iter(graph, initial_state, deps, inputs)
+        self._iterator = _iter_graph(graph, initial_state, inputs)
 
     def __aiter__(self) -> AsyncIterator[EndMarker[OutputT] | JoinItem | Sequence[GraphTask]]:
         return self
@@ -94,12 +93,8 @@ class GraphRun[StateT, DepsT, OutputT]:
         return await self.__anext__()
 
 
-# TODO: Need to implement some pattern for stream handling that works.
-#  I think it will be fine with channels in deps in the in-memory case; in the temporal case, you'll just need to
-#  pass the relevant channel-building configuration (e.g., for a redis streams connection or similar) through
-#  (serializable) deps.
-async def _iter[StateT, DepsT, InputsT, OutputT](
-    graph: Graph[StateT, DepsT, InputsT, OutputT], state: StateT, deps: DepsT, inputs: InputsT
+async def _iter_graph[StateT, InputsT, OutputT](
+    graph: Graph[StateT, InputsT, OutputT], state: StateT, inputs: InputsT
 ) -> AsyncGenerator[
     EndMarker[OutputT] | JoinItem | Sequence[GraphTask], EndMarker[OutputT] | JoinItem | Sequence[GraphTask]
 ]:
@@ -110,13 +105,13 @@ async def _iter[StateT, DepsT, InputsT, OutputT](
 
     tasks_by_id = {start_task.task_id: start_task}
     pending: set[asyncio.Task[EndMarker[OutputT] | JoinItem | Sequence[GraphTask]]] = {
-        asyncio.create_task(_handle_task(graph, state, deps, start_task), name=start_task.task_id)
+        asyncio.create_task(_handle_task(graph, state, start_task), name=start_task.task_id)
     }
 
-    def _start_task(t: GraphTask) -> None:
+    def _start_task(t_: GraphTask) -> None:
         """Helper function to start a new task while doing all necessary tracking."""
-        tasks_by_id[t.task_id] = t
-        pending.add(asyncio.create_task(_handle_task(graph, state, deps, t), name=t.task_id))
+        tasks_by_id[t_.task_id] = t_
+        pending.add(asyncio.create_task(_handle_task(graph, state, t_), name=t_.task_id))
 
     active_reducers: dict[tuple[JoinId, NodeRunId], Reducer[Any, Any, Any]] = {}
 
@@ -140,14 +135,10 @@ async def _iter[StateT, DepsT, InputsT, OutputT](
                 if reducer is None:
                     join_node = graph.nodes[result.join_id]
                     assert isinstance(join_node, Join)
-                    # Note: if we wanted to access `state` in the ReducerContext, we'd need reducing to be an activity in temporal
-                    # That might be reasonable, but things seem simpler like this, and it seems maybe unnecessary
-                    reducer = join_node.create_reducer(ReducerContext(None, result.inputs))
+                    reducer = join_node.create_reducer(StepContext(None, result.inputs))
                     active_reducers[(result.join_id, fork_run_id)] = reducer
                 else:
-                    # Note: if we wanted to access `state` in the ReducerContext, we'd need reducing to be an activity in temporal
-                    # That might be reasonable, but things seem simpler like this, and it seems maybe unnecessary
-                    reducer.reduce(ReducerContext(None, result.inputs))
+                    reducer.reduce(StepContext(None, result.inputs))
             else:
                 for new_task in result:
                     _start_task(new_task)
@@ -157,11 +148,10 @@ async def _iter[StateT, DepsT, InputsT, OutputT](
             ):
                 reducer = active_reducers.pop((join_id, fork_run_id))
 
-                ctx = ReducerContext(None, None)
-                output = reducer.finalize(ctx)
+                output = reducer.finalize(StepContext(None, None))
                 join_node = graph.nodes[join_id]
                 assert isinstance(join_node, Join)  # We could drop this but if it fails it means there is a bug.
-                new_tasks = _handle_edges(graph, join_node, output, fork_stack)
+                new_tasks = _handle_edges(graph, join_node, state, output, fork_stack)
                 for new_task in new_tasks:
                     _start_task(new_task)
 
@@ -170,10 +160,9 @@ async def _iter[StateT, DepsT, InputsT, OutputT](
     )
 
 
-async def _handle_task[StateT, DepsT, OutputT](
-    graph: Graph[StateT, DepsT, Any, OutputT],
+async def _handle_task[StateT, OutputT](
+    graph: Graph[StateT, Any, OutputT],
     state: StateT,
-    deps: DepsT,
     task: GraphTask,
 ) -> Sequence[GraphTask] | JoinItem | EndMarker[OutputT]:
     node_id = task.node_id
@@ -182,23 +171,23 @@ async def _handle_task[StateT, DepsT, OutputT](
 
     node = graph.nodes[node_id]
     if isinstance(node, (StartNode, Fork)):
-        return _handle_edges(graph, node, inputs, fork_stack)
+        return _handle_edges(graph, node, state, inputs, fork_stack)
     elif isinstance(node, Step):
-        step_context = StepContext[StateT, DepsT, Any](state, deps, inputs)
+        step_context = StepContext[StateT, Any](state, inputs)
         output = await node.call(step_context)
-        return _handle_edges(graph, node, output, fork_stack)
+        return _handle_edges(graph, node, state, output, fork_stack)
     elif isinstance(node, Join):
         return JoinItem(node_id, inputs, fork_stack)
     elif isinstance(node, Decision):
-        return _handle_decision(graph, node, inputs, fork_stack)
+        return _handle_decision(graph, node, state, inputs, fork_stack)
     elif isinstance(node, EndNode):
         return EndMarker(inputs)
     else:
         assert_never(node)
 
 
-def _handle_decision[StateT, DepsT](
-    graph: Graph[StateT, DepsT, Any, Any], decision: Decision[StateT, DepsT, Any], inputs: Any, fork_stack: ForkStack
+def _handle_decision[StateT](
+    graph: Graph[StateT, Any, Any], decision: Decision[StateT, Any], state: Any, inputs: Any, fork_stack: ForkStack
 ) -> Sequence[GraphTask]:
     for branch in decision.branches:
         match_tester = branch.matches
@@ -218,13 +207,13 @@ def _handle_decision[StateT, DepsT](
                     raise RuntimeError(f'Decision branch source {branch_source} is not a valid type.') from e
 
         if inputs_match:
-            return _handle_path(graph, branch.path, inputs, fork_stack)
+            return _handle_path(graph, branch.path, state, inputs, fork_stack)
 
     raise RuntimeError(f'No branch matched inputs {inputs} for decision node {decision}.')
 
 
 def _get_completed_fork_runs(
-    graph: Graph[Any, Any, Any, Any],
+    graph: Graph[Any, Any, Any],
     t: GraphTask,
     active_tasks: Iterable[GraphTask],
     reducers_keys: Iterable[tuple[JoinId, NodeRunId]],
@@ -246,7 +235,7 @@ def _get_completed_fork_runs(
 
 
 def _handle_path(
-    graph: Graph[Any, Any, Any, Any], path: Path, inputs: Any, fork_stack: ForkStack
+    graph: Graph[Any, Any, Any], path: Path, state: Any, inputs: Any, fork_stack: ForkStack
 ) -> Sequence[GraphTask]:
     if not path.items:
         return []
@@ -263,32 +252,28 @@ def _handle_path(
     elif isinstance(item, BroadcastMarker):
         return [GraphTask(item.fork_id, inputs, fork_stack)]
     elif isinstance(item, TransformMarker):
-        # TODO(P1): Transforms need to become (anonymous) nodes so that we can do this as a node.
-        raise NotImplementedError
-        # state = await self.run_api.get_immutable_state()
-        # ctx = TransformContext(state, self.deps, inputs)
-        # inputs = item.transform(ctx)
-        # return self._handle_path(path.next_path, inputs, fork_stack)
+        inputs = item.transform(StepContext(state, inputs))
+        return _handle_path(graph, path.next_path, state, inputs, fork_stack)
     elif isinstance(item, LabelMarker):
-        return _handle_path(graph, path.next_path, inputs, fork_stack)
+        return _handle_path(graph, path.next_path, state, inputs, fork_stack)
     else:
         assert_never(item)
 
 
 def _handle_edges(
-    graph: Graph[Any, Any, Any, Any], node: AnyNode, inputs: Any, fork_stack: ForkStack
+    graph: Graph[Any, Any, Any], node: AnyNode, state: Any, inputs: Any, fork_stack: ForkStack
 ) -> Sequence[GraphTask]:
     edges = graph.edges_by_source.get(node.id, [])
     assert len(edges) == 1 or isinstance(node, Fork)  # this should have already been ensured during graph building
 
     new_tasks: list[GraphTask] = []
     for path in edges:
-        new_tasks.extend(_handle_path(graph, path, inputs, fork_stack))
+        new_tasks.extend(_handle_path(graph, path, state, inputs, fork_stack))
     return new_tasks
 
 
 def _is_fork_run_completed(
-    graph: Graph[Any, Any, Any, Any], tasks: Iterable[GraphTask], join_id: JoinId, fork_run_id: NodeRunId
+    graph: Graph[Any, Any, Any], tasks: Iterable[GraphTask], join_id: JoinId, fork_run_id: NodeRunId
 ) -> bool:
     # Check if any of the tasks in the graph have this fork_run_id in their fork_stack
     # If this is the case, then the fork run is not yet completed

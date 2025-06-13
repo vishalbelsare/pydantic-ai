@@ -29,68 +29,65 @@ from pydantic_graph.v2.paths import (
     PathBuilder,
     SpreadMarker,
 )
-from pydantic_graph.v2.step import Step, StepCallProtocol
+from pydantic_graph.v2.step import Step, StepFunction
 from pydantic_graph.v2.util import TypeOrTypeExpression, get_callable_name, unpack_type_expression
 
 
 # Node building:
 @overload
-def step[StateT, DepsT, InputT, OutputT](
+def step[StateT, InputT, OutputT](
     *,
     node_id: str | None = None,
     label: str | None = None,
-) -> Callable[[StepCallProtocol[StateT, DepsT, InputT, OutputT]], Step[StateT, DepsT, InputT, OutputT]]: ...
+) -> Callable[[StepFunction[StateT, InputT, OutputT]], Step[StateT, InputT, OutputT]]: ...
 @overload
-def step[StateT, DepsT, InputT, OutputT](
-    call: StepCallProtocol[StateT, DepsT, InputT, OutputT],
+def step[StateT, InputT, OutputT](
+    call: StepFunction[StateT, InputT, OutputT],
     *,
     node_id: str | None = None,
     label: str | None = None,
-) -> Step[StateT, DepsT, InputT, OutputT]: ...
-def step[StateT, DepsT, InputT, OutputT](
-    call: StepCallProtocol[StateT, DepsT, InputT, OutputT] | None = None,
+) -> Step[StateT, InputT, OutputT]: ...
+def step[StateT, InputT, OutputT](
+    call: StepFunction[StateT, InputT, OutputT] | None = None,
     *,
     node_id: str | None = None,
     label: str | None = None,
-) -> (
-    Step[StateT, DepsT, InputT, OutputT]
-    | Callable[[StepCallProtocol[StateT, DepsT, InputT, OutputT]], Step[StateT, DepsT, InputT, OutputT]]
-):
+) -> Step[StateT, InputT, OutputT] | Callable[[StepFunction[StateT, InputT, OutputT]], Step[StateT, InputT, OutputT]]:
     if call is None:
 
         def decorator(
-            func: StepCallProtocol[StateT, DepsT, InputT, OutputT],
-        ) -> Step[StateT, DepsT, InputT, OutputT]:
+            func: StepFunction[StateT, InputT, OutputT],
+        ) -> Step[StateT, InputT, OutputT]:
             return step(call=func, node_id=node_id, label=label)
 
         return decorator
 
     node_id = node_id or get_callable_name(call)
 
-    return Step[StateT, DepsT, InputT, OutputT](id=NodeId(node_id), call=call, user_label=label)
+    return Step[StateT, InputT, OutputT](id=NodeId(node_id), call=call, user_label=label)
 
 
 @overload
-def join[StateT, DepsT, InputT, OutputT](
+def join[StateT, InputT, OutputT](
     *,
     node_id: str | None = None,
-) -> Callable[[type[Reducer[DepsT, InputT, OutputT]]], Join[DepsT, InputT, OutputT]]: ...
+) -> Callable[[type[Reducer[StateT, InputT, OutputT]]], Join[StateT, InputT, OutputT]]: ...
 @overload
-def join[StateT, DepsT, InputT, OutputT](
-    reducer_type: type[Reducer[DepsT, InputT, OutputT]],
+def join[StateT, InputT, OutputT](
+    reducer_type: type[Reducer[StateT, InputT, OutputT]],
     *,
     node_id: str | None = None,
-) -> Join[DepsT, InputT, OutputT]: ...
-def join[StateT, DepsT](
-    reducer_type: type[Reducer[DepsT, Any, Any]] | None = None,
+) -> Join[StateT, InputT, OutputT]: ...
+def join[StateT](
+    reducer_type: type[Reducer[StateT, Any, Any]] | None = None,
     *,
     node_id: str | None = None,
-) -> Join[DepsT, Any, Any] | Callable[[type[Reducer[DepsT, Any, Any]]], Join[DepsT, Any, Any]]:
+) -> Join[StateT, Any, Any] | Callable[[type[Reducer[StateT, Any, Any]]], Join[StateT, Any, Any]]:
     if reducer_type is None:
 
         def decorator(
-            reducer_type: type[Reducer[DepsT, Any, Any]],
-        ) -> Join[DepsT, Any, Any]:
+            reducer_type: type[Reducer[StateT, Any, Any]],
+        ) -> Join[StateT, Any, Any]:
             return join(reducer_type=reducer_type, node_id=node_id)
 
         return decorator
@@ -98,16 +95,15 @@ def join[StateT, DepsT](
     # TODO(P3): Ideally we'd be able to infer this from the parent frame variable assignment or similar
     node_id = node_id or get_callable_name(reducer_type)
 
-    return Join[DepsT, Any, Any](
+    return Join[StateT, Any, Any](
         id=JoinId(NodeId(node_id)),
         reducer_type=reducer_type,
     )
 
 
 @dataclass
-class GraphBuilder[StateT, DepsT, GraphInputT, GraphOutputT]:
+class GraphBuilder[StateT, GraphInputT, GraphOutputT]:
     state_type: TypeOrTypeExpression[StateT]
-    deps_type: TypeOrTypeExpression[DepsT]
     input_type: TypeOrTypeExpression[GraphInputT]
     output_type: TypeOrTypeExpression[GraphOutputT]
 
@@ -117,8 +113,8 @@ class GraphBuilder[StateT, DepsT, GraphInputT, GraphOutputT]:
     _edges_by_source: dict[NodeId, list[Path]] = field(init=False, default_factory=lambda: defaultdict(list))
     _decision_index: int = field(init=False, default=1)
 
-    type Source[OutputT] = SourceNode[StateT, DepsT, OutputT]
-    type Destination[InputT] = DestinationNode[StateT, DepsT, InputT]
+    type Source[OutputT] = SourceNode[StateT, OutputT]
+    type Destination[InputT] = DestinationNode[StateT, InputT]
 
     def __post_init__(self):
         self._start_node = StartNode[GraphInputT]()
@@ -139,24 +135,23 @@ class GraphBuilder[StateT, DepsT, GraphInputT, GraphOutputT]:
         *,
         node_id: str | None = None,
         label: str | None = None,
-    ) -> Callable[[StepCallProtocol[StateT, DepsT, InputT, OutputT]], Step[StateT, DepsT, InputT, OutputT]]: ...
+    ) -> Callable[[StepFunction[StateT, InputT, OutputT]], Step[StateT, InputT, OutputT]]: ...
     @overload
     def step[InputT, OutputT](
         self,
-        call: StepCallProtocol[StateT, DepsT, InputT, OutputT],
+        call: StepFunction[StateT, InputT, OutputT],
         *,
         node_id: str | None = None,
         label: str | None = None,
-    ) -> Step[StateT, DepsT, InputT, OutputT]: ...
+    ) -> Step[StateT, InputT, OutputT]: ...
     def step[InputT, OutputT](
         self,
-        call: StepCallProtocol[StateT, DepsT, InputT, OutputT] | None = None,
+        call: StepFunction[StateT, InputT, OutputT] | None = None,
         *,
         node_id: str | None = None,
         label: str | None = None,
     ) -> (
-        Step[StateT, DepsT, InputT, OutputT]
-        | Callable[[StepCallProtocol[StateT, DepsT, InputT, OutputT]], Step[StateT, DepsT, InputT, OutputT]]
+        Step[StateT, InputT, OutputT] | Callable[[StepFunction[StateT, InputT, OutputT]], Step[StateT, InputT, OutputT]]
     ):
         if call is None:
             return step(node_id=node_id, label=label)
@@ -168,27 +163,27 @@ class GraphBuilder[StateT, DepsT, GraphInputT, GraphOutputT]:
         self,
         *,
         node_id: str | None = None,
-    ) -> Callable[[type[Reducer[DepsT, InputT, OutputT]]], Join[DepsT, InputT, OutputT]]: ...
+    ) -> Callable[[type[Reducer[StateT, InputT, OutputT]]], Join[StateT, InputT, OutputT]]: ...
     @overload
     def join[InputT, OutputT](
         self,
-        reducer_factory: type[Reducer[DepsT, InputT, OutputT]],
+        reducer_factory: type[Reducer[StateT, InputT, OutputT]],
         *,
         node_id: str | None = None,
-    ) -> Join[DepsT, InputT, OutputT]: ...
+    ) -> Join[StateT, InputT, OutputT]: ...
     def join(
         self,
-        reducer_factory: type[Reducer[DepsT, Any, Any]] | None = None,
+        reducer_factory: type[Reducer[StateT, Any, Any]] | None = None,
         *,
         node_id: str | None = None,
-    ) -> Join[DepsT, Any, Any] | Callable[[type[Reducer[DepsT, Any, Any]]], Join[DepsT, Any, Any]]:
+    ) -> Join[StateT, Any, Any] | Callable[[type[Reducer[StateT, Any, Any]]], Join[StateT, Any, Any]]:
         if reducer_factory is None:
             return join(node_id=node_id)
         else:
             return join(reducer_type=reducer_factory, node_id=node_id)
 
     # Edge building
-    def add(self, *edges: EdgePath[StateT, DepsT]) -> None:
+    def add(self, *edges: EdgePath[StateT]) -> None:
         def _handle_path(p: Path):
             for item in p.items:
                 if isinstance(item, BroadcastMarker):
@@ -236,14 +231,10 @@ class GraphBuilder[StateT, DepsT, GraphInputT, GraphOutputT]:
     # TODO(P2): Support adding subgraphs ... not sure exactly what that looks like yet..
     #  probably similar to a step, but with some tweaks
 
-    def edge_from[SourceOutputT](
-        self, *sources: Source[SourceOutputT]
-    ) -> EdgePathBuilder[StateT, DepsT, SourceOutputT]:
-        return EdgePathBuilder[StateT, DepsT, SourceOutputT](
-            sources=sources, path_builder=PathBuilder(working_items=[])
-        )
+    def edge_from[SourceOutputT](self, *sources: Source[SourceOutputT]) -> EdgePathBuilder[StateT, SourceOutputT]:
+        return EdgePathBuilder[StateT, SourceOutputT](sources=sources, path_builder=PathBuilder(working_items=[]))
 
-    def decision(self, *, note: str | None = None) -> Decision[StateT, DepsT, Never]:
+    def decision(self, *, note: str | None = None) -> Decision[StateT, Never]:
         return Decision(id=NodeId(self._get_new_decision_id()), branches=[], note=note)
 
     def match[SourceT](
@@ -251,10 +242,10 @@ class GraphBuilder[StateT, DepsT, GraphInputT, GraphOutputT]:
         source: TypeOrTypeExpression[SourceT],
         *,
         matches: Callable[[Any], bool] | None = None,
-    ) -> DecisionBranchBuilder[StateT, DepsT, SourceT, SourceT, Never]:
+    ) -> DecisionBranchBuilder[StateT, SourceT, SourceT, Never]:
         node_id = NodeId(self._get_new_decision_id())
-        decision = Decision[StateT, DepsT, Never](node_id, branches=[], note=None)
-        new_path_builder = PathBuilder[StateT, DepsT, SourceT](working_items=[])
+        decision = Decision[StateT, Never](node_id, branches=[], note=None)
+        new_path_builder = PathBuilder[StateT, SourceT](working_items=[])
         return DecisionBranchBuilder(decision=decision, source=source, matches=matches, path_builder=new_path_builder)
 
     # Helpers
@@ -300,7 +291,7 @@ class GraphBuilder[StateT, DepsT, GraphInputT, GraphOutputT]:
         return node_id
 
     # Graph building
-    def build(self) -> Graph[StateT, DepsT, GraphInputT, GraphOutputT]:
+    def build(self) -> Graph[StateT, GraphInputT, GraphOutputT]:
         # TODO(P2): Warn/error if there is no start node / edges, or end node / edges
         # TODO(P2): Warn/error if the graph is not connected
         # TODO(P2): Warn/error if any non-End node is a dead end
@@ -313,9 +304,8 @@ class GraphBuilder[StateT, DepsT, GraphInputT, GraphOutputT]:
         nodes, edges_by_source = _normalize_forks(nodes, edges_by_source)
         parent_forks = _collect_dominating_forks(nodes, edges_by_source)
 
-        return Graph[StateT, DepsT, GraphInputT, GraphOutputT](
+        return Graph[StateT, GraphInputT, GraphOutputT](
             state_type=unpack_type_expression(self.state_type),
-            deps_type=unpack_type_expression(self.deps_type),
             input_type=unpack_type_expression(self.input_type),
             output_type=unpack_type_expression(self.output_type),
             nodes=nodes,
@@ -429,9 +419,8 @@ def _collect_dominating_forks(
 
 
 @dataclass(repr=False)
-class Graph[StateT, DepsT, InputT, OutputT]:
+class Graph[StateT, InputT, OutputT]:
     state_type: type[StateT]
-    deps_type: type[DepsT]
     input_type: type[InputT]
     output_type: type[OutputT]
 
@@ -451,8 +440,6 @@ class Graph[StateT, DepsT, InputT, OutputT]:
 
     def render(self, *, title: str | None = None, direction: StateDiagramDirection | None = None) -> str:
         return build_mermaid_graph(self).render(title=title, direction=direction)
-
-    # TODO(P2): Should we re-add a `run` method that just uses a default global GraphRunner?
 
     def __repr__(self):
         return self.render()

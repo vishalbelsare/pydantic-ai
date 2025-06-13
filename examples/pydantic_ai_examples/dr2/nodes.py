@@ -73,7 +73,7 @@ class Prompt[InputT, OutputT]:
             instructions=instructions,
         )
 
-    async def __call__(self, ctx: StepContext[Any, Any, InputT]) -> OutputT:
+    async def __call__(self, ctx: StepContext[Any, InputT]) -> OutputT:
         result = self.agent.run_sync(to_json(ctx.inputs, indent=2).decode())
         output = result.output
         if self.output_transform:

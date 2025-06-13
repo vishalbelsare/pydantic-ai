@@ -45,7 +45,7 @@ class MermaidEdge:
     label: str | None
 
 
-def build_mermaid_graph(graph: Graph[Any, Any, Any, Any]) -> MermaidGraph:
+def build_mermaid_graph(graph: Graph[Any, Any, Any]) -> MermaidGraph:
     nodes: list[MermaidNode] = []
     edges_by_source: dict[str, list[MermaidEdge]] = defaultdict(list)
 

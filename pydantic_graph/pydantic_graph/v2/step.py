@@ -1,28 +1,43 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable
-from typing import Protocol, Any
+from dataclasses import dataclass
+from typing import Protocol, Any, TYPE_CHECKING, Generic
+
+from typing_extensions import TypeVar
 
 from pydantic_graph.v2.id_types import NodeId
 
+StateT = TypeVar('StateT', infer_variance=True)
+InputT = TypeVar('InputT', infer_variance=True)
 
-class StepContext[StateT, InputT]:
+
+class StepContext(Generic[StateT, InputT]):
     """The main reason this is not a dataclass is that we need it to be covariant in its type parameters."""
 
-    def __init__(self, state: StateT, inputs: InputT):
-        self._state = state
-        self._inputs = inputs
+    if TYPE_CHECKING:
 
-    @property
-    def state(self) -> StateT:
-        return self._state
+        def __init__(self, state: StateT, inputs: InputT):
+            self._state = state
+            self._inputs = inputs
 
-    @property
-    def inputs(self) -> InputT:
-        return self._inputs
+        @property
+        def state(self) -> StateT:
+            return self._state
+
+        @property
+        def inputs(self) -> InputT:
+            return self._inputs
+    else:
+        state: StateT
+        inputs: InputT
 
     def __repr__(self):
         return f'{self.__class__.__name__}(inputs={self.inputs})'
+
+
+if not TYPE_CHECKING:
+    StepContext = dataclass(StepContext)
 
 
 class StepFunction[StateT, InputT, OutputT](Protocol):

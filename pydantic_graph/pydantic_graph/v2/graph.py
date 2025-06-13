@@ -138,6 +138,7 @@ class GraphBuilder[StateT, GraphInputT, GraphOutputT]:
         *,
         node_id: str | None = None,
         label: str | None = None,
+        activity: bool = False,
     ) -> Callable[[StepFunction[StateT, InputT, OutputT]], Step[StateT, InputT, OutputT]]: ...
     @overload
     def step[InputT, OutputT](
@@ -146,6 +147,7 @@ class GraphBuilder[StateT, GraphInputT, GraphOutputT]:
         *,
         node_id: str | None = None,
         label: str | None = None,
+        activity: bool = False,
     ) -> Step[StateT, InputT, OutputT]: ...
     def step[InputT, OutputT](
         self,
@@ -153,13 +155,14 @@ class GraphBuilder[StateT, GraphInputT, GraphOutputT]:
         *,
         node_id: str | None = None,
         label: str | None = None,
+        activity: bool = False,
     ) -> (
         Step[StateT, InputT, OutputT] | Callable[[StepFunction[StateT, InputT, OutputT]], Step[StateT, InputT, OutputT]]
     ):
         if call is None:
-            return step(node_id=node_id, label=label)
+            return step(node_id=node_id, label=label, activity=activity)
         else:
-            return step(call=call, node_id=node_id, label=label)
+            return step(call=call, node_id=node_id, label=label, activity=activity)
 
     @overload
     def join[InputT, OutputT](
@@ -399,9 +402,6 @@ def _collect_dominating_forks(
             for path in graph_edges_by_source.get(source_id, []):
                 _handle_path(path, source_id)
 
-    print(sorted(nodes))
-    for k, v in edges.items():
-        print(f'{k}: {v}')
     finder = ParentForkFinder(
         nodes=nodes,
         start_ids=start_ids,

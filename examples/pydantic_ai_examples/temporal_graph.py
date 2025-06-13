@@ -1,15 +1,28 @@
+import os
+
+os.environ['PYDANTIC_DISABLE_PLUGINS'] = 'true'
 import asyncio
 import random
 from collections.abc import Iterable
 from dataclasses import dataclass
+from datetime import timedelta
 from types import NoneType
 from typing import Any, Literal
 
-from pydantic_graph.v2.execution.graph_walker import GraphRunner
-from pydantic_graph.v2.graph import GraphBuilder
-from pydantic_graph.v2.join import NullReducer
-from pydantic_graph.v2.step import StepContext
-from pydantic_graph.v2.util import TypeExpression
+from temporalio import workflow, activity
+from temporalio.client import Client
+from temporalio.contrib.pydantic import pydantic_data_converter
+from temporalio.worker import Worker
+
+
+with workflow.unsafe.imports_passed_through():
+    # from temporalio.contrib.pydantic import pydantic_data_converter
+
+    from pydantic_graph.v2.execution.graph_walker import GraphRunner
+    from pydantic_graph.v2.graph import GraphBuilder
+    from pydantic_graph.v2.join import NullReducer
+    from pydantic_graph.v2.step import StepContext
+    from pydantic_graph.v2.util import TypeExpression
 
 
 @dataclass
@@ -28,12 +41,19 @@ class MyState:
 g = GraphBuilder(state_type=MyState, input_type=NoneType, output_type=NoneType)
 
 
+@activity.defn
+async def get_random_number() -> float:
+    return random.random()
+
+
 @g.step
 async def choose_type(ctx: StepContext[MyState, object]) -> Literal['int', 'str']:
-    chosen_type = int if random.random() < 0.5 else str
-    state = ctx.state
-    state.type_name = chosen_type.__name__
-    state.container = MyContainer(field_1=None, field_2=None, field_3=None)
+    random_number = await workflow.execute_activity(
+        get_random_number, start_to_close_timeout=timedelta(seconds=1)
+    )  # pyright: ignore[reportUnknownMemberType]
+    chosen_type = int if random_number < 0.5 else str
+    ctx.state.type_name = chosen_type.__name__
+    ctx.state.container = MyContainer(field_1=None, field_2=None, field_3=None)
     return 'int' if chosen_type is int else 'str'
 
 
@@ -129,11 +149,17 @@ g.add(
     ),
     g.edge_from(handle_int).to(handle_int_1, handle_int_2, handle_int_3),
     g.edge_from(handle_str).to(
-        lambda e: [e.label('abc').to(handle_str_1), e.label('def').to(handle_str_2), e.to(handle_str_3)]
+        lambda e: [
+            e.label('abc').to(handle_str_1),
+            e.label('def').to(handle_str_2),
+            e.to(handle_str_3),
+        ]
     ),
     g.edge_from(handle_int_3).spread().to(handle_field_3_item),
     g.edge_from(handle_str_3).spread().to(handle_field_3_item),
-    g.edge_from(handle_int_1, handle_int_2, handle_str_1, handle_str_2, handle_field_3_item).to(handle_join),
+    g.edge_from(
+        handle_int_1, handle_int_2, handle_str_1, handle_str_2, handle_field_3_item
+    ).to(handle_join),
     g.edge_from(handle_join).to(g.end_node),
 )
 
@@ -141,15 +167,6 @@ graph = g.build()
 print(graph)
 print('----------')
 
-from temporalio import workflow
-
-@workflow.defn
-class MyWorkflow:
-    @workflow.run
-    async def run(self, state: MyState) -> MyState:
-        runner = GraphRunner(graph)
-        state, _ = await runner.run(state=MyState(), inputs=None)
-        return state
 
 async def main():
     runner = GraphRunner(graph)
@@ -160,5 +177,36 @@ async def main():
     print(f'{state=}')
 
 
+@workflow.defn
+class MyWorkflow:
+    @workflow.run
+    async def run(self, state: MyState) -> MyState:
+        runner = GraphRunner(graph)
+        state, _ = await runner.run(state=MyState(), inputs=None)
+        return state
+
+
+async def main_temporal():
+    client = await Client.connect(
+        'localhost:7233',
+        data_converter=pydantic_data_converter,
+    )
+
+    async with Worker(
+        client,
+        task_queue='my-task-queue',
+        workflows=[MyWorkflow],
+        activities=[get_random_number],
+    ):
+        result = await client.execute_workflow(  # pyright: ignore[reportUnknownMemberType]
+            MyWorkflow.run,
+            MyState(),
+            id=f'my-workflow-id-{random.random()}',
+            task_queue='my-task-queue',
+        )
+        print(f'Result: {result!r}')
+
+
 if __name__ == '__main__':
-    asyncio.run(main())
+    # asyncio.run(main())
+    asyncio.run(main_temporal())

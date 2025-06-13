@@ -87,18 +87,6 @@ def build_mermaid_graph(graph: Graph[Any, Any, Any]) -> MermaidGraph:
         source_node = MermaidNode(id=node_id, kind=kind, label=label, note=note)
         nodes.append(source_node)
 
-    for source_id, paths in graph.edges_by_source.items():
-        print(source_id)
-        for path in paths:
-            print(path)
-            print('')
-            print('  *** before ***', edges_by_source.get(source_id, []))
-            _collect_edges(path, source_id)
-            print('')
-            print('  *** after ***', edges_by_source.get(source_id, []))
-            print('')
-            print('==========')
-
     for node in graph.nodes.values():
         if isinstance(node, Decision):
             for branch in node.branches:

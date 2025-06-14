@@ -1,421 +1,310 @@
 from __future__ import annotations
 
-from collections import defaultdict
+import asyncio
+import uuid
+from collections.abc import AsyncGenerator, AsyncIterator, Sequence
 from collections.abc import Iterable
-from dataclasses import dataclass, field
-from typing import Any, Callable, Never, overload
+from contextlib import asynccontextmanager
+from dataclasses import dataclass
+from dataclasses import field
+from typing import Any, TYPE_CHECKING
+from typing import assert_never, cast, get_args, get_origin
 
-from pydantic_graph.v2.decision import Decision, DecisionBranchBuilder
-from pydantic_graph.v2.execution.graph_walker import Graph
-from pydantic_graph.v2.id_types import ForkId, JoinId, NodeId
+from typing_extensions import Literal
+
+from pydantic_graph.v2.decision import Decision
+from pydantic_graph.v2.id_types import ForkStack, ForkStackItem, GraphRunId, JoinId, NodeRunId, TaskId
+from pydantic_graph.v2.id_types import NodeId
 from pydantic_graph.v2.join import Join, Reducer
 from pydantic_graph.v2.node import (
     EndNode,
     Fork,
     StartNode,
 )
-from pydantic_graph.v2.node_types import (
-    AnyNode,
-    DestinationNode,
-    SourceNode,
-)
-from pydantic_graph.v2.parent_forks import ParentFork, ParentForkFinder
-from pydantic_graph.v2.paths import (
-    BroadcastMarker,
-    DestinationMarker,
-    EdgePath,
-    EdgePathBuilder,
-    Path,
-    PathBuilder,
-    SpreadMarker,
-)
-from pydantic_graph.v2.step import Step, StepFunction
-from pydantic_graph.v2.util import TypeOrTypeExpression, get_callable_name, unpack_type_expression
+from pydantic_graph.v2.node_types import AnyNode
+from pydantic_graph.v2.parent_forks import ParentFork
+from pydantic_graph.v2.paths import BroadcastMarker, DestinationMarker, LabelMarker, Path, SpreadMarker, TransformMarker
+from pydantic_graph.v2.step import Step, StepContext
+from pydantic_graph.v2.util import unpack_type_expression
 
-
-# Node building:
-@overload
-def step[StateT, InputT, OutputT](
-    *,
-    node_id: str | None = None,
-    label: str | None = None,
-    activity: bool = False,
-) -> Callable[[StepFunction[StateT, InputT, OutputT]], Step[StateT, InputT, OutputT]]: ...
-@overload
-def step[StateT, InputT, OutputT](
-    call: StepFunction[StateT, InputT, OutputT],
-    *,
-    node_id: str | None = None,
-    label: str | None = None,
-    activity: bool = False,
-) -> Step[StateT, InputT, OutputT]: ...
-def step[StateT, InputT, OutputT](
-    call: StepFunction[StateT, InputT, OutputT] | None = None,
-    *,
-    node_id: str | None = None,
-    label: str | None = None,
-    activity: bool = False,
-) -> Step[StateT, InputT, OutputT] | Callable[[StepFunction[StateT, InputT, OutputT]], Step[StateT, InputT, OutputT]]:
-    if call is None:
-
-        def decorator(
-            func: StepFunction[StateT, InputT, OutputT],
-        ) -> Step[StateT, InputT, OutputT]:
-            return step(call=func, node_id=node_id, label=label, activity=activity)
-
-        return decorator
-
-    node_id = node_id or get_callable_name(call)
-
-    return Step[StateT, InputT, OutputT](id=NodeId(node_id), call=call, user_label=label, activity=activity)
-
-
-@overload
-def join[StateT, InputT, OutputT](
-    *,
-    node_id: str | None = None,
-) -> Callable[[type[Reducer[StateT, InputT, OutputT]]], Join[StateT, InputT, OutputT]]: ...
-@overload
-def join[StateT, InputT, OutputT](
-    reducer_type: type[Reducer[StateT, InputT, OutputT]],
-    *,
-    node_id: str | None = None,
-) -> Join[StateT, InputT, OutputT]: ...
-def join[StateT](
-    reducer_type: type[Reducer[StateT, Any, Any]] | None = None,
-    *,
-    node_id: str | None = None,
-) -> Join[StateT, Any, Any] | Callable[[type[Reducer[StateT, Any, Any]]], Join[StateT, Any, Any]]:
-    if reducer_type is None:
-
-        def decorator(
-            reducer_type: type[Reducer[StateT, Any, Any]],
-        ) -> Join[StateT, Any, Any]:
-            return join(reducer_type=reducer_type, node_id=node_id)
-
-        return decorator
-
-    # TODO(P3): Ideally we'd be able to infer this from the parent frame variable assignment or similar
-    node_id = node_id or get_callable_name(reducer_type)
-
-    return Join[StateT, Any, Any](
-        id=JoinId(NodeId(node_id)),
-        reducer_type=reducer_type,
-    )
+if TYPE_CHECKING:
+    from pydantic_graph.v2.mermaid import StateDiagramDirection
 
 
 @dataclass
-class GraphBuilder[StateT, GraphInputT, GraphOutputT]:
-    state_type: TypeOrTypeExpression[StateT]
-    input_type: TypeOrTypeExpression[GraphInputT]
-    output_type: TypeOrTypeExpression[GraphOutputT]
+class EndMarker[OutputT]:
+    value: OutputT
 
-    parallel: bool = True  # if False, allow direct state modification and don't copy state sent to steps, but disallow parallel node execution
 
-    _nodes: dict[NodeId, AnyNode] = field(init=False, default_factory=dict)
-    _edges_by_source: dict[NodeId, list[Path]] = field(init=False, default_factory=lambda: defaultdict(list))
-    _decision_index: int = field(init=False, default=1)
+@dataclass
+class JoinItem:
+    join_id: JoinId
+    inputs: Any
+    fork_stack: ForkStack
 
-    type Source[OutputT] = SourceNode[StateT, OutputT]
-    type Destination[InputT] = DestinationNode[StateT, InputT]
 
-    def __post_init__(self):
-        self._start_node = StartNode[GraphInputT]()
-        self._end_node = EndNode[GraphOutputT]()
+@dataclass(repr=False)
+class Graph[StateT, InputT, OutputT]:
+    state_type: type[StateT]
+    input_type: type[InputT]
+    output_type: type[OutputT]
 
-    # Node building
-    @property
-    def start_node(self) -> StartNode[GraphInputT]:
-        return self._start_node
+    nodes: dict[NodeId, AnyNode]
+    edges_by_source: dict[NodeId, list[Path]]
+    parent_forks: dict[JoinId, ParentFork[NodeId]]
 
-    @property
-    def end_node(self) -> EndNode[GraphOutputT]:
-        return self._end_node
+    def get_parent_fork(self, join_id: JoinId) -> ParentFork[NodeId]:
+        result = self.parent_forks.get(join_id)
+        if result is None:
+            raise RuntimeError(f'Node {join_id} is not a join node or did not have a dominating fork (this is a bug)')
+        return result
 
-    @overload
-    def step[InputT, OutputT](
-        self,
-        *,
-        node_id: str | None = None,
-        label: str | None = None,
-        activity: bool = False,
-    ) -> Callable[[StepFunction[StateT, InputT, OutputT]], Step[StateT, InputT, OutputT]]: ...
-    @overload
-    def step[InputT, OutputT](
-        self,
-        call: StepFunction[StateT, InputT, OutputT],
-        *,
-        node_id: str | None = None,
-        label: str | None = None,
-        activity: bool = False,
-    ) -> Step[StateT, InputT, OutputT]: ...
-    def step[InputT, OutputT](
-        self,
-        call: StepFunction[StateT, InputT, OutputT] | None = None,
-        *,
-        node_id: str | None = None,
-        label: str | None = None,
-        activity: bool = False,
-    ) -> (
-        Step[StateT, InputT, OutputT] | Callable[[StepFunction[StateT, InputT, OutputT]], Step[StateT, InputT, OutputT]]
-    ):
-        if call is None:
-            return step(node_id=node_id, label=label, activity=activity)
-        else:
-            return step(call=call, node_id=node_id, label=label, activity=activity)
+    async def run(self, state: StateT, inputs: InputT) -> OutputT:
+        async with self.iter(state, inputs) as graph_run:
+            # Note: This would probably be better using `async for _ in graph_run`, but this tests the `next` method,
+            # which I'm less confident will be implemented correctly if not used on the critical path. We can change it
+            # once we have tests, etc.
+            event: Any = None
+            while True:
+                try:
+                    event = await graph_run.next(event)
+                except StopAsyncIteration:
+                    assert isinstance(event, EndMarker), 'Graph run should end with an EndMarker.'
+                    return cast(EndMarker[OutputT], event).value
 
-    @overload
-    def join[InputT, OutputT](
-        self,
-        *,
-        node_id: str | None = None,
-    ) -> Callable[[type[Reducer[StateT, InputT, OutputT]]], Join[StateT, InputT, OutputT]]: ...
-    @overload
-    def join[InputT, OutputT](
-        self,
-        reducer_factory: type[Reducer[StateT, InputT, OutputT]],
-        *,
-        node_id: str | None = None,
-    ) -> Join[StateT, InputT, OutputT]: ...
-    def join(
-        self,
-        reducer_factory: type[Reducer[StateT, Any, Any]] | None = None,
-        *,
-        node_id: str | None = None,
-    ) -> Join[StateT, Any, Any] | Callable[[type[Reducer[StateT, Any, Any]]], Join[StateT, Any, Any]]:
-        if reducer_factory is None:
-            return join(node_id=node_id)
-        else:
-            return join(reducer_type=reducer_factory, node_id=node_id)
-
-    # Edge building
-    def add(self, *edges: EdgePath[StateT]) -> None:
-        def _handle_path(p: Path):
-            for item in p.items:
-                if isinstance(item, BroadcastMarker):
-                    new_node = Fork[Any, Any](id=item.fork_id, is_spread=False)
-                    self._insert_node(new_node)
-                    for path in item.paths:
-                        _handle_path(Path(items=[*path.items]))
-                elif isinstance(item, SpreadMarker):
-                    new_node = Fork[Any, Any](id=item.fork_id, is_spread=True)
-                    self._insert_node(new_node)
-                elif isinstance(item, DestinationMarker):
-                    pass
-
-        for edge in edges:
-            for source_node in edge.sources:
-                self._insert_node(source_node)
-                self._edges_by_source[source_node.id].append(edge.path)
-            for destination_node in edge.destinations:
-                self._insert_node(destination_node)
-
-            _handle_path(edge.path)
-
-    def add_edge[T](self, source: Source[T], destination: Destination[T], *, label: str | None = None) -> None:
-        builder = self.edge_from(source)
-        if label is not None:
-            builder = builder.label(label)
-        self.add(builder.to(destination))
-
-    def add_spreading_edge[T](
-        self,
-        source: Source[Iterable[T]],
-        spread_to: Destination[T],
-        *,
-        pre_spread_label: str | None = None,
-        post_spread_label: str | None = None,
-    ) -> None:
-        builder = self.edge_from(source)
-        if pre_spread_label is not None:
-            builder = builder.label(pre_spread_label)
-        builder = builder.spread()
-        if post_spread_label is not None:
-            builder = builder.label(post_spread_label)
-        self.add(builder.to(spread_to))
-
-    # TODO(P2): Support adding subgraphs ... not sure exactly what that looks like yet..
-    #  probably similar to a step, but with some tweaks
-
-    def edge_from[SourceOutputT](self, *sources: Source[SourceOutputT]) -> EdgePathBuilder[StateT, SourceOutputT]:
-        return EdgePathBuilder[StateT, SourceOutputT](sources=sources, path_builder=PathBuilder(working_items=[]))
-
-    def decision(self, *, note: str | None = None) -> Decision[StateT, Never]:
-        return Decision(id=NodeId(self._get_new_decision_id()), branches=[], note=note)
-
-    def match[SourceT](
-        self,
-        source: TypeOrTypeExpression[SourceT],
-        *,
-        matches: Callable[[Any], bool] | None = None,
-    ) -> DecisionBranchBuilder[StateT, SourceT, SourceT, Never]:
-        node_id = NodeId(self._get_new_decision_id())
-        decision = Decision[StateT, Never](node_id, branches=[], note=None)
-        new_path_builder = PathBuilder[StateT, SourceT](working_items=[])
-        return DecisionBranchBuilder(decision=decision, source=source, matches=matches, path_builder=new_path_builder)
-
-    # Helpers
-    def _insert_node(self, node: AnyNode) -> None:
-        existing = self._nodes.get(node.id)
-        if existing is None:
-            self._nodes[node.id] = node
-        elif existing is not node:
-            raise ValueError(f'All nodes must have unique node IDs. {node.id!r} was the ID for {existing} and {node}')
-
-    def _get_new_decision_id(self) -> str:
-        node_id = f'decision_{self._decision_index}'
-        self._decision_index += 1
-        while node_id in self._nodes:
-            node_id = f'decision_{self._decision_index}'
-            self._decision_index += 1
-        return node_id
-
-    def _get_new_broadcast_id(self, from_: str | None = None) -> str:
-        prefix = 'broadcast'
-        if from_ is not None:
-            prefix += f'_from_{from_}'
-
-        node_id = prefix
-        index = 2
-        while node_id in self._nodes:
-            node_id = f'{prefix}_{index}'
-            index += 1
-        return node_id
-
-    def _get_new_spread_id(self, from_: str | None = None, to: str | None = None) -> str:
-        prefix = 'spread'
-        if from_ is not None:
-            prefix += f'_from_{from_}'
-        if to is not None:
-            prefix += f'_to_{to}'
-
-        node_id = prefix
-        index = 2
-        while node_id in self._nodes:
-            node_id = f'{prefix}_{index}'
-            index += 1
-        return node_id
-
-    # Graph building
-    def build(self) -> Graph[StateT, GraphInputT, GraphOutputT]:
-        # TODO(P2): Warn/error if there is no start node / edges, or end node / edges
-        # TODO(P2): Warn/error if the graph is not connected
-        # TODO(P2): Warn/error if any non-End node is a dead end
-        # TODO(P2): Error if the graph does not meet the every-join-has-a-parent-fork requirement (otherwise can't know when to proceed past joins)
-        # TODO(P2): Allow the user to specify the parent forks; only infer them if _not_ specified
-        # TODO(P2): Verify that any user-specified parent forks are _actually_ valid parent forks, and if not, generate a helpful error message
-        # TODO(P3): Consider doing a deepcopy here to prevent modifications to the underlying nodes and edges
-        nodes = self._nodes
-        edges_by_source = self._edges_by_source
-        nodes, edges_by_source = _normalize_forks(nodes, edges_by_source)
-        parent_forks = _collect_dominating_forks(nodes, edges_by_source)
-
-        return Graph[StateT, GraphInputT, GraphOutputT](
-            state_type=unpack_type_expression(self.state_type),
-            input_type=unpack_type_expression(self.input_type),
-            output_type=unpack_type_expression(self.output_type),
-            nodes=nodes,
-            edges_by_source=edges_by_source,
-            parent_forks=parent_forks,
+    @asynccontextmanager
+    async def iter(self, state: StateT, inputs: InputT) -> AsyncIterator[GraphRun[StateT, OutputT]]:
+        yield GraphRun[StateT, OutputT](
+            graph=self,
+            state=state,
+            inputs=inputs,
         )
 
+    def render(self, *, title: str | None = None, direction: StateDiagramDirection | None = None) -> str:
+        from pydantic_graph.v2.mermaid import build_mermaid_graph
 
-def _normalize_forks(
-    nodes: dict[NodeId, AnyNode], edges: dict[NodeId, list[Path]]
-) -> tuple[dict[NodeId, AnyNode], dict[NodeId, list[Path]]]:
-    """Rework the nodes/edges so that the _only_ nodes with multiple edges coming out are broadcast forks.
+        return build_mermaid_graph(self).render(title=title, direction=direction)
 
-    Also, add forks to edges.
+    def __repr__(self):
+        return self.render()
+
+
+@dataclass
+class GraphTask:
+    # With our current BaseNode thing, next_node_id and next_node_inputs are merged into `next_node` itself
+    node_id: NodeId
+    inputs: Any
+    fork_stack: ForkStack
     """
-    new_nodes = nodes.copy()
-    new_edges: dict[NodeId, list[Path]] = {}
+    Stack of forks that have been entered; used so that the GraphRunner can decide when to proceed through joins
+    """
 
-    paths_to_handle: list[Path] = []
-
-    for source_id, edges_from_source in edges.items():
-        paths_to_handle.extend(edges_from_source)
-
-        node = nodes[source_id]
-        if isinstance(node, Fork) and not node.is_spread:
-            new_edges[source_id] = edges_from_source
-            continue  # broadcast fork; nothing to do
-        if len(edges_from_source) == 1:
-            new_edges[source_id] = edges_from_source
-            continue
-        new_fork = Fork[Any, Any](id=ForkId(NodeId(f'{node.id}_broadcast_fork')), is_spread=False)
-        new_nodes[new_fork.id] = new_fork
-        new_edges[source_id] = [Path(items=[BroadcastMarker(fork_id=new_fork.id, paths=edges_from_source)])]
-        new_edges[new_fork.id] = edges_from_source
-
-    while paths_to_handle:
-        path = paths_to_handle.pop()
-        for item in path.items:
-            if isinstance(item, SpreadMarker):
-                assert item.fork_id in new_nodes
-                new_edges[item.fork_id] = [path.next_path]
-            if isinstance(item, BroadcastMarker):
-                assert item.fork_id in new_nodes
-                # if item.fork_id not in new_nodes:
-                #     new_nodes[new_fork.id] = Fork[Any, Any](id=item.fork_id, is_spread=False)
-                new_edges[item.fork_id] = [*item.paths]
-                paths_to_handle.extend(item.paths)
-
-    return new_nodes, new_edges
+    task_id: TaskId = field(default_factory=lambda: TaskId(str(uuid.uuid4())))
 
 
-def _collect_dominating_forks(
-    graph_nodes: dict[NodeId, AnyNode], graph_edges_by_source: dict[NodeId, list[Path]]
-) -> dict[JoinId, ParentFork[NodeId]]:
-    nodes = set(graph_nodes)
-    start_ids: set[NodeId] = {StartNode.id}
-    edges: dict[NodeId, list[NodeId]] = defaultdict(list)
+class GraphRun[StateT, OutputT]:
+    def __init__[InputT](
+        self,
+        graph: Graph[StateT, InputT, OutputT],
+        state: StateT,
+        inputs: InputT,
+    ):
+        self._graph = graph
+        self._state = state
+        self._active_reducers: dict[tuple[JoinId, NodeRunId], Reducer[Any, Any, Any]] = {}
 
-    fork_ids: set[NodeId] = set(start_ids)
-    for source_id in nodes:
-        working_source_id = source_id
-        node = graph_nodes.get(source_id)
+        self._next: EndMarker[OutputT] | JoinItem | Sequence[GraphTask] | None = None
 
-        if isinstance(node, Fork):
-            fork_ids.add(node.id)
-            continue
+        run_id = GraphRunId(str(uuid.uuid4()))
+        initial_fork_stack: ForkStack = (ForkStackItem(StartNode.id, NodeRunId(run_id), 0),)
+        self._first_task = GraphTask(node_id=StartNode.id, inputs=inputs, fork_stack=initial_fork_stack)
+        self._iterator = self._iter_graph()
 
-        def _handle_path(path: Path, last_source_id: NodeId):
-            for item in path.items:
-                if isinstance(item, SpreadMarker):
-                    fork_ids.add(item.fork_id)
-                    edges[last_source_id].append(item.fork_id)
-                    last_source_id = item.fork_id
-                elif isinstance(item, BroadcastMarker):
-                    fork_ids.add(item.fork_id)
-                    edges[last_source_id].append(item.fork_id)
-                    for fork in item.paths:
-                        _handle_path(Path([*fork.items]), item.fork_id)
-                    # Broadcasts should only ever occur as the last item in the list, so no need to update the working_source_id
-                elif isinstance(item, DestinationMarker):
-                    edges[last_source_id].append(item.destination_id)
-                    # Destinations should only ever occur as the last item in the list, so no need to update the working_source_id
+    def __aiter__(self) -> AsyncIterator[EndMarker[OutputT] | JoinItem | Sequence[GraphTask]]:
+        return self
 
-        if isinstance(node, Decision):
-            for branch in node.branches:
-                _handle_path(branch.path, working_source_id)
+    async def __anext__(self) -> EndMarker[OutputT] | JoinItem | Sequence[GraphTask]:
+        if self._next is None:
+            self._next = await anext(self._iterator)
         else:
-            for path in graph_edges_by_source.get(source_id, []):
-                _handle_path(path, source_id)
+            self._next = await self._iterator.asend(self._next)
+        return self._next
 
-    finder = ParentForkFinder(
-        nodes=nodes,
-        start_ids=start_ids,
-        fork_ids=fork_ids,
-        edges=edges,
-    )
+    async def next(
+        self, value: EndMarker[OutputT] | JoinItem | Sequence[GraphTask] | None = None
+    ) -> EndMarker[OutputT] | JoinItem | Sequence[GraphTask]:
+        """Allows for sending a value to the iterator, which is useful for resuming the iteration."""
+        if value is not None:
+            self._next = value
+        return await self.__anext__()
 
-    join_ids = {node.id for node in graph_nodes.values() if isinstance(node, Join)}
-    dominating_forks: dict[JoinId, ParentFork[NodeId]] = {}
-    for join_id in join_ids:
-        dominating_fork = finder.find_parent_fork(join_id)
-        if dominating_fork is None:
-            # TODO(P3): Print out the mermaid graph and explain the problem
-            raise ValueError(f'Join node {join_id} has no dominating fork')
-        dominating_forks[join_id] = dominating_fork
+    async def _iter_graph(
+        self,
+    ) -> AsyncGenerator[
+        EndMarker[OutputT] | JoinItem | Sequence[GraphTask], EndMarker[OutputT] | JoinItem | Sequence[GraphTask]
+    ]:
+        tasks_by_id: dict[TaskId, GraphTask] = {}
+        pending: set[asyncio.Task[EndMarker[OutputT] | JoinItem | Sequence[GraphTask]]] = set()
 
-    return dominating_forks
+        def _start_task(t_: GraphTask) -> None:
+            """Helper function to start a new task while doing all necessary tracking."""
+            tasks_by_id[t_.task_id] = t_
+            pending.add(asyncio.create_task(self._handle_task(t_), name=t_.task_id))
+
+        _start_task(self._first_task)
+
+        while pending:
+            done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
+            for task in done:
+                result = task.result()
+                source_task = tasks_by_id.pop(TaskId(task.get_name()))
+                result = yield result
+                if isinstance(result, EndMarker):
+                    for t in pending:
+                        t.cancel()
+                    return
+
+                if isinstance(result, JoinItem):
+                    parent_fork_id = self._graph.get_parent_fork(result.join_id).fork_id
+                    fork_run_id = [x.node_run_id for x in result.fork_stack[::-1] if x.fork_id == parent_fork_id][0]
+                    reducer = self._active_reducers.get((result.join_id, fork_run_id))
+                    if reducer is None:
+                        join_node = self._graph.nodes[result.join_id]
+                        assert isinstance(join_node, Join)
+                        reducer = join_node.create_reducer(StepContext(None, result.inputs))
+                        self._active_reducers[(result.join_id, fork_run_id)] = reducer
+                    else:
+                        reducer.reduce(StepContext(None, result.inputs))
+                else:
+                    for new_task in result:
+                        _start_task(new_task)
+
+                for join_id, fork_run_id, fork_stack in self._get_completed_fork_runs(
+                    source_task, tasks_by_id.values()
+                ):
+                    reducer = self._active_reducers.pop((join_id, fork_run_id))
+
+                    output = reducer.finalize(StepContext(None, None))
+                    join_node = self._graph.nodes[join_id]
+                    assert isinstance(join_node, Join)  # We could drop this but if it fails it means there is a bug.
+                    new_tasks = self._handle_edges(join_node, output, fork_stack)
+                    for new_task in new_tasks:
+                        _start_task(new_task)
+
+        raise RuntimeError(
+            'Graph run completed, but no result was produced. This is either a bug in the graph or a bug in the graph runner.'
+        )
+
+    async def _handle_task(
+        self,
+        task: GraphTask,
+    ) -> Sequence[GraphTask] | JoinItem | EndMarker[OutputT]:
+        state = self._state
+        node_id = task.node_id
+        inputs = task.inputs
+        fork_stack = task.fork_stack
+
+        node = self._graph.nodes[node_id]
+        if isinstance(node, (StartNode, Fork)):
+            return self._handle_edges(node, inputs, fork_stack)
+        elif isinstance(node, Step):
+            step_context = StepContext[StateT, Any](state, inputs)
+            output = await node.call(step_context)
+            return self._handle_edges(node, output, fork_stack)
+        elif isinstance(node, Join):
+            return JoinItem(node_id, inputs, fork_stack)
+        elif isinstance(node, Decision):
+            return self._handle_decision(node, inputs, fork_stack)
+        elif isinstance(node, EndNode):
+            return EndMarker(inputs)
+        else:
+            assert_never(node)
+
+    def _handle_decision(
+        self, decision: Decision[StateT, Any], inputs: Any, fork_stack: ForkStack
+    ) -> Sequence[GraphTask]:
+        for branch in decision.branches:
+            match_tester = branch.matches
+            if match_tester is not None:
+                inputs_match = match_tester(inputs)
+            else:
+                branch_source = unpack_type_expression(branch.source)
+
+                if branch_source in {Any, object}:
+                    inputs_match = True
+                elif get_origin(branch_source) is Literal:
+                    inputs_match = inputs in get_args(branch_source)
+                else:
+                    try:
+                        inputs_match = isinstance(inputs, branch_source)
+                    except TypeError as e:
+                        raise RuntimeError(f'Decision branch source {branch_source} is not a valid type.') from e
+
+            if inputs_match:
+                return self._handle_path(branch.path, inputs, fork_stack)
+
+        raise RuntimeError(f'No branch matched inputs {inputs} for decision node {decision}.')
+
+    def _get_completed_fork_runs(
+        self,
+        t: GraphTask,
+        active_tasks: Iterable[GraphTask],
+    ) -> list[tuple[JoinId, NodeRunId, ForkStack]]:
+        completed_fork_runs: list[tuple[JoinId, NodeRunId, ForkStack]] = []
+
+        fork_run_indices = {fsi.node_run_id: i for i, fsi in enumerate(t.fork_stack)}
+        for join_id, fork_run_id in self._active_reducers.keys():
+            fork_run_index = fork_run_indices.get(fork_run_id)
+            if fork_run_index is None:
+                continue  # The fork_run_id is not in the current task's fork stack, so this task didn't complete it.
+
+            new_fork_stack = t.fork_stack[:fork_run_index]
+            # This reducer _may_ now be ready to finalize:
+            if self._is_fork_run_completed(active_tasks, join_id, fork_run_id):
+                completed_fork_runs.append((join_id, fork_run_id, new_fork_stack))
+
+        return completed_fork_runs
+
+    def _handle_path(self, path: Path, inputs: Any, fork_stack: ForkStack) -> Sequence[GraphTask]:
+        if not path.items:
+            return []
+
+        item = path.items[0]
+        if isinstance(item, DestinationMarker):
+            return [GraphTask(item.destination_id, inputs, fork_stack)]
+        elif isinstance(item, SpreadMarker):
+            node_run_id = NodeRunId(str(uuid.uuid4()))
+            return [
+                GraphTask(
+                    item.fork_id, input_item, fork_stack + (ForkStackItem(item.fork_id, node_run_id, thread_index),)
+                )
+                for thread_index, input_item in enumerate(inputs)
+            ]
+        elif isinstance(item, BroadcastMarker):
+            return [GraphTask(item.fork_id, inputs, fork_stack)]
+        elif isinstance(item, TransformMarker):
+            inputs = item.transform(StepContext(self._state, inputs))
+            return self._handle_path(path.next_path, inputs, fork_stack)
+        elif isinstance(item, LabelMarker):
+            return self._handle_path(path.next_path, inputs, fork_stack)
+        else:
+            assert_never(item)
+
+    def _handle_edges(self, node: AnyNode, inputs: Any, fork_stack: ForkStack) -> Sequence[GraphTask]:
+        edges = self._graph.edges_by_source.get(node.id, [])
+        assert len(edges) == 1 or isinstance(node, Fork)  # this should have already been ensured during graph building
+
+        new_tasks: list[GraphTask] = []
+        for path in edges:
+            new_tasks.extend(self._handle_path(path, inputs, fork_stack))
+        return new_tasks
+
+    def _is_fork_run_completed(self, tasks: Iterable[GraphTask], join_id: JoinId, fork_run_id: NodeRunId) -> bool:
+        # Check if any of the tasks in the graph have this fork_run_id in their fork_stack
+        # If this is the case, then the fork run is not yet completed
+        parent_fork = self._graph.get_parent_fork(join_id)
+        for t in tasks:
+            if fork_run_id in {x.node_run_id for x in t.fork_stack}:
+                if t.node_id in parent_fork.intermediate_nodes:
+                    return False
+        return True

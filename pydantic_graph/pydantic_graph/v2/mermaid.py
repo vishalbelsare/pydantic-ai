@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import Any, Literal, assert_never
 
 from pydantic_graph.v2.decision import Decision
-from pydantic_graph.v2.execution.graph_walker import Graph
+from pydantic_graph.v2.graph import Graph
 from pydantic_graph.v2.id_types import NodeId
 from pydantic_graph.v2.join import Join
 from pydantic_graph.v2.node import EndNode, Fork, StartNode

@@ -16,9 +16,6 @@ from temporalio.worker import Worker
 
 
 with workflow.unsafe.imports_passed_through():
-    # from temporalio.contrib.pydantic import pydantic_data_converter
-
-    from pydantic_graph.v2.execution.graph_walker import GraphRunner
     from pydantic_graph.v2.graph import GraphBuilder
     from pydantic_graph.v2.join import NullReducer
     from pydantic_graph.v2.step import StepContext
@@ -182,16 +179,13 @@ g.add(
 )
 
 graph = g.build()
-print(graph)
-print('----------')
 
 
 @workflow.defn
 class MyWorkflow:
     @workflow.run
     async def run(self, state: MyState) -> MyState:
-        runner = GraphRunner(graph)
-        final_state, _ = await runner.run(
+        final_state, _ = await graph.run(
             state=state.with_workflow(self),
             inputs=None,
         )
@@ -199,6 +193,9 @@ class MyWorkflow:
 
 
 async def main_temporal():
+    print(graph)
+    print('----------')
+
     client = await Client.connect(
         'localhost:7233',
         data_converter=pydantic_data_converter,

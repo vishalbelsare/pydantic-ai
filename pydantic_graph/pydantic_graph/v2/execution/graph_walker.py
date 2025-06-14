@@ -2,17 +2,19 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from collections.abc import AsyncGenerator, AsyncIterator, Iterable, Sequence
+from collections.abc import AsyncGenerator, AsyncIterator, Sequence
+from collections.abc import Iterable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from typing import Any, assert_never, cast, get_args, get_origin
+from typing import Any, TYPE_CHECKING
+from typing import assert_never, cast, get_args, get_origin
 
 from typing_extensions import Literal
 
 from pydantic_graph.v2.decision import Decision
 from pydantic_graph.v2.execution.graph_task import GraphTask
-from pydantic_graph.v2.graph import Graph
 from pydantic_graph.v2.id_types import ForkStack, ForkStackItem, GraphRunId, JoinId, NodeRunId, TaskId
+from pydantic_graph.v2.id_types import NodeId
 from pydantic_graph.v2.join import Join, Reducer
 from pydantic_graph.v2.node import (
     EndNode,
@@ -20,9 +22,13 @@ from pydantic_graph.v2.node import (
     StartNode,
 )
 from pydantic_graph.v2.node_types import AnyNode
+from pydantic_graph.v2.parent_forks import ParentFork
 from pydantic_graph.v2.paths import BroadcastMarker, DestinationMarker, LabelMarker, Path, SpreadMarker, TransformMarker
 from pydantic_graph.v2.step import Step, StepContext
 from pydantic_graph.v2.util import unpack_type_expression
+
+if TYPE_CHECKING:
+    from pydantic_graph.v2.mermaid import StateDiagramDirection
 
 
 @dataclass
@@ -37,10 +43,21 @@ class JoinItem:
     fork_stack: ForkStack
 
 
-# TODO: This class should probably just get merged with Graph
-class GraphRunner[StateT, InputT, OutputT]:
-    def __init__(self, graph: Graph[StateT, InputT, OutputT]):
-        self.graph = graph
+@dataclass(repr=False)
+class Graph[StateT, InputT, OutputT]:
+    state_type: type[StateT]
+    input_type: type[InputT]
+    output_type: type[OutputT]
+
+    nodes: dict[NodeId, AnyNode]
+    edges_by_source: dict[NodeId, list[Path]]
+    parent_forks: dict[JoinId, ParentFork[NodeId]]
+
+    def get_parent_fork(self, join_id: JoinId) -> ParentFork[NodeId]:
+        result = self.parent_forks.get(join_id)
+        if result is None:
+            raise RuntimeError(f'Node {join_id} is not a join node or did not have a dominating fork (this is a bug)')
+        return result
 
     async def run(self, state: StateT, inputs: InputT) -> tuple[StateT, OutputT]:
         async with self.iter(state, inputs) as graph_run:
@@ -58,10 +75,18 @@ class GraphRunner[StateT, InputT, OutputT]:
     @asynccontextmanager
     async def iter(self, state: StateT, inputs: InputT) -> AsyncIterator[GraphRun[StateT, OutputT]]:
         yield GraphRun[StateT, OutputT](
-            graph=self.graph,
+            graph=self,
             initial_state=state,
             inputs=inputs,
         )
+
+    def render(self, *, title: str | None = None, direction: StateDiagramDirection | None = None) -> str:
+        from pydantic_graph.v2.mermaid import build_mermaid_graph
+
+        return build_mermaid_graph(self).render(title=title, direction=direction)
+
+    def __repr__(self):
+        return self.render()
 
 
 class GraphRun[StateT, OutputT]:

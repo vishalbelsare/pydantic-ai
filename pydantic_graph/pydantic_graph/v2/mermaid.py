@@ -2,17 +2,15 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Literal, assert_never
+from typing import Any, Literal, assert_never
 
 from pydantic_graph.v2.decision import Decision
+from pydantic_graph.v2.execution.graph_walker import Graph
 from pydantic_graph.v2.id_types import NodeId
 from pydantic_graph.v2.join import Join
 from pydantic_graph.v2.node import EndNode, Fork, StartNode
 from pydantic_graph.v2.paths import BroadcastMarker, DestinationMarker, LabelMarker, Path, SpreadMarker
 from pydantic_graph.v2.step import Step
-
-if TYPE_CHECKING:
-    from pydantic_graph.v2.graph import Graph
 
 DEFAULT_HIGHLIGHT_CSS = 'fill:#fdff32'
 """The default CSS to use for highlighting nodes."""

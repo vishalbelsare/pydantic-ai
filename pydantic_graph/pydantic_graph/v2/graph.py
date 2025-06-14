@@ -6,9 +6,9 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Never, overload
 
 from pydantic_graph.v2.decision import Decision, DecisionBranchBuilder
+from pydantic_graph.v2.execution.graph_walker import Graph
 from pydantic_graph.v2.id_types import ForkId, JoinId, NodeId
 from pydantic_graph.v2.join import Join, Reducer
-from pydantic_graph.v2.mermaid import StateDiagramDirection, build_mermaid_graph
 from pydantic_graph.v2.node import (
     EndNode,
     Fork,
@@ -419,30 +419,3 @@ def _collect_dominating_forks(
         dominating_forks[join_id] = dominating_fork
 
     return dominating_forks
-
-
-@dataclass(repr=False)
-class Graph[StateT, InputT, OutputT]:
-    state_type: type[StateT]
-    input_type: type[InputT]
-    output_type: type[OutputT]
-
-    nodes: dict[NodeId, AnyNode]
-    edges_by_source: dict[NodeId, list[Path]]
-    parent_forks: dict[JoinId, ParentFork[NodeId]]
-
-    # @property
-    # def start_edges(self) -> list[EdgeDestination]:
-    #     return self.edges_by_source.get(StartNode.id, [])
-
-    def get_parent_fork(self, join_id: JoinId) -> ParentFork[NodeId]:
-        result = self.parent_forks.get(join_id)
-        if result is None:
-            raise RuntimeError(f'Node {join_id} is not a join node or did not have a dominating fork (this is a bug)')
-        return result
-
-    def render(self, *, title: str | None = None, direction: StateDiagramDirection | None = None) -> str:
-        return build_mermaid_graph(self).render(title=title, direction=direction)
-
-    def __repr__(self):
-        return self.render()

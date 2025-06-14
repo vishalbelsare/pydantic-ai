@@ -34,11 +34,27 @@ class MyContainer[T]:
 
 @dataclass
 class MyState:
-    type_name: str | None = None
-    container: MyContainer[Any] | None = None
+    type_name: str | None
+    container: MyContainer[Any] | None
+
+    def with_workflow(self, workflow: 'MyWorkflow'):
+        return MyStateWithWorkflow(
+            type_name=self.type_name, container=self.container, workflow=workflow
+        )
 
 
-g = GraphBuilder(state_type=MyState, input_type=NoneType, output_type=NoneType)
+# If you want access to the workflow inside the nodes, add it as a field onto the state type for the graph
+@dataclass
+class MyStateWithWorkflow(MyState):
+    workflow: 'MyWorkflow'
+
+    def without_workflow(self) -> MyState:
+        return MyState(type_name=self.type_name, container=self.container)
+
+
+g = GraphBuilder(
+    state_type=MyStateWithWorkflow, input_type=NoneType, output_type=NoneType
+)
 
 
 @activity.defn
@@ -47,10 +63,12 @@ async def get_random_number() -> float:
 
 
 @g.step
-async def choose_type(ctx: StepContext[MyState, object]) -> Literal['int', 'str']:
-    random_number = await workflow.execute_activity(
+async def choose_type(
+    ctx: StepContext[MyStateWithWorkflow, object],
+) -> Literal['int', 'str']:
+    random_number = await workflow.execute_activity(  # pyright: ignore[reportUnknownMemberType]
         get_random_number, start_to_close_timeout=timedelta(seconds=1)
-    )  # pyright: ignore[reportUnknownMemberType]
+    )
     chosen_type = int if random_number < 0.5 else str
     ctx.state.type_name = chosen_type.__name__
     ctx.state.container = MyContainer(field_1=None, field_2=None, field_3=None)
@@ -68,7 +86,7 @@ async def handle_str(ctx: StepContext[object, object]) -> None:
 
 
 @g.step
-async def handle_int_1(ctx: StepContext[MyState, object]) -> None:
+async def handle_int_1(ctx: StepContext[MyStateWithWorkflow, object]) -> None:
     print('start int 1')
     await asyncio.sleep(1)
     assert ctx.state.container is not None
@@ -77,7 +95,7 @@ async def handle_int_1(ctx: StepContext[MyState, object]) -> None:
 
 
 @g.step
-async def handle_int_2(ctx: StepContext[MyState, object]) -> None:
+async def handle_int_2(ctx: StepContext[MyStateWithWorkflow, object]) -> None:
     print('start int 2')
     await asyncio.sleep(1)
     assert ctx.state.container is not None
@@ -87,7 +105,7 @@ async def handle_int_2(ctx: StepContext[MyState, object]) -> None:
 
 @g.step
 async def handle_int_3(
-    ctx: StepContext[MyState, object],
+    ctx: StepContext[MyStateWithWorkflow, object],
 ) -> list[int]:
     print('start int 3')
     await asyncio.sleep(1)
@@ -98,7 +116,7 @@ async def handle_int_3(
 
 
 @g.step
-async def handle_str_1(ctx: StepContext[MyState, object]) -> None:
+async def handle_str_1(ctx: StepContext[MyStateWithWorkflow, object]) -> None:
     print('start str 1')
     await asyncio.sleep(1)
     assert ctx.state.container is not None
@@ -107,7 +125,7 @@ async def handle_str_1(ctx: StepContext[MyState, object]) -> None:
 
 
 @g.step
-async def handle_str_2(ctx: StepContext[MyState, object]) -> None:
+async def handle_str_2(ctx: StepContext[MyStateWithWorkflow, object]) -> None:
     print('start str 2')
     await asyncio.sleep(1)
     assert ctx.state.container is not None
@@ -117,7 +135,7 @@ async def handle_str_2(ctx: StepContext[MyState, object]) -> None:
 
 @g.step
 async def handle_str_3(
-    ctx: StepContext[MyState, object],
+    ctx: StepContext[MyStateWithWorkflow, object],
 ) -> Iterable[str]:
     print('start str 3')
     await asyncio.sleep(1)
@@ -128,7 +146,7 @@ async def handle_str_3(
 
 
 @g.step(node_id='handle_field_3_item')
-async def handle_field_3_item(ctx: StepContext[MyState, int | str]) -> None:
+async def handle_field_3_item(ctx: StepContext[MyStateWithWorkflow, int | str]) -> None:
     inputs = ctx.inputs
     print(f'handle_field_3_item: {inputs}')
     await asyncio.sleep(0.25)
@@ -168,22 +186,16 @@ print(graph)
 print('----------')
 
 
-async def main():
-    runner = GraphRunner(graph)
-    state, result = await runner.run(state=MyState(), inputs=None)
-
-    print('-')
-    print(f'{result=}')
-    print(f'{state=}')
-
-
 @workflow.defn
 class MyWorkflow:
     @workflow.run
     async def run(self, state: MyState) -> MyState:
         runner = GraphRunner(graph)
-        state, _ = await runner.run(state=MyState(), inputs=None)
-        return state
+        final_state, _ = await runner.run(
+            state=state.with_workflow(self),
+            inputs=None,
+        )
+        return final_state.without_workflow()
 
 
 async def main_temporal():
@@ -200,7 +212,7 @@ async def main_temporal():
     ):
         result = await client.execute_workflow(  # pyright: ignore[reportUnknownMemberType]
             MyWorkflow.run,
-            MyState(),
+            MyState(type_name=None, container=None),
             id=f'my-workflow-id-{random.random()}',
             task_queue='my-task-queue',
         )

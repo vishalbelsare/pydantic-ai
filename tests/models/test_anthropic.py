@@ -1552,6 +1552,7 @@ The year 2025 is a regular year with 365 days
                 ),
                 model_name='gpt-4.1-2025-04-14',
                 timestamp=IsDatetime(),
+                vendor_id='resp_6834631faf2481918638284f62855ddf040b4e5d7e74f261',
             ),
         ]
     )

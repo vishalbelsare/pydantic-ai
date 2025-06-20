@@ -10,16 +10,12 @@ from uuid import uuid4
 
 from typing_extensions import assert_never
 
-from pydantic_ai.builtin_tools import CodeExecutionTool, WebSearchTool
-from pydantic_ai.exceptions import UserError
-from pydantic_ai.providers import Provider
-
 from .. import UnexpectedModelBehavior, _utils, usage
+from ..builtin_tools import CodeExecutionTool, WebSearchTool
+from ..exceptions import UserError
 from ..messages import (
-    AudioUrl,
     BinaryContent,
-    DocumentUrl,
-    ImageUrl,
+    FileUrl,
     ModelMessage,
     ModelRequest,
     ModelResponse,
@@ -30,20 +26,22 @@ from ..messages import (
     ServerToolReturnPart,
     SystemPromptPart,
     TextPart,
+    ThinkingPart,
     ToolCallPart,
     ToolReturnPart,
     UserPromptPart,
     VideoUrl,
 )
 from ..profiles import ModelProfileSpec
+from ..providers import Provider
 from ..settings import ModelSettings
 from ..tools import ToolDefinition
 from . import (
     Model,
     ModelRequestParameters,
     StreamedResponse,
-    cached_async_http_client,
     check_allow_model_requests,
+    download_item,
     get_user_agent,
 )
 
@@ -59,6 +57,7 @@ try:
         GenerateContentConfigDict,
         GenerateContentResponse,
         GoogleSearchDict,
+        HttpOptionsDict,
         Part,
         PartDict,
         SafetySettingDict,
@@ -85,8 +84,11 @@ LatestGoogleModelNames = Literal[
     'gemini-2.0-flash-lite-preview-02-05',
     'gemini-2.0-pro-exp-02-05',
     'gemini-2.5-flash-preview-05-20',
+    'gemini-2.5-flash',
+    'gemini-2.5-flash-lite-preview-06-17',
     'gemini-2.5-pro-exp-03-25',
     'gemini-2.5-pro-preview-05-06',
+    'gemini-2.5-pro',
 ]
 """Latest Gemini models."""
 
@@ -267,12 +269,22 @@ class GoogleModel(Model):
         tool_config = self._get_tool_config(model_request_parameters, tools)
         system_instruction, contents = await self._map_messages(messages)
 
+        http_options: HttpOptionsDict = {
+            'headers': {'Content-Type': 'application/json', 'User-Agent': get_user_agent()}
+        }
+        if timeout := model_settings.get('timeout'):
+            if isinstance(timeout, (int, float)):
+                http_options['timeout'] = int(1000 * timeout)
+            else:
+                raise UserError('Google does not support setting ModelSettings.timeout to a httpx.Timeout')
+
         config = GenerateContentConfigDict(
-            http_options={'headers': {'Content-Type': 'application/json', 'User-Agent': get_user_agent()}},
+            http_options=http_options,
             system_instruction=system_instruction,
             temperature=model_settings.get('temperature'),
             top_p=model_settings.get('top_p'),
             max_output_tokens=model_settings.get('max_tokens'),
+            stop_sequences=model_settings.get('stop_sequences'),
             presence_penalty=model_settings.get('presence_penalty'),
             frequency_penalty=model_settings.get('frequency_penalty'),
             safety_settings=model_settings.get('google_safety_settings'),
@@ -359,8 +371,10 @@ class GoogleModel(Model):
                     else:
                         assert_never(part)
 
-                if message_parts:  # pragma: no branch
-                    contents.append({'role': 'user', 'parts': message_parts})
+                # Google GenAI requires at least one part in the message.
+                if not message_parts:
+                    message_parts = [{'text': ''}]
+                contents.append({'role': 'user', 'parts': message_parts})
             elif isinstance(m, ModelResponse):
                 contents.append(_content_model_response(m))
             else:
@@ -382,13 +396,15 @@ class GoogleModel(Model):
                     # NOTE: The type from Google GenAI is incorrect, it should be `str`, not `bytes`.
                     base64_encoded = base64.b64encode(item.data).decode('utf-8')
                     content.append({'inline_data': {'data': base64_encoded, 'mime_type': item.media_type}})  # type: ignore
-                elif isinstance(item, (AudioUrl, ImageUrl, DocumentUrl, VideoUrl)):
-                    client = cached_async_http_client()
-                    response = await client.get(item.url, follow_redirects=True)
-                    response.raise_for_status()
-                    # NOTE: The type from Google GenAI is incorrect, it should be `str`, not `bytes`.
-                    base64_encoded = base64.b64encode(response.content).decode('utf-8')
-                    content.append({'inline_data': {'data': base64_encoded, 'mime_type': item.media_type}})  # type: ignore
+                elif isinstance(item, VideoUrl) and item.is_youtube:
+                    content.append({'file_data': {'file_uri': item.url, 'mime_type': item.media_type}})
+                elif isinstance(item, FileUrl):
+                    if self.system == 'google-gla' or item.force_download:
+                        downloaded_item = await download_item(item, data_format='base64')
+                        inline_data = {'data': downloaded_item['data'], 'mime_type': downloaded_item['data_type']}
+                        content.append({'inline_data': inline_data})  # type: ignore
+                    else:
+                        content.append({'file_data': {'file_uri': item.url, 'mime_type': item.media_type}})
                 else:
                     assert_never(item)
         return content
@@ -413,7 +429,10 @@ class GeminiStreamedResponse(StreamedResponse):
             assert candidate.content.parts is not None
             for part in candidate.content.parts:
                 if part.text is not None:
-                    yield self._parts_manager.handle_text_delta(vendor_part_id='content', content=part.text)
+                    if part.thought:
+                        yield self._parts_manager.handle_thinking_delta(vendor_part_id='thinking', content=part.text)
+                    else:
+                        yield self._parts_manager.handle_text_delta(vendor_part_id='content', content=part.text)
                 elif part.function_call:
                     maybe_event = self._parts_manager.handle_tool_call_delta(
                         vendor_part_id=uuid4(),
@@ -446,6 +465,11 @@ def _content_model_response(m: ModelResponse) -> ContentDict:
         elif isinstance(item, TextPart):
             if item.content:  # pragma: no branch
                 parts.append({'text': item.content})
+        elif isinstance(item, ThinkingPart):  # pragma: no cover
+            # NOTE: We don't send ThinkingPart to the providers yet. If you are unsatisfied with this,
+            # please open an issue. The below code is the code to send thinking to the provider.
+            # parts.append({'text': item.content, 'thought': True})
+            pass
         else:
             assert_never(item)
     return ContentDict(role='model', parts=parts)
@@ -472,7 +496,10 @@ def _process_response_from_parts(
                 )
             )
         elif part.text is not None:
-            items.append(TextPart(content=part.text))
+            if part.thought:
+                items.append(ThinkingPart(content=part.text))
+            else:
+                items.append(TextPart(content=part.text))
         elif part.function_call:
             assert part.function_call.name is not None
             tool_call_part = ToolCallPart(tool_name=part.function_call.name, args=part.function_call.args)
@@ -490,9 +517,11 @@ def _process_response_from_parts(
 
 def _function_declaration_from_tool(tool: ToolDefinition) -> FunctionDeclarationDict:
     json_schema = tool.parameters_json_schema
-    f = FunctionDeclarationDict(name=tool.name, description=tool.description)
-    if json_schema.get('properties'):  # pragma: no branch
-        f['parameters'] = json_schema  # type: ignore
+    f = FunctionDeclarationDict(
+        name=tool.name,
+        description=tool.description,
+        parameters=json_schema,  # type: ignore
+    )
     return f
 
 

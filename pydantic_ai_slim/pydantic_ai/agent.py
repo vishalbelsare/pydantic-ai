@@ -29,6 +29,7 @@ from . import (
     result,
     usage as _usage,
 )
+from ._agent_graph import HistoryProcessor
 from .models.instrumented import InstrumentationSettings, InstrumentedModel, instrument_model
 from .result import FinalResult, OutputDataT, StreamedRunResult
 from .settings import ModelSettings, merge_model_settings
@@ -181,6 +182,7 @@ class Agent(Generic[AgentDepsT, OutputDataT]):
         defer_model_check: bool = False,
         end_strategy: EndStrategy = 'early',
         instrument: InstrumentationSettings | bool | None = None,
+        history_processors: Sequence[HistoryProcessor[AgentDepsT]] | None = None,
     ) -> None: ...
 
     @overload
@@ -211,6 +213,7 @@ class Agent(Generic[AgentDepsT, OutputDataT]):
         defer_model_check: bool = False,
         end_strategy: EndStrategy = 'early',
         instrument: InstrumentationSettings | bool | None = None,
+        history_processors: Sequence[HistoryProcessor[AgentDepsT]] | None = None,
     ) -> None: ...
 
     def __init__(
@@ -236,6 +239,7 @@ class Agent(Generic[AgentDepsT, OutputDataT]):
         defer_model_check: bool = False,
         end_strategy: EndStrategy = 'early',
         instrument: InstrumentationSettings | bool | None = None,
+        history_processors: Sequence[HistoryProcessor[AgentDepsT]] | None = None,
         **_deprecated_kwargs: Any,
     ):
         """Create an agent.
@@ -281,6 +285,9 @@ class Agent(Generic[AgentDepsT, OutputDataT]):
                 [`Agent.instrument_all()`][pydantic_ai.Agent.instrument_all]
                 will be used, which defaults to False.
                 See the [Debugging and Monitoring guide](https://ai.pydantic.dev/logfire/) for more info.
+            history_processors: Optional list of callables to process the message history before sending it to the model.
+                Each processor takes a list of messages and returns a modified list of messages.
+                Processors can be sync or async and are applied in sequence.
         """
         if model is None or defer_model_check:
             self.model = model
@@ -357,6 +364,7 @@ class Agent(Generic[AgentDepsT, OutputDataT]):
                 self._builtin_tools.append(tool)
 
         self._prepare_tools = prepare_tools
+        self.history_processors = history_processors or []
         for tool in tools:
             if isinstance(tool, Tool):
                 self._register_tool(tool)
@@ -660,11 +668,6 @@ class Agent(Generic[AgentDepsT, OutputDataT]):
         # typecast reasonable, even though it is possible to violate it with otherwise-type-checked code.
         output_validators = cast(list[_output.OutputValidator[AgentDepsT, RunOutputDataT]], self._output_validators)
 
-        # TODO: Instead of this, copy the function tools to ensure they don't share current_retry state between agent
-        #  runs. Requires some changes to `Tool` to make them copyable though.
-        for v in self._function_tools.values():
-            v.current_retry = 0
-
         model_settings = merge_model_settings(self.model_settings, model_settings)
         usage_limits = usage_limits or _usage.UsageLimits()
 
@@ -688,10 +691,15 @@ class Agent(Generic[AgentDepsT, OutputDataT]):
             if self._instructions is None and not self._instructions_functions:
                 return None
 
-            instructions = self._instructions or ''
+            instructions = [self._instructions] if self._instructions else []
             for instructions_runner in self._instructions_functions:
-                instructions += '\n' + await instructions_runner.run(run_context)
-            return instructions.strip()
+                instructions.append(await instructions_runner.run(run_context))
+            concatenated_instructions = '\n'.join(instruction for instruction in instructions if instruction)
+            return concatenated_instructions.strip() if concatenated_instructions else None
+
+        # Copy the function tools so that retry state is agent-run-specific
+        # Note that the retry count is reset to 0 when this happens due to the `default=0` and `init=False`.
+        run_function_tools = {k: dataclasses.replace(v) for k, v in self._function_tools.items()}
 
         graph_deps = _agent_graph.GraphAgentDeps[AgentDepsT, RunOutputDataT](
             user_deps=deps,
@@ -704,7 +712,8 @@ class Agent(Generic[AgentDepsT, OutputDataT]):
             end_strategy=self.end_strategy,
             output_schema=output_schema,
             output_validators=output_validators,
-            function_tools=self._function_tools,
+            history_processors=self.history_processors,
+            function_tools=run_function_tools,
             builtin_tools=self._builtin_tools,
             mcp_servers=self._mcp_servers,
             default_retries=self._default_retries,
@@ -1697,14 +1706,23 @@ class Agent(Generic[AgentDepsT, OutputDataT]):
         return isinstance(node, End)
 
     @asynccontextmanager
-    async def run_mcp_servers(self) -> AsyncIterator[None]:
+    async def run_mcp_servers(
+        self, model: models.Model | models.KnownModelName | str | None = None
+    ) -> AsyncIterator[None]:
         """Run [`MCPServerStdio`s][pydantic_ai.mcp.MCPServerStdio] so they can be used by the agent.
 
         Returns: a context manager to start and shutdown the servers.
         """
+        try:
+            sampling_model: models.Model | None = self._get_model(model)
+        except exceptions.UserError:  # pragma: no cover
+            sampling_model = None
+
         exit_stack = AsyncExitStack()
         try:
             for mcp_server in self._mcp_servers:
+                if sampling_model is not None:  # pragma: no branch
+                    mcp_server.sampling_model = sampling_model
                 await exit_stack.enter_async_context(mcp_server)
             yield
         finally:

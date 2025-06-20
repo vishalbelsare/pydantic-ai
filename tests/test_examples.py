@@ -127,7 +127,8 @@ def test_docs_examples(  # noqa: C901
     mocker.patch('pydantic_evals.dataset.EvaluationReport', side_effect=CustomEvaluationReport)
 
     if sys.version_info >= (3, 10):  # pragma: lax no cover
-        mocker.patch('pydantic_ai.mcp.MCPServerHTTP', return_value=MockMCPServer())
+        mocker.patch('pydantic_ai.mcp.MCPServerSSE', return_value=MockMCPServer())
+        mocker.patch('pydantic_ai.mcp.MCPServerStreamableHTTP', return_value=MockMCPServer())
         mocker.patch('mcp.server.fastmcp.FastMCP')
 
     env.set('OPENAI_API_KEY', 'testing')
@@ -289,8 +290,8 @@ text_responses: dict[str, str | ToolCallPart] = {
     'I bet five is the winner': ToolCallPart(
         tool_name='roulette_wheel', args={'square': 5}, tool_call_id='pyd_ai_tool_call_id'
     ),
-    'My guess is 6': ToolCallPart(tool_name='roll_die', args={}, tool_call_id='pyd_ai_tool_call_id'),
-    'My guess is 4': ToolCallPart(tool_name='roll_die', args={}, tool_call_id='pyd_ai_tool_call_id'),
+    'My guess is 6': ToolCallPart(tool_name='roll_dice', args={}, tool_call_id='pyd_ai_tool_call_id'),
+    'My guess is 4': ToolCallPart(tool_name='roll_dice', args={}, tool_call_id='pyd_ai_tool_call_id'),
     'Send a message to John Doe asking for coffee next week': ToolCallPart(
         tool_name='get_user_by_name', args={'name': 'John'}
     ),
@@ -544,7 +545,7 @@ async def model_logic(  # noqa: C901
         return ModelResponse(
             parts=[ToolCallPart(tool_name='final_result', args={'response': win}, tool_call_id='pyd_ai_tool_call_id')],
         )
-    elif isinstance(m, ToolReturnPart) and m.tool_name == 'roll_die':
+    elif isinstance(m, ToolReturnPart) and m.tool_name == 'roll_dice':
         return ModelResponse(
             parts=[ToolCallPart(tool_name='get_player_name', args={}, tool_call_id='pyd_ai_tool_call_id')]
         )

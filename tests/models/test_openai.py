@@ -10,6 +10,7 @@ from typing import Annotated, Any, Callable, Literal, Union, cast
 
 import httpx
 import pytest
+from dirty_equals import IsListOrTuple
 from inline_snapshot import snapshot
 from pydantic import BaseModel, Discriminator, Field, Tag
 from typing_extensions import TypedDict
@@ -20,12 +21,17 @@ from pydantic_ai.messages import (
     AudioUrl,
     BinaryContent,
     DocumentUrl,
+    FinalResultEvent,
     ImageUrl,
     ModelRequest,
     ModelResponse,
+    PartDeltaEvent,
+    PartStartEvent,
     RetryPromptPart,
     SystemPromptPart,
     TextPart,
+    ThinkingPart,
+    ThinkingPartDelta,
     ToolCallPart,
     ToolReturnPart,
     UserPromptPart,
@@ -39,7 +45,7 @@ from pydantic_ai.result import Usage
 from pydantic_ai.settings import ModelSettings
 from pydantic_ai.tools import ToolDefinition
 
-from ..conftest import IsDatetime, IsNow, IsStr, raise_if_exception, try_import
+from ..conftest import IsDatetime, IsInstance, IsNow, IsStr, raise_if_exception, try_import
 from .mock_async_stream import MockAsyncStream
 
 with try_import() as imports_successful:
@@ -60,6 +66,8 @@ with try_import() as imports_successful:
     from pydantic_ai.models.openai import (
         OpenAIModel,
         OpenAIModelSettings,
+        OpenAIResponsesModel,
+        OpenAIResponsesModelSettings,
         OpenAISystemPromptRole,
     )
     from pydantic_ai.profiles.openai import OpenAIJsonSchemaTransformer
@@ -72,6 +80,7 @@ with try_import() as imports_successful:
 pytestmark = [
     pytest.mark.skipif(not imports_successful(), reason='openai not installed'),
     pytest.mark.anyio,
+    pytest.mark.vcr,
 ]
 
 
@@ -596,7 +605,6 @@ async def test_system_prompt_role(
 
 
 @pytest.mark.parametrize('system_prompt_role', ['system', 'developer'])
-@pytest.mark.vcr
 async def test_openai_o1_mini_system_role(
     allow_model_requests: None,
     system_prompt_role: Literal['system', 'developer'],
@@ -867,7 +875,6 @@ async def test_image_as_binary_content_input(
     assert result.output == snapshot('The fruit in the image is a kiwi.')
 
 
-@pytest.mark.vcr()
 async def test_audio_as_binary_content_input(
     allow_model_requests: None, audio_content: BinaryContent, openai_api_key: str
 ):
@@ -904,7 +911,6 @@ def test_model_status_error(allow_model_requests: None) -> None:
     assert str(exc_info.value) == snapshot("status_code: 500, model_name: gpt-4o, body: {'error': 'test error'}")
 
 
-@pytest.mark.vcr()
 @pytest.mark.parametrize('model_name', ['o3-mini', 'gpt-4o-mini', 'gpt-4.5-preview'])
 async def test_max_completion_tokens(allow_model_requests: None, model_name: str, openai_api_key: str):
     m = OpenAIModel(model_name, provider=OpenAIProvider(api_key=openai_api_key))
@@ -914,7 +920,6 @@ async def test_max_completion_tokens(allow_model_requests: None, model_name: str
     assert result.output == IsStr()
 
 
-@pytest.mark.vcr()
 async def test_multiple_agent_tool_calls(allow_model_requests: None, gemini_api_key: str, openai_api_key: str):
     gemini_model = GeminiModel('gemini-2.0-flash-exp', provider=GoogleGLAProvider(api_key=gemini_api_key))
     openai_model = OpenAIModel('gpt-4o-mini', provider=OpenAIProvider(api_key=openai_api_key))
@@ -1467,7 +1472,6 @@ def test_strict_schema():
     )
 
 
-@pytest.mark.vcr()
 async def test_openai_instructions(allow_model_requests: None, openai_api_key: str):
     m = OpenAIModel('gpt-4o', provider=OpenAIProvider(api_key=openai_api_key))
     agent = Agent(m, instructions='You are a helpful assistant.')
@@ -1502,7 +1506,6 @@ async def test_openai_instructions(allow_model_requests: None, openai_api_key: s
     )
 
 
-@pytest.mark.vcr()
 async def test_openai_model_without_system_prompt(allow_model_requests: None, openai_api_key: str):
     m = OpenAIModel('o3-mini', provider=OpenAIProvider(api_key=openai_api_key))
     agent = Agent(m, system_prompt='You are a potato.')
@@ -1512,7 +1515,6 @@ async def test_openai_model_without_system_prompt(allow_model_requests: None, op
     )
 
 
-@pytest.mark.vcr()
 async def test_openai_instructions_with_tool_calls_keep_instructions(allow_model_requests: None, openai_api_key: str):
     m = OpenAIModel('gpt-4.1-mini', provider=OpenAIProvider(api_key=openai_api_key))
     agent = Agent(m, instructions='You are a helpful assistant.')
@@ -1578,6 +1580,206 @@ async def test_openai_instructions_with_tool_calls_keep_instructions(allow_model
     )
 
 
+@pytest.mark.vcr()
+async def test_openai_responses_model_thinking_part(allow_model_requests: None, openai_api_key: str):
+    m = OpenAIResponsesModel('o3-mini', provider=OpenAIProvider(api_key=openai_api_key))
+    settings = OpenAIResponsesModelSettings(openai_reasoning_effort='high', openai_reasoning_summary='detailed')
+    agent = Agent(m, model_settings=settings)
+
+    result = await agent.run('How do I cross the street?')
+    assert result.all_messages() == snapshot(
+        [
+            ModelRequest(parts=[UserPromptPart(content='How do I cross the street?', timestamp=IsDatetime())]),
+            ModelResponse(
+                parts=[
+                    TextPart(content=IsStr()),
+                    ThinkingPart(content=IsStr(), id='rs_68034841ab2881918a8c210e3d988b9208c845d2be9bcdd8'),
+                    ThinkingPart(content=IsStr(), id='rs_68034841ab2881918a8c210e3d988b9208c845d2be9bcdd8'),
+                    ThinkingPart(content=IsStr(), id='rs_68034841ab2881918a8c210e3d988b9208c845d2be9bcdd8'),
+                    ThinkingPart(content=IsStr(), id='rs_68034841ab2881918a8c210e3d988b9208c845d2be9bcdd8'),
+                ],
+                usage=Usage(
+                    request_tokens=13,
+                    response_tokens=2050,
+                    total_tokens=2063,
+                    details={'reasoning_tokens': 1664, 'cached_tokens': 0},
+                ),
+                model_name='o3-mini-2025-01-31',
+                timestamp=IsDatetime(),
+                vendor_id='resp_68034835d12481919c80a7fd8dbe6f7e08c845d2be9bcdd8',
+            ),
+        ]
+    )
+
+    result = await agent.run(
+        'Considering the way to cross the street, analogously, how do I cross the river?',
+        message_history=result.all_messages(),
+    )
+    assert result.all_messages() == snapshot(
+        [
+            ModelRequest(parts=[UserPromptPart(content='How do I cross the street?', timestamp=IsDatetime())]),
+            ModelResponse(
+                parts=[
+                    TextPart(content=IsStr()),
+                    ThinkingPart(content=IsStr(), id='rs_68034841ab2881918a8c210e3d988b9208c845d2be9bcdd8'),
+                    ThinkingPart(content=IsStr(), id='rs_68034841ab2881918a8c210e3d988b9208c845d2be9bcdd8'),
+                    ThinkingPart(content=IsStr(), id='rs_68034841ab2881918a8c210e3d988b9208c845d2be9bcdd8'),
+                    ThinkingPart(content=IsStr(), id='rs_68034841ab2881918a8c210e3d988b9208c845d2be9bcdd8'),
+                ],
+                usage=Usage(
+                    request_tokens=13,
+                    response_tokens=2050,
+                    total_tokens=2063,
+                    details={'reasoning_tokens': 1664, 'cached_tokens': 0},
+                ),
+                model_name='o3-mini-2025-01-31',
+                timestamp=IsDatetime(),
+                vendor_id='resp_68034835d12481919c80a7fd8dbe6f7e08c845d2be9bcdd8',
+            ),
+            ModelRequest(
+                parts=[
+                    UserPromptPart(
+                        content='Considering the way to cross the street, analogously, how do I cross the river?',
+                        timestamp=IsDatetime(),
+                    )
+                ]
+            ),
+            ModelResponse(
+                parts=[
+                    TextPart(content=IsStr()),
+                    ThinkingPart(content=IsStr(), id='rs_68034858dc588191bc3a6801c23e728f08c845d2be9bcdd8'),
+                    ThinkingPart(content=IsStr(), id='rs_68034858dc588191bc3a6801c23e728f08c845d2be9bcdd8'),
+                    ThinkingPart(content=IsStr(), id='rs_68034858dc588191bc3a6801c23e728f08c845d2be9bcdd8'),
+                ],
+                usage=Usage(
+                    request_tokens=424,
+                    response_tokens=2033,
+                    total_tokens=2457,
+                    details={'reasoning_tokens': 1408, 'cached_tokens': 0},
+                ),
+                model_name='o3-mini-2025-01-31',
+                timestamp=IsDatetime(),
+                vendor_id='resp_6803484f19a88191b9ea975d7cfbbe8408c845d2be9bcdd8',
+            ),
+        ]
+    )
+
+
+@pytest.mark.vcr()
+async def test_openai_model_thinking_part(allow_model_requests: None, openai_api_key: str):
+    provider = OpenAIProvider(api_key=openai_api_key)
+    responses_model = OpenAIResponsesModel('o3-mini', provider=provider)
+    settings = OpenAIResponsesModelSettings(openai_reasoning_effort='high', openai_reasoning_summary='detailed')
+    agent = Agent(responses_model, model_settings=settings)
+
+    result = await agent.run('How do I cross the street?')
+    assert result.all_messages() == snapshot(
+        [
+            ModelRequest(parts=[UserPromptPart(content='How do I cross the street?', timestamp=IsDatetime())]),
+            ModelResponse(
+                parts=[
+                    TextPart(content=IsStr()),
+                    IsInstance(ThinkingPart),
+                    IsInstance(ThinkingPart),
+                    IsInstance(ThinkingPart),
+                    IsInstance(ThinkingPart),
+                ],
+                usage=Usage(
+                    request_tokens=13,
+                    response_tokens=1900,
+                    total_tokens=1913,
+                    details={'reasoning_tokens': 1536, 'cached_tokens': 0},
+                ),
+                model_name='o3-mini-2025-01-31',
+                timestamp=IsDatetime(),
+                vendor_id='resp_680797310bbc8191971fff5a405113940ed3ec3064b5efac',
+            ),
+        ]
+    )
+
+    result = await agent.run(
+        'Considering the way to cross the street, analogously, how do I cross the river?',
+        model=OpenAIModel('o3-mini', provider=provider),
+        message_history=result.all_messages(),
+    )
+    assert result.all_messages() == snapshot(
+        [
+            ModelRequest(parts=[UserPromptPart(content='How do I cross the street?', timestamp=IsDatetime())]),
+            ModelResponse(
+                parts=[
+                    TextPart(content=IsStr()),
+                    IsInstance(ThinkingPart),
+                    IsInstance(ThinkingPart),
+                    IsInstance(ThinkingPart),
+                    IsInstance(ThinkingPart),
+                ],
+                usage=Usage(
+                    request_tokens=13,
+                    response_tokens=1900,
+                    total_tokens=1913,
+                    details={'reasoning_tokens': 1536, 'cached_tokens': 0},
+                ),
+                model_name='o3-mini-2025-01-31',
+                timestamp=IsDatetime(),
+                vendor_id='resp_680797310bbc8191971fff5a405113940ed3ec3064b5efac',
+            ),
+            ModelRequest(
+                parts=[
+                    UserPromptPart(
+                        content='Considering the way to cross the street, analogously, how do I cross the river?',
+                        timestamp=IsDatetime(),
+                    )
+                ]
+            ),
+            ModelResponse(
+                parts=[TextPart(content=IsStr())],
+                usage=Usage(
+                    requests=1,
+                    request_tokens=822,
+                    response_tokens=2437,
+                    total_tokens=3259,
+                    details={
+                        'accepted_prediction_tokens': 0,
+                        'audio_tokens': 0,
+                        'reasoning_tokens': 1792,
+                        'rejected_prediction_tokens': 0,
+                        'cached_tokens': 0,
+                    },
+                ),
+                model_name='o3-mini-2025-01-31',
+                timestamp=IsDatetime(),
+                vendor_id='chatcmpl-BP7ocN6qxho4C1UzUJWnU5tPJno55',
+            ),
+        ]
+    )
+
+
+@pytest.mark.vcr()
+async def test_openai_model_thinking_part_iter(allow_model_requests: None, openai_api_key: str):
+    provider = OpenAIProvider(api_key=openai_api_key)
+    responses_model = OpenAIResponsesModel('o3-mini', provider=provider)
+    settings = OpenAIResponsesModelSettings(openai_reasoning_effort='low', openai_reasoning_summary='detailed')
+    agent = Agent(responses_model, model_settings=settings)
+
+    event_parts: list[Any] = []
+    async with agent.iter(user_prompt='How do I cross the street?') as agent_run:
+        async for node in agent_run:
+            if Agent.is_model_request_node(node) or Agent.is_call_tools_node(node):
+                async with node.stream(agent_run.ctx) as request_stream:
+                    async for event in request_stream:
+                        event_parts.append(event)
+
+    assert event_parts == snapshot(
+        IsListOrTuple(
+            PartStartEvent(index=0, part=ThinkingPart(content='', signature=IsStr())),
+            FinalResultEvent(tool_name=None, tool_call_id=None),
+            PartDeltaEvent(index=0, delta=IsInstance(ThinkingPartDelta)),
+            length=(3, ...),
+        )
+    )
+
+
+@pytest.mark.vcr()
 async def test_openai_instructions_with_logprobs(allow_model_requests: None):
     # Create a mock response with logprobs
     c = completion_message(
@@ -1665,6 +1867,15 @@ Dagvoorspelling:
 
 
 @pytest.mark.vcr()
+async def test_reasoning_model_with_temperature(allow_model_requests: None, openai_api_key: str):
+    m = OpenAIModel('o3-mini', provider=OpenAIProvider(api_key=openai_api_key))
+    agent = Agent(m, model_settings=OpenAIModelSettings(temperature=0.5))
+    result = await agent.run('What is the capital of Mexico?')
+    assert result.output == snapshot(
+        'The capital of Mexico is Mexico City. It is not only the seat of the federal government but also a major cultural, political, and economic center in the country.'
+    )
+
+
 def test_openai_model_profile():
     m = OpenAIModel('gpt-4o', provider=OpenAIProvider(api_key='foobar'))
     assert isinstance(m.profile, OpenAIModelProfile)
@@ -1758,3 +1969,42 @@ def test_model_profile_strict_not_supported():
             },
         }
     )
+
+
+@pytest.mark.vcr
+async def test_compatible_api_with_tool_calls_without_id(allow_model_requests: None, gemini_api_key: str):
+    provider = OpenAIProvider(
+        openai_client=AsyncOpenAI(
+            base_url='https://generativelanguage.googleapis.com/v1beta/openai/',
+            api_key=gemini_api_key,
+        )
+    )
+
+    model = OpenAIModel('gemini-2.5-pro-preview-05-06', provider=provider)
+
+    agent = Agent(model)
+
+    @agent.tool_plain
+    def get_current_time() -> str:
+        """Get the current time."""
+        return 'Noon'
+
+    response = await agent.run('What is the current time?')
+    assert response.output == snapshot('The current time is Noon.')
+
+
+def test_openai_response_timestamp_milliseconds(allow_model_requests: None):
+    c = completion_message(
+        ChatCompletionMessage(content='world', role='assistant'),
+    )
+    # Some models on OpenRouter return timestamps in milliseconds rather than seconds
+    # https://github.com/pydantic/pydantic-ai/issues/1877
+    c.created = 1748747268000
+
+    mock_client = MockOpenAI.create_mock(c)
+    m = OpenAIModel('gpt-4o', provider=OpenAIProvider(openai_client=mock_client))
+    agent = Agent(m)
+
+    result = agent.run_sync('Hello')
+    response = cast(ModelResponse, result.all_messages()[-1])
+    assert response.timestamp == snapshot(datetime(2025, 6, 1, 3, 7, 48, tzinfo=timezone.utc))

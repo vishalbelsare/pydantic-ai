@@ -4,15 +4,17 @@ import base64
 from collections.abc import AsyncIterable, AsyncIterator, Iterable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any, Literal, Union, cast
 
 import pydantic_core
 from httpx import Timeout
 from typing_extensions import assert_never
 
+from pydantic_ai._thinking_part import split_content_into_text_and_thinking
+
 from .. import ModelHTTPError, UnexpectedModelBehavior, _utils
-from .._utils import generate_tool_call_id as _generate_tool_call_id, now_utc as _now_utc
+from .._utils import generate_tool_call_id as _generate_tool_call_id, now_utc as _now_utc, number_to_datetime
 from ..messages import (
     BinaryContent,
     DocumentUrl,
@@ -25,6 +27,7 @@ from ..messages import (
     RetryPromptPart,
     SystemPromptPart,
     TextPart,
+    ThinkingPart,
     ToolCallPart,
     ToolReturnPart,
     UserPromptPart,
@@ -312,7 +315,7 @@ class MistralModel(Model):
         assert response.choices, 'Unexpected empty response choice.'
 
         if response.created:
-            timestamp = datetime.fromtimestamp(response.created, tz=timezone.utc)
+            timestamp = number_to_datetime(response.created)
         else:
             timestamp = _now_utc()
 
@@ -322,7 +325,7 @@ class MistralModel(Model):
 
         parts: list[ModelResponsePart] = []
         if text := _map_content(content):
-            parts.append(TextPart(content=text))
+            parts.extend(split_content_into_text_and_thinking(text))
 
         if isinstance(tool_calls, list):
             for tool_call in tool_calls:
@@ -347,9 +350,9 @@ class MistralModel(Model):
             )
 
         if first_chunk.data.created:
-            timestamp = datetime.fromtimestamp(first_chunk.data.created, tz=timezone.utc)
+            timestamp = number_to_datetime(first_chunk.data.created)
         else:
-            timestamp = datetime.now(tz=timezone.utc)
+            timestamp = _now_utc()
 
         return MistralStreamedResponse(
             _response=peekable_response,
@@ -484,6 +487,11 @@ class MistralModel(Model):
                 for part in message.parts:
                     if isinstance(part, TextPart):
                         content_chunks.append(MistralTextChunk(text=part.content))
+                    elif isinstance(part, ThinkingPart):
+                        # NOTE: We don't send ThinkingPart to the providers yet. If you are unsatisfied with this,
+                        # please open an issue. The below code is the code to send thinking to the provider.
+                        # content_chunks.append(MistralTextChunk(text=f'<think>{part.content}</think>'))
+                        pass
                     elif isinstance(part, ToolCallPart):
                         tool_calls.append(self._map_tool_call(part))
                     else:

@@ -128,7 +128,7 @@ async def test_openai_responses_reasoning_generate_summary(allow_model_requests:
     agent = Agent(
         model=model,
         model_settings=OpenAIResponsesModelSettings(
-            openai_reasoning_generate_summary='concise',
+            openai_reasoning_summary='concise',
             openai_truncation='auto',
         ),
     )
@@ -198,6 +198,7 @@ async def test_openai_responses_model_retry(allow_model_requests: None, openai_a
                 ),
                 model_name='gpt-4o-2024-08-06',
                 timestamp=IsDatetime(),
+                vendor_id='resp_67e547c48c9481918c5c4394464ce0c60ae6111e84dd5c08',
             ),
             ModelRequest(
                 parts=[
@@ -233,6 +234,7 @@ For **London**, it's located at approximately latitude 51° N and longitude 0° 
                 ),
                 model_name='gpt-4o-2024-08-06',
                 timestamp=IsDatetime(),
+                vendor_id='resp_67e547c5a2f08191802a1f43620f348503a2086afed73b47',
             ),
         ]
     )
@@ -273,6 +275,7 @@ async def test_image_as_binary_content_tool_response(
                 ),
                 model_name='gpt-4o-2024-08-06',
                 timestamp=IsDatetime(),
+                vendor_id='resp_681134d3aa3481919ca581a267db1e510fe7a5a4e2123dc3',
             ),
             ModelRequest(
                 parts=[
@@ -301,6 +304,7 @@ async def test_image_as_binary_content_tool_response(
                 ),
                 model_name='gpt-4o-2024-08-06',
                 timestamp=IsDatetime(),
+                vendor_id='resp_681134d53c48819198ce7b89db78dffd02cbfeaababb040c',
             ),
         ]
     )
@@ -436,6 +440,7 @@ In the past 24 hours, OpenAI announced plans to release its first open-weight la
                 ),
                 model_name='gpt-4o-2024-08-06',
                 timestamp=IsDatetime(),
+                vendor_id='resp_67ebcbb93728819197f923ff16e98bce04f5055a2a33abc3',
             ),
         ]
     )
@@ -463,6 +468,7 @@ async def test_openai_responses_model_instructions(allow_model_requests: None, o
                 ),
                 model_name='gpt-4o-2024-08-06',
                 timestamp=IsDatetime(),
+                vendor_id='resp_67f3fdfd9fa08191a3d5825db81b8df6003bc73febb56d77',
             ),
         ]
     )
@@ -557,4 +563,14 @@ def test_model_profile_strict_not_supported():
             'description': 'This is my tool',
             'strict': False,
         }
+    )
+
+
+@pytest.mark.vcr()
+async def test_reasoning_model_with_temperature(allow_model_requests: None, openai_api_key: str):
+    m = OpenAIResponsesModel('o3-mini', provider=OpenAIProvider(api_key=openai_api_key))
+    agent = Agent(m, model_settings=OpenAIResponsesModelSettings(temperature=0.5))
+    result = await agent.run('What is the capital of Mexico?')
+    assert result.output == snapshot(
+        'The capital of Mexico is Mexico City. It serves as the political, cultural, and economic heart of the country and is one of the largest metropolitan areas in the world.'
     )

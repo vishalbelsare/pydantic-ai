@@ -2053,7 +2053,7 @@ class AgentRun(Generic[AgentDepsT, OutputDataT]):
         return self._graph_run.state.usage
 
     async def validate_structured_output(
-        self, response: _messages.ModelResponse, *, allow_partial: bool = False
+        self, response: _messages.ModelResponse, *, tool_name: str | None = None, allow_partial: bool = False
     ) -> FinalResult[OutputDataT] | None:
         """Validate a structured result message.
 
@@ -2062,7 +2062,10 @@ class AgentRun(Generic[AgentDepsT, OutputDataT]):
 
         Args:
             response: The structured result message.
-            output_tool_name: If provided, this must be the name of the output tool to use for validation.
+            tool_name: If provided, this should be the name of the tool that will produce the output.
+                This is only included so that you can skip the tool-lookup step if you already know which tool
+                produced the output, which may be the case if calling this method in a loop while streaming.
+                (You can get the `tool_name` from the return value of this method when it is not `None`.)
             allow_partial: If true, allow partial validation.
 
         Returns:
@@ -2076,14 +2079,14 @@ class AgentRun(Generic[AgentDepsT, OutputDataT]):
         run_context = _agent_graph.build_run_context(self.ctx)
 
         call = None
-        tool_name: str | None = None
         tool_call_id: str | None = None
         if isinstance(output_schema, _output.ToolOutputSchema):
-            tool_name: str | None = None
-            for part, _ in output_schema.find_tool(response.parts):
-                tool_name = part.tool_name
-                tool_call_id = part.tool_call_id
-                break
+            if tool_name is None:
+                # infer the tool name from the response parts
+                for part, _ in output_schema.find_tool(response.parts):
+                    tool_name = part.tool_name
+                    tool_call_id = part.tool_call_id
+                    break
             if tool_name is None:
                 return None  # no output tool was present, so there's no final output
 

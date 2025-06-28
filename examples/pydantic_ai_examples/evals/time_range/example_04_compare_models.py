@@ -4,12 +4,11 @@ from types import NoneType
 import logfire
 from pydantic_evals import Dataset
 
-from pydantic_ai_examples.evals import infer_time_range
-from pydantic_ai_examples.evals.agent import time_range_agent
-from pydantic_ai_examples.evals.custom_evaluators import (
+from pydantic_ai_examples.evals.time_range.agent import time_range_agent, infer_time_range
+from pydantic_ai_examples.evals.time_range.custom_evaluators import (
     CUSTOM_EVALUATOR_TYPES,
 )
-from pydantic_ai_examples.evals.models import (
+from pydantic_ai_examples.evals.time_range.models import (
     TimeRangeInputs,
     TimeRangeResponse,
 )

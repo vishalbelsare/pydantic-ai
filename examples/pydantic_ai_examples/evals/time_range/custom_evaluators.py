@@ -8,10 +8,10 @@ from pydantic_evals.evaluators import (
 )
 from pydantic_evals.otel import SpanQuery
 
-from pydantic_ai_examples.evals.models import (
+from pydantic_ai_examples.evals.time_range.models import (
     TimeRangeBuilderSuccess,
     TimeRangeInputs,
-    TimeRangeResponse,
+    TimeRangeResponse
 )
 
 

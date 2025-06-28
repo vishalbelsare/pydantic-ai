@@ -1,16 +1,18 @@
 from __future__ import annotations as _annotations
 
-from dataclasses import dataclass, field
+from dataclasses import field, dataclass
 from datetime import datetime
 
 from pydantic_ai import Agent, RunContext
 
-from .models import TimeRangeInputs, TimeRangeResponse
-
+from .models import (
+    TimeRangeInputs,
+    TimeRangeResponse,
+)
 
 @dataclass
 class TimeRangeDeps:
-    """Dependencies for the time range inference agent.
+    """Dependencies for a time range inference agent.
 
     While we could just get the current time using datetime.now() directly in the tools or system prompt, passing it
     via deps makes it easier to use a repeatable value during testing. While there are packages like `time-machine`
@@ -24,12 +26,12 @@ time_range_agent = Agent[TimeRangeDeps, TimeRangeResponse](
     'gpt-4o',
     output_type=TimeRangeResponse,  # type: ignore  # we can't yet annotate something as receiving a TypeForm
     deps_type=TimeRangeDeps,
-    system_prompt="Convert the user's request into a structured time range.",
+    instructions="Convert the user's request into a structured time range.",
     retries=1,
-    instrument=True,
 )
 
 
+# Add get_current_time as a tool; we would normally use a decorator, but the function is defined in a shared module.
 @time_range_agent.tool
 def get_current_time(ctx: RunContext[TimeRangeDeps]) -> str:
     """Get the user's current time and timezone in the format 'Friday, November 22, 2024 11:15:14 PST'."""

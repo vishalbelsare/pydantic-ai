@@ -3,13 +3,13 @@ from types import NoneType
 
 from pydantic_evals import Dataset
 
-from pydantic_ai_examples.evals.custom_evaluators import (
+from pydantic_ai_examples.evals.time_range.custom_evaluators import (
     CUSTOM_EVALUATOR_TYPES,
     AgentCalledTool,
     UserMessageIsConcise,
     ValidateTimeRange,
 )
-from pydantic_ai_examples.evals.models import (
+from pydantic_ai_examples.evals.time_range.models import (
     TimeRangeInputs,
     TimeRangeResponse,
 )

@@ -9,7 +9,7 @@ from datetime import timedelta
 from types import NoneType
 from typing import Any, Literal
 
-from temporalio import workflow, activity
+from temporalio import activity, workflow
 from temporalio.client import Client
 from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.worker import Worker

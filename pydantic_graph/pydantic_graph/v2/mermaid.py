@@ -85,6 +85,10 @@ def build_mermaid_graph(graph: Graph[Any, Any, Any]) -> MermaidGraph:
         source_node = MermaidNode(id=node_id, kind=kind, label=label, note=note)
         nodes.append(source_node)
 
+    for k, v in graph.edges_by_source.items():
+        for path in v:
+            _collect_edges(path, k)
+
     for node in graph.nodes.values():
         if isinstance(node, Decision):
             for branch in node.branches:

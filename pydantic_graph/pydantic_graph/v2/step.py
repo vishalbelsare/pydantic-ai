@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable
 from dataclasses import dataclass
-from typing import Protocol, Any, TYPE_CHECKING, Generic
+from typing import TYPE_CHECKING, Any, Generic, Protocol
 
 from typing_extensions import TypeVar
 

@@ -2,19 +2,15 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from collections.abc import AsyncGenerator, AsyncIterator, Sequence
-from collections.abc import Iterable
+from collections.abc import AsyncGenerator, AsyncIterator, Iterable, Sequence
 from contextlib import asynccontextmanager
-from dataclasses import dataclass
-from dataclasses import field
-from typing import Any, TYPE_CHECKING
-from typing import assert_never, cast, get_args, get_origin
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any, assert_never, cast, get_args, get_origin
 
 from typing_extensions import Literal
 
 from pydantic_graph.v2.decision import Decision
-from pydantic_graph.v2.id_types import ForkStack, ForkStackItem, GraphRunId, JoinId, NodeRunId, TaskId
-from pydantic_graph.v2.id_types import NodeId
+from pydantic_graph.v2.id_types import ForkStack, ForkStackItem, GraphRunId, JoinId, NodeId, NodeRunId, TaskId
 from pydantic_graph.v2.join import Join, Reducer
 from pydantic_graph.v2.node import (
     EndNode,

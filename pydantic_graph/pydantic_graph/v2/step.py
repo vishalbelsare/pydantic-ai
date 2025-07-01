@@ -65,10 +65,13 @@ class Step[StateT, InputT, OutputT]:
         self.user_label = user_label
         self.activity = activity
 
+    # TODO(P3): Consider replacing this with __call__, so the decorated object can still be called with the same signature
     @property
     def call(self) -> StepFunction[StateT, InputT, OutputT]:
         # The use of a property here is necessary to ensure that Step is covariant/contravariant as appropriate.
         return self._call
+
+    # TODO(P3): Consider adding a `bind` method that returns an object that can be used to get something you can return from a BaseNode that allows you to transition to nodes using "new"-form edges
 
     @property
     def label(self) -> str | None:

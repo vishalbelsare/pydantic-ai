@@ -327,7 +327,7 @@ async def test_google_model_vertex_provider(allow_model_requests: None, vertex_p
 
 async def test_google_model_vertex_labels(
     allow_model_requests: None, vertex_provider: GoogleProvider
-):  # pragma: lax no cover
+):  # pragma: no cover
     model = GoogleModel('gemini-2.0-flash', provider=vertex_provider)
     settings = GoogleModelSettings(google_labels={'environment': 'test', 'team': 'analytics'})
     agent = Agent(model=model, system_prompt='You are a helpful chatbot.', model_settings=settings)
@@ -346,7 +346,7 @@ async def test_google_model_iter_stream(allow_model_requests: None, google_provi
         Args:
             country: The country name.
         """
-        return 'Paris'  # pragma: lax no cover
+        return 'Paris'  # pragma: no cover
 
     @agent.tool_plain
     async def get_temperature(city: str) -> str:

@@ -17,7 +17,7 @@ from .conftest import IsStr
 
 try:
     from logfire.testing import CaptureLogfire
-except ImportError:  # pragma: lax no cover
+except ImportError:  # pragma: no cover
     logfire_installed = False
 else:
     logfire_installed = True
@@ -447,7 +447,7 @@ def test_instrument_all():
 async def test_feedback(capfire: CaptureLogfire) -> None:
     try:
         from logfire.experimental.annotations import record_feedback
-    except ImportError:  # pragma: lax no cover
+    except ImportError:  # pragma: no cover
         pytest.skip('Requires recent version of logfire')
 
     my_agent = Agent(model=TestModel(), instrument=True)

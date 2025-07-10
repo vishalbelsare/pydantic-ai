@@ -26,7 +26,7 @@ pytestmark = [
 
 
 @pytest.fixture(scope='module')
-def vcr_config():  # pragma: lax no cover
+def vcr_config():  # pragma: no cover
     if not os.getenv('CI'):
         return {'record_mode': 'rewrite'}
     return {'record_mode': 'none'}
@@ -84,7 +84,7 @@ def get_heroku_model_names():
     response = httpx.get('https://us.inference.heroku.com/available-models')
 
     if response.status_code != 200:
-        pytest.skip(f'Heroku AI returned status code {response.status_code}')  # pragma: lax no cover
+        pytest.skip(f'Heroku AI returned status code {response.status_code}')  # pragma: no cover
 
     heroku_models: list[HerokuModel] = response.json()
 

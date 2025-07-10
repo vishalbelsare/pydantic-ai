@@ -36,7 +36,7 @@ pytestmark = [
 
 
 @pytest.fixture(autouse=True)
-def vertex_provider_auth(mocker: MockerFixture) -> None:  # pragma: lax no cover
+def vertex_provider_auth(mocker: MockerFixture) -> None:  # pragma: no cover
     # Locally, we authenticate via `gcloud` CLI, so we don't need to patch anything.
     if not os.getenv('CI'):
         return
@@ -55,7 +55,7 @@ def vertex_provider_auth(mocker: MockerFixture) -> None:  # pragma: lax no cover
     not os.getenv('CI', False), reason='Requires properly configured local google vertex config to pass'
 )
 @pytest.mark.vcr()
-async def test_labels(allow_model_requests: None) -> None:  # pragma: lax no cover
+async def test_labels(allow_model_requests: None) -> None:  # pragma: no cover
     provider = GoogleVertexProvider(project_id='pydantic-ai', region='us-central1')
     m = GeminiModel('gemini-2.0-flash', provider=provider)
     agent = Agent(m)
@@ -123,7 +123,7 @@ async def test_labels(allow_model_requests: None) -> None:  # pragma: lax no cov
 @pytest.mark.vcr()
 async def test_url_input(
     url: Union[AudioUrl, DocumentUrl, ImageUrl, VideoUrl], expected_output: str, allow_model_requests: None
-) -> None:  # pragma: lax no cover
+) -> None:  # pragma: no cover
     provider = GoogleVertexProvider(project_id='pydantic-ai', region='us-central1')
     m = GeminiModel('gemini-2.0-flash', provider=provider)
     agent = Agent(m)
@@ -156,7 +156,7 @@ async def test_url_input(
     not os.getenv('CI', False), reason='Requires properly configured local google vertex config to pass'
 )
 @pytest.mark.vcr()
-async def test_url_input_force_download(allow_model_requests: None) -> None:  # pragma: lax no cover
+async def test_url_input_force_download(allow_model_requests: None) -> None:  # pragma: no cover
     provider = GoogleVertexProvider(project_id='pydantic-ai', region='us-central1')
     m = GeminiModel('gemini-2.0-flash', provider=provider)
     agent = Agent(m)

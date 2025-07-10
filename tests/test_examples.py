@@ -42,14 +42,14 @@ from .conftest import ClientWithHandler, TestEnv, try_import
 try:
     from pydantic_ai.providers.google import GoogleProvider
     from pydantic_ai.providers.google_vertex import GoogleVertexProvider
-except ImportError:  # pragma: lax no cover
+except ImportError:  # pragma: no cover
     GoogleVertexProvider = None
     GoogleProvider = None
 
 
 try:
     import logfire
-except ImportError:  # pragma: lax no cover
+except ImportError:  # pragma: no cover
     logfire = None
 
 
@@ -128,7 +128,7 @@ def test_docs_examples(  # noqa: C901
 
     class CustomEvaluationReport(EvaluationReport):
         def print(self, *args: Any, **kwargs: Any) -> None:
-            if 'width' in kwargs:  # pragma: lax no cover
+            if 'width' in kwargs:  # pragma: no cover
                 raise ValueError('width should not be passed to CustomEvaluationReport')
             table = self.console_table(*args, **kwargs)
             io_file = StringIO()
@@ -137,7 +137,7 @@ def test_docs_examples(  # noqa: C901
 
     mocker.patch('pydantic_evals.dataset.EvaluationReport', side_effect=CustomEvaluationReport)
 
-    if sys.version_info >= (3, 10):  # pragma: lax no cover
+    if sys.version_info >= (3, 10):  # pragma: no cover
         mocker.patch('pydantic_ai.mcp.MCPServerSSE', return_value=MockMCPServer())
         mocker.patch('pydantic_ai.mcp.MCPServerStreamableHTTP', return_value=MockMCPServer())
         mocker.patch('mcp.server.fastmcp.FastMCP')
@@ -165,7 +165,7 @@ def test_docs_examples(  # noqa: C901
     if python_version:
         python_version_info = tuple(int(v) for v in python_version.split('.'))
         if sys.version_info < python_version_info:
-            pytest.skip(f'Python version {python_version} required')  # pragma: lax no cover
+            pytest.skip(f'Python version {python_version} required')  # pragma: no cover
 
         ruff_target_version = f'py{python_version_info[0]}{python_version_info[1]}'
 
@@ -199,7 +199,7 @@ def test_docs_examples(  # noqa: C901
 
     if not opt_lint.startswith('skip'):
         # ruff and seem to black disagree here, not sure if that's easily fixable
-        if eval_example.update_examples:  # pragma: lax no cover
+        if eval_example.update_examples:  # pragma: no cover
             eval_example.format_ruff(example)
         else:
             eval_example.lint_ruff(example)
@@ -209,7 +209,7 @@ def test_docs_examples(  # noqa: C901
     else:
         test_globals: dict[str, str] = {'__name__': dunder_name}
 
-        if eval_example.update_examples:  # pragma: lax no cover
+        if eval_example.update_examples:  # pragma: no cover
             eval_example.run_print_update(example, call=call_name, module_globals=test_globals)
         else:
             eval_example.run_print_check(example, call=call_name, module_globals=test_globals)
@@ -460,7 +460,7 @@ tool_responses: dict[tuple[str, str], str] = {
 
 async def model_logic(  # noqa: C901
     messages: list[ModelMessage], info: AgentInfo
-) -> ModelResponse:  # pragma: lax no cover
+) -> ModelResponse:  # pragma: no cover
     m = messages[-1].parts[-1]
     if isinstance(m, UserPromptPart):
         if isinstance(m.content, list) and m.content[0] == 'This is file d9a13f:':
@@ -701,7 +701,7 @@ async def model_logic(  # noqa: C901
 
 async def stream_model_logic(  # noqa C901
     messages: list[ModelMessage], info: AgentInfo
-) -> AsyncIterator[str | DeltaToolCalls]:  # pragma: lax no cover
+) -> AsyncIterator[str | DeltaToolCalls]:  # pragma: no cover
     async def stream_text_response(r: str) -> AsyncIterator[str]:
         if isinstance(r, str):
             words = r.split(' ')
@@ -766,7 +766,7 @@ def mock_infer_model(model: Model | KnownModelName) -> Model:
         for m in model.models:
             try:
                 from pydantic_ai.models.openai import OpenAIModel
-            except ImportError:  # pragma: lax no cover
+            except ImportError:  # pragma: no cover
                 OpenAIModel = type(None)
 
             if isinstance(m, OpenAIModel):

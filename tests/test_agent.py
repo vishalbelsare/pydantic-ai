@@ -427,7 +427,7 @@ def upcase(text: str) -> str:
 def test_response_union_allow_str(input_union_callable: Callable[[], Any]):
     try:
         union = input_union_callable()
-    except TypeError:  # pragma: lax no cover
+    except TypeError:  # pragma: no cover
         pytest.skip('Python version does not support `|` syntax for unions')
 
     m = TestModel()
@@ -2076,7 +2076,7 @@ def test_model_requests_blocked(env: TestEnv):
 
         with pytest.raises(RuntimeError, match='Model requests are not allowed, since ALLOW_MODEL_REQUESTS is False'):
             agent.run_sync('Hello')
-    except ImportError:  # pragma: lax no cover
+    except ImportError:  # pragma: no cover
         pytest.skip('google-genai not installed')
 
 

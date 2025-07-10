@@ -253,7 +253,7 @@ class EvaluationReport(Generic[InputsT, OutputT, MetadataT]):
         else:  # pragma: no cover
             return renderer.build_diff_table(self, baseline)
 
-    def __str__(self) -> str:  # pragma: lax no cover
+    def __str__(self) -> str:  # pragma: no cover
         """Return a string representation of the report."""
         table = self.console_table()
         io_file = StringIO()

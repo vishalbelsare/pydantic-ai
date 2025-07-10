@@ -232,8 +232,8 @@ precision = 2
 exclude_lines = [
     # `# pragma: no cover` is standard marker for code that's not covered, this will error if code is covered
     'pragma: no cover',
-    # use `# pragma: lax no cover` if you want to ignore cases where (some of) the code is covered
-    'pragma: lax no cover',
+    # use `# pragma: no cover` if you want to ignore cases where (some of) the code is covered
+    'pragma: no cover',
     'raise NotImplementedError',
     'if TYPE_CHECKING:',
     'if typing.TYPE_CHECKING:',

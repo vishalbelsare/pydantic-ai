@@ -33,6 +33,10 @@ from .agent import Agent, AgentDepsT, OutputDataT
 WorkerOutputT = TypeVar('WorkerOutputT')
 
 try:
+    from starlette.middleware import Middleware
+    from starlette.routing import Route
+    from starlette.types import ExceptionHandler, Lifespan
+
     from fasta2a.applications import FastA2A
     from fasta2a.broker import Broker, InMemoryBroker
     from fasta2a.schema import (
@@ -48,9 +52,6 @@ try:
     )
     from fasta2a.storage import InMemoryStorage, Storage
     from fasta2a.worker import Worker
-    from starlette.middleware import Middleware
-    from starlette.routing import Route
-    from starlette.types import ExceptionHandler, Lifespan
 except ImportError as _import_error:
     raise ImportError(
         'Please install the `fasta2a` package to use `Agent.to_a2a()` method, '

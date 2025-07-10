@@ -57,14 +57,14 @@ ModelRequestNode = _agent_graph.ModelRequestNode
 UserPromptNode = _agent_graph.UserPromptNode
 
 if TYPE_CHECKING:
-    from fasta2a.applications import FastA2A
-    from fasta2a.broker import Broker
-    from fasta2a.schema import AgentProvider, Skill
-    from fasta2a.storage import Storage
     from starlette.middleware import Middleware
     from starlette.routing import Route
     from starlette.types import ExceptionHandler, Lifespan
 
+    from fasta2a.applications import FastA2A
+    from fasta2a.broker import Broker
+    from fasta2a.schema import AgentProvider, Skill
+    from fasta2a.storage import Storage
     from pydantic_ai.mcp import MCPServer
 
 
@@ -1274,7 +1274,7 @@ class Agent(Generic[AgentDepsT, OutputDataT]):
             ) -> _system_prompt.SystemPromptFunc[AgentDepsT]:
                 runner = _system_prompt.SystemPromptRunner[AgentDepsT](func_, dynamic=dynamic)
                 self._system_prompt_functions.append(runner)
-                if dynamic:  # pragma: lax no cover
+                if dynamic:  # pragma: no cover
                     self._system_prompt_dynamic_functions[func_.__qualname__] = runner
                 return func_
 

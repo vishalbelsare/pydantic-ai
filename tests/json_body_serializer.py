@@ -45,7 +45,7 @@ def deserialize(cassette_string: str):
     return cassette_dict
 
 
-def serialize(cassette_dict: Any):  # pragma: lax no cover
+def serialize(cassette_dict: Any):  # pragma: no cover
     for interaction in cassette_dict['interactions']:
         for _kind, data in interaction.items():
             headers: dict[str, list[str]] = data.get('headers', {})

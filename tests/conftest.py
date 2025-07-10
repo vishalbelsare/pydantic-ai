@@ -72,7 +72,7 @@ class TestEnv:
             if value is None:
                 os.environ.pop(name, None)
             else:
-                os.environ[name] = value  # pragma: lax no cover
+                os.environ[name] = value  # pragma: no cover
 
 
 @pytest.fixture
@@ -336,15 +336,15 @@ def bedrock_provider():
         )
         yield BedrockProvider(bedrock_client=bedrock_client)
         bedrock_client.close()
-    except ImportError:  # pragma: lax no cover
+    except ImportError:  # pragma: no cover
         pytest.skip('boto3 is not installed')
 
 
 @pytest.fixture(autouse=True)
-def vertex_provider_auth(mocker: MockerFixture) -> None:  # pragma: lax no cover
+def vertex_provider_auth(mocker: MockerFixture) -> None:  # pragma: no cover
     # Locally, we authenticate via `gcloud` CLI, so we don't need to patch anything.
     if not os.getenv('CI', False):
-        return  # pragma: lax no cover
+        return  # pragma: no cover
 
     try:
         from google.genai import _api_client
@@ -368,14 +368,14 @@ def vertex_provider_auth(mocker: MockerFixture) -> None:  # pragma: lax no cover
 @pytest.fixture()
 async def vertex_provider():
     # NOTE: You need to comment out this line to rewrite the cassettes locally.
-    if not os.getenv('CI', False):  # pragma: lax no cover
+    if not os.getenv('CI', False):  # pragma: no cover
         pytest.skip('Requires properly configured local google vertex config to pass')
 
     try:
         from google import genai
 
         from pydantic_ai.providers.google import GoogleProvider
-    except ImportError:  # pragma: lax no cover
+    except ImportError:  # pragma: no cover
         pytest.skip('google is not installed')
 
     project = os.getenv('GOOGLE_PROJECT', 'pydantic-ai')
@@ -399,7 +399,7 @@ def model(
     co_api_key: str,
     gemini_api_key: str,
     bedrock_provider: BedrockProvider,
-) -> Model:  # pragma: lax no cover
+) -> Model:  # pragma: no cover
     try:
         if request.param == 'openai':
             from pydantic_ai.models.openai import OpenAIModel

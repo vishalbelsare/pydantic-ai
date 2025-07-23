@@ -11,6 +11,8 @@ The module includes:
 - wait_retry_after: Wait strategy that respects HTTP Retry-After headers
 """
 
+from __future__ import annotations
+
 from httpx import AsyncBaseTransport, AsyncHTTPTransport, BaseTransport, HTTPTransport, Request, Response
 
 try:

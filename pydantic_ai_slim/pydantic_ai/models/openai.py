@@ -74,7 +74,7 @@ except ImportError as _import_error:
     ) from _import_error
 
 __all__ = (
-    'OpenAIChatChatCompletions',
+    'OpenAIChatCompletionsModel',
     'OpenAIModel',
     'OpenAIResponsesModel',
     'OpenAIModelSettings',
@@ -173,7 +173,7 @@ class OpenAIResponsesModelSettings(OpenAIModelSettings, total=False):
 
 
 @dataclass(init=False)
-class OpenAIChatChatCompletions(Model):
+class OpenAIChatCompletionsModel(Model):
     """A model that uses the OpenAI Chat Completions API.
 
     Internally, this uses the [OpenAI Python client](https://github.com/openai/openai-python) to interact with the API.
@@ -582,11 +582,11 @@ class OpenAIChatChatCompletions(Model):
         return chat.ChatCompletionUserMessageParam(role='user', content=content)
 
 
-@deprecated('Use OpenAIChatChatCompletions instead')
-class OpenAIModel(OpenAIChatChatCompletions):
+@deprecated('Use OpenAIChatCompletionsModel instead')
+class OpenAIModel(OpenAIChatCompletionsModel):
     """A model that uses the OpenAI API.
 
-    This class was renamed to `OpenAIChatChatCompletions`.
+    This class was renamed to `OpenAIChatCompletionsModel`.
     """
 
 

@@ -790,7 +790,7 @@ def mock_infer_model(model: Model | KnownModelName) -> Model:
         model = infer_model(model)
 
     if isinstance(model, FallbackModel):
-        # When a fallback model is encountered, replace any OpenAIChatChatCompletions with a model that will raise a ModelHTTPError.
+        # When a fallback model is encountered, replace any OpenAIChatCompletionsModel with a model that will raise a ModelHTTPError.
         # Otherwise, do the usual inference.
         def raise_http_error(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
             raise ModelHTTPError(401, 'Invalid API Key')
@@ -798,12 +798,12 @@ def mock_infer_model(model: Model | KnownModelName) -> Model:
         mock_fallback_models: list[Model] = []
         for m in model.models:
             try:
-                from pydantic_ai.models.openai import OpenAIChatChatCompletions
+                from pydantic_ai.models.openai import OpenAIChatCompletionsModel
             except ImportError:  # pragma: lax no cover
-                OpenAIChatChatCompletions = type(None)
+                OpenAIChatCompletionsModel = type(None)
 
-            if isinstance(m, OpenAIChatChatCompletions):
-                # Raise an HTTP error for OpenAIChatChatCompletions
+            if isinstance(m, OpenAIChatCompletionsModel):
+                # Raise an HTTP error for OpenAIChatCompletionsModel
                 mock_fallback_models.append(FunctionModel(raise_http_error, model_name=m.model_name))
             else:
                 mock_fallback_models.append(mock_infer_model(m))

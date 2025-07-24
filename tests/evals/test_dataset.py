@@ -11,8 +11,6 @@ from dirty_equals import HasRepr, IsNumber
 from inline_snapshot import snapshot
 from pydantic import BaseModel
 
-from pydantic_evals.evaluators.evaluator import EvaluatorFailure
-
 from ..conftest import IsStr, try_import
 from .utils import render_table
 
@@ -22,7 +20,14 @@ with try_import() as imports_successful:
 
     from pydantic_evals import Case, Dataset
     from pydantic_evals.dataset import increment_eval_metric, set_eval_attribute
-    from pydantic_evals.evaluators import EvaluationResult, Evaluator, EvaluatorOutput, LLMJudge, Python
+    from pydantic_evals.evaluators import (
+        EvaluationResult,
+        Evaluator,
+        EvaluatorFailure,
+        EvaluatorOutput,
+        LLMJudge,
+        Python,
+    )
     from pydantic_evals.evaluators.context import EvaluatorContext
 
     @dataclass

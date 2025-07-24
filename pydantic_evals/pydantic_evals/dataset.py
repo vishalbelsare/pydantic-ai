@@ -278,6 +278,7 @@ class Dataset(BaseModel, Generic[InputsT, OutputT, MetadataT], extra='forbid', a
             max_concurrency: The maximum number of concurrent evaluations of the task to allow.
                 If None, all cases will be evaluated concurrently.
             progress: Whether to show a progress bar for the evaluation. Defaults to `True`.
+            retry: Optional retry configuration for the task execution.
 
         Returns:
             A report containing the results of the evaluation.
@@ -920,6 +921,7 @@ async def _run_task_and_evaluators(
         case: The case to run the task on.
         report_case_name: The name to use for this case in the report.
         dataset_evaluators: Evaluators from the dataset to apply to this case.
+        retry: The retry strategy to use for running the task.
 
     Returns:
         A ReportCase containing the evaluation results.

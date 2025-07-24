@@ -25,6 +25,7 @@ __all__ = (
     'EvaluationResult',
     'EvaluationScalar',
     'Evaluator',
+    'EvaluatorFailure',
     'EvaluatorOutput',
 )
 
@@ -101,6 +102,8 @@ class EvaluationResult(Generic[EvaluationScalarT]):
 
 @dataclass
 class EvaluatorFailure:
+    """Represents a failure raised during the execution of an evaluator."""
+
     name: str
     error_msg: str
     source: Evaluator

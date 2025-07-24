@@ -35,6 +35,7 @@ with try_import() as imports_successful:
         EvaluationReason,
         EvaluationResult,
         Evaluator,
+        EvaluatorFailure,
         EvaluatorOutput,
     )
     from pydantic_evals.otel._context_in_memory_span_exporter import context_subtree
@@ -278,8 +279,10 @@ async def test_evaluator_error_handling(test_context: EvaluatorContext[TaskInput
     evaluator = FailingEvaluator()
 
     # When called directly, it should raise an error
-    with pytest.raises(ValueError, match='Simulated error'):
-        await run_evaluator(evaluator, test_context)
+    result = await run_evaluator(evaluator, test_context)
+    assert result == [
+        EvaluatorFailure(name='FailingEvaluator', error_msg='ValueError: Simulated error', source=FailingEvaluator())
+    ]
 
 
 async def test_evaluator_with_null_values():

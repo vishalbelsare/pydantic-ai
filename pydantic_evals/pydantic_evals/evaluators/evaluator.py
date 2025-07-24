@@ -99,6 +99,13 @@ class EvaluationResult(Generic[EvaluationScalarT]):
         return None
 
 
+@dataclass
+class EvaluatorFailure:
+    name: str
+    error_msg: str
+    source: Evaluator
+
+
 # Evaluators are contravariant in all of its parameters.
 InputsT = TypeVar('InputsT', default=Any, contravariant=True)
 """Type variable for the inputs type of the task being evaluated."""

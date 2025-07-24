@@ -33,6 +33,7 @@ with try_import() as imports_successful:
     from pydantic_evals.evaluators.context import EvaluatorContext
     from pydantic_evals.evaluators.evaluator import (
         EvaluationReason,
+        EvaluationResult,
         Evaluator,
         EvaluatorOutput,
     )
@@ -159,10 +160,12 @@ async def test_evaluator_call(test_context: EvaluatorContext[TaskInput, TaskOutp
     results = await run_evaluator(evaluator, test_context)
 
     assert len(results) == 1
-    assert results[0].name == 'result'
-    assert results[0].value == 'passed'
-    assert results[0].reason is None
-    assert results[0].source is evaluator
+    first_result = results[0]
+    assert isinstance(first_result, EvaluationResult)
+    assert first_result.name == 'result'
+    assert first_result.value == 'passed'
+    assert first_result.reason is None
+    assert first_result.source is evaluator
 
 
 async def test_is_instance_evaluator():

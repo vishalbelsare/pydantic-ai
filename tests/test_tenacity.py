@@ -21,7 +21,7 @@ with try_import() as imports_successful:
         wait_fixed,
     )
 
-    from pydantic_ai.tenacity import AsyncTenacityTransport, TenacityTransport, wait_retry_after
+    from pydantic_ai.retries import AsyncTenacityTransport, TenacityTransport, wait_retry_after
 
 pytestmark = pytest.mark.skipif(not imports_successful(), reason='install tenacity to run tenacity tests')
 

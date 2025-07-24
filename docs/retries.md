@@ -13,9 +13,7 @@ seamlessly with httpx clients. You can configure retry behavior for any provider
 To use the retry transports, you need to install the `tenacity` dependency:
 
 ```bash
-pip install tenacity
-# or if using uv
-uv add tenacity
+pip/uv-add 'pydantic-ai-slim[tenacity]'
 ```
 
 ## Usage Example
@@ -32,7 +30,7 @@ from tenacity import (
 )
 from pydantic_ai import Agent
 from pydantic_ai.models.openai import OpenAIModel
-from pydantic_ai.tenacity import AsyncTenacityTransport, wait_retry_after
+from pydantic_ai.retries import AsyncTenacityTransport, wait_retry_after
 from pydantic_ai.providers.openai import OpenAIProvider
 
 def create_retrying_client():
@@ -74,7 +72,7 @@ agent = Agent(model)
 The `wait_retry_after` function is a smart wait strategy that automatically respects HTTP `Retry-After` headers:
 
 ```python {title="wait_strategy_example.py"}
-from pydantic_ai.tenacity import wait_retry_after
+from pydantic_ai.retries import wait_retry_after
 from tenacity import wait_exponential
 
 # Basic usage - respects Retry-After headers, falls back to exponential backoff
@@ -102,7 +100,7 @@ For asynchronous HTTP clients (recommended for most use cases):
 ```python {title="async_transport_example.py"}
 from httpx import AsyncClient
 from tenacity import AsyncRetrying, stop_after_attempt
-from pydantic_ai.tenacity import AsyncTenacityTransport
+from pydantic_ai.retries import AsyncTenacityTransport
 
 # Create the basic components
 async_retrying = AsyncRetrying(stop=stop_after_attempt(3), reraise=True)
@@ -128,7 +126,7 @@ For synchronous HTTP clients:
 ```python {title="sync_transport_example.py"}
 from httpx import Client
 from tenacity import Retrying, stop_after_attempt
-from pydantic_ai.tenacity import TenacityTransport
+from pydantic_ai.retries import TenacityTransport
 
 # Create the basic components
 retrying = Retrying(stop=stop_after_attempt(3), reraise=True)
@@ -154,7 +152,7 @@ client = Client(transport=transport)
 ```python {title="rate_limit_handling.py"}
 from httpx import AsyncClient, HTTPStatusError
 from tenacity import AsyncRetrying, stop_after_attempt, retry_if_exception_type, wait_exponential
-from pydantic_ai.tenacity import AsyncTenacityTransport, wait_retry_after
+from pydantic_ai.retries import AsyncTenacityTransport, wait_retry_after
 
 def create_rate_limit_client():
     """Create a client that respects Retry-After headers from rate limiting responses."""
@@ -184,7 +182,7 @@ The `wait_retry_after` function automatically detects `Retry-After` headers in 4
 ```python {title="network_error_handling.py"}
 import httpx
 from tenacity import AsyncRetrying, retry_if_exception_type, wait_exponential, stop_after_attempt
-from pydantic_ai.tenacity import AsyncTenacityTransport
+from pydantic_ai.retries import AsyncTenacityTransport
 
 def create_network_resilient_client():
     """Create a client that handles network errors with retries."""
@@ -212,7 +210,7 @@ client = create_network_resilient_client()
 ```python {title="custom_retry_logic.py"}
 import httpx
 from tenacity import AsyncRetrying, wait_exponential, stop_after_attempt
-from pydantic_ai.tenacity import AsyncTenacityTransport, wait_retry_after
+from pydantic_ai.retries import AsyncTenacityTransport, wait_retry_after
 
 def create_custom_retry_client():
     """Create a client with custom retry logic."""
@@ -249,30 +247,12 @@ The retry transports work with any provider that accepts a custom HTTP client:
 
 ### OpenAI
 
-```python {title="openai_with_retries.py"}
-from httpx import AsyncClient, HTTPStatusError
-from tenacity import AsyncRetrying, stop_after_attempt, retry_if_exception_type
+```python {title="openai_with_retries.py" requires="smart_retry_example.py"}
 from pydantic_ai import Agent
 from pydantic_ai.models.openai import OpenAIModel
 from pydantic_ai.providers.openai import OpenAIProvider
-from pydantic_ai.tenacity import AsyncTenacityTransport, wait_retry_after
 
-def create_retrying_client():
-    """Create a client with retry functionality."""
-    def should_retry_status(response):
-        if response.status_code in (429, 502, 503, 504):
-            response.raise_for_status()
-
-    transport = AsyncTenacityTransport(
-        controller=AsyncRetrying(
-            retry=retry_if_exception_type(HTTPStatusError),
-            wait=wait_retry_after(max_wait=300),
-            stop=stop_after_attempt(5),
-            reraise=True
-        ),
-        validate_response=should_retry_status
-    )
-    return AsyncClient(transport=transport)
+from smart_retry_example import create_retrying_client
 
 client = create_retrying_client()
 model = OpenAIModel('gpt-4o', provider=OpenAIProvider(http_client=client))
@@ -281,30 +261,12 @@ agent = Agent(model)
 
 ### Anthropic
 
-```python {title="anthropic_with_retries.py"}
-from httpx import AsyncClient, HTTPStatusError
-from tenacity import AsyncRetrying, stop_after_attempt, retry_if_exception_type
+```python {title="anthropic_with_retries.py" requires="smart_retry_example.py"}
 from pydantic_ai import Agent
 from pydantic_ai.models.anthropic import AnthropicModel
 from pydantic_ai.providers.anthropic import AnthropicProvider
-from pydantic_ai.tenacity import AsyncTenacityTransport, wait_retry_after
 
-def create_retrying_client():
-    """Create a client with retry functionality."""
-    def should_retry_status(response):
-        if response.status_code in (429, 502, 503, 504):
-            response.raise_for_status()
-
-    transport = AsyncTenacityTransport(
-        controller=AsyncRetrying(
-            retry=retry_if_exception_type(HTTPStatusError),
-            wait=wait_retry_after(max_wait=300),
-            stop=stop_after_attempt(5),
-            reraise=True
-        ),
-        validate_response=should_retry_status
-    )
-    return AsyncClient(transport=transport)
+from smart_retry_example import create_retrying_client
 
 client = create_retrying_client()
 model = AnthropicModel('claude-3-5-sonnet-20241022', provider=AnthropicProvider(http_client=client))
@@ -313,30 +275,12 @@ agent = Agent(model)
 
 ### Any OpenAI-Compatible Provider
 
-```python {title="openai_compatible_with_retries.py"}
-from httpx import AsyncClient, HTTPStatusError
-from tenacity import AsyncRetrying, stop_after_attempt, retry_if_exception_type
+```python {title="openai_compatible_with_retries.py" requires="smart_retry_example.py"}
 from pydantic_ai import Agent
 from pydantic_ai.models.openai import OpenAIModel
 from pydantic_ai.providers.openai import OpenAIProvider
-from pydantic_ai.tenacity import AsyncTenacityTransport, wait_retry_after
 
-def create_retrying_client():
-    """Create a client with retry functionality."""
-    def should_retry_status(response):
-        if response.status_code in (429, 502, 503, 504):
-            response.raise_for_status()
-
-    transport = AsyncTenacityTransport(
-        controller=AsyncRetrying(
-            retry=retry_if_exception_type(HTTPStatusError),
-            wait=wait_retry_after(max_wait=300),
-            stop=stop_after_attempt(5),
-            reraise=True
-        ),
-        validate_response=should_retry_status
-    )
-    return AsyncClient(transport=transport)
+from smart_retry_example import create_retrying_client
 
 client = create_retrying_client()
 model = OpenAIModel(
@@ -368,30 +312,12 @@ agent = Agent(model)
 
 The retry transports will re-raise the last exception if all retry attempts fail. Make sure to handle these appropriately in your application:
 
-```python {title="error_handling_example.py"}
-from httpx import AsyncClient, HTTPStatusError
-from tenacity import AsyncRetrying, stop_after_attempt, retry_if_exception_type
+```python {title="error_handling_example.py" requires="smart_retry_example.py"}
 from pydantic_ai import Agent
 from pydantic_ai.models.openai import OpenAIModel
 from pydantic_ai.providers.openai import OpenAIProvider
-from pydantic_ai.tenacity import AsyncTenacityTransport, wait_retry_after
 
-def create_retrying_client():
-    """Create a client with retry functionality."""
-    def should_retry_status(response):
-        if response.status_code in (429, 502, 503, 504):
-            response.raise_for_status()
-
-    transport = AsyncTenacityTransport(
-        controller=AsyncRetrying(
-            retry=retry_if_exception_type(HTTPStatusError),
-            wait=wait_retry_after(max_wait=300),
-            stop=stop_after_attempt(3),  # Low for demonstration
-            reraise=True
-        ),
-        validate_response=should_retry_status
-    )
-    return AsyncClient(transport=transport)
+from smart_retry_example import create_retrying_client
 
 client = create_retrying_client()
 model = OpenAIModel('gpt-4o', provider=OpenAIProvider(http_client=client))

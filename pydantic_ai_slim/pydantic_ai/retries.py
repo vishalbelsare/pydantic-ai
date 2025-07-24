@@ -58,7 +58,7 @@ class TenacityTransport(BaseTransport):
         ```python
         from httpx import Client, HTTPTransport, HTTPStatusError
         from tenacity import Retrying, stop_after_attempt, retry_if_exception_type
-        from pydantic_ai.tenacity import TenacityTransport, wait_retry_after
+        from pydantic_ai.retries import TenacityTransport, wait_retry_after
 
         transport = TenacityTransport(
             HTTPTransport(),
@@ -130,7 +130,7 @@ class AsyncTenacityTransport(AsyncBaseTransport):
         ```python
         from httpx import AsyncClient, HTTPStatusError
         from tenacity import AsyncRetrying, stop_after_attempt, retry_if_exception_type
-        from pydantic_ai.tenacity import AsyncTenacityTransport, wait_retry_after
+        from pydantic_ai.retries import AsyncTenacityTransport, wait_retry_after
 
         transport = AsyncTenacityTransport(
             AsyncRetrying(
@@ -203,7 +203,7 @@ def wait_retry_after(
         ```python
         from httpx import AsyncClient, HTTPStatusError
         from tenacity import AsyncRetrying, stop_after_attempt, retry_if_exception_type
-        from pydantic_ai.tenacity import AsyncTenacityTransport, wait_retry_after
+        from pydantic_ai.retries import AsyncTenacityTransport, wait_retry_after
 
         transport = AsyncTenacityTransport(
             AsyncRetrying(

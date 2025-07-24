@@ -10,7 +10,7 @@ from contextlib import AbstractAsyncContextManager, AsyncExitStack, asynccontext
 from contextvars import ContextVar
 from copy import deepcopy
 from types import FrameType
-from typing import TYPE_CHECKING, Any, Callable, ClassVar, Generic, cast, final, overload
+from typing import TYPE_CHECKING, Any, Callable, ClassVar, Generic, Union, cast, final, overload
 
 from opentelemetry.trace import NoOpTracer, use_span
 from pydantic.json_schema import GenerateJsonSchema
@@ -99,7 +99,7 @@ RunOutputDataT = TypeVar('RunOutputDataT')
 EventStreamHandler: TypeAlias = Callable[
     [
         RunContext[AgentDepsT],
-        AsyncIterable[_messages.AgentStreamEvent | _messages.HandleResponseEvent],
+        AsyncIterable[Union[_messages.AgentStreamEvent, _messages.HandleResponseEvent]],
     ],
     Awaitable[None],
 ]

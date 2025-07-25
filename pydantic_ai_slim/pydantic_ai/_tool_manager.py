@@ -28,6 +28,8 @@ class ToolManager(Generic[AgentDepsT]):
     """The toolset that provides the tools for this run step."""
     tools: dict[str, ToolsetTool[AgentDepsT]]
     """The cached tools for this run step."""
+    failed_calls: set[str]
+    """The names of tools that have failed in this run step."""
 
     @classmethod
     async def build(cls, toolset: AbstractToolset[AgentDepsT], ctx: RunContext[AgentDepsT]) -> ToolManager[AgentDepsT]:
@@ -36,11 +38,17 @@ class ToolManager(Generic[AgentDepsT]):
             ctx=ctx,
             toolset=toolset,
             tools=await toolset.get_tools(ctx),
+            failed_calls=set(),
         )
 
     async def for_run_step(self, ctx: RunContext[AgentDepsT]) -> ToolManager[AgentDepsT]:
         """Build a new tool manager for the next run step, carrying over the retries from the current run step."""
-        return await self.__class__.build(self.toolset, replace(ctx, retries=self.ctx.retries))
+        # Increment retry counts by 1 for each tool that failed in this run step
+        updated_retries = self.ctx.retries.copy()
+        for failed_tool_name in self.failed_calls:
+            updated_retries[failed_tool_name] = updated_retries.get(failed_tool_name, 0) + 1
+        
+        return await self.__class__.build(self.toolset, replace(ctx, retries=updated_retries))
 
     @property
     def tool_defs(self) -> list[ToolDefinition]:
@@ -117,10 +125,12 @@ class ToolManager(Generic[AgentDepsT]):
                 else:
                     assert_never(e)
 
-                self.ctx.retries[name] = current_retry + 1
+                self.failed_calls.add(name)
                 raise e
         else:
-            self.ctx.retries.pop(name, None)
+            # Only clear retry count if this tool hasn't failed in this run step
+            if name not in self.failed_calls:
+                self.ctx.retries.pop(name, None)
             return output
 
     async def _call_tool_traced(self, call: ToolCallPart, allow_partial: bool = False) -> Any:

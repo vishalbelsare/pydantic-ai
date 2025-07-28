@@ -82,6 +82,17 @@ class SystemPromptPart:
             body={'role': 'system', **({'content': self.content} if settings.include_content else {})},
         )
 
+    def otel_message(self, settings: InstrumentationSettings) -> dict[str, Any]:
+        return {
+            'role': 'system',
+            'parts': [
+                {
+                    'type': 'text',
+                    **({'content': self.content} if settings.include_content else {}),
+                }
+            ],
+        }
+
     __repr__ = _utils.dataclasses_no_defaults_repr
 
 
@@ -477,24 +488,38 @@ class UserPromptPart:
     """Part type identifier, this is available on all parts as a discriminator."""
 
     def otel_event(self, settings: InstrumentationSettings) -> Event:
-        content: str | list[dict[str, Any] | str] | dict[str, Any]
-        if isinstance(self.content, str):
-            content = self.content if settings.include_content else {'kind': 'text'}
-        else:
-            content = []
-            for part in self.content:
-                if isinstance(part, str):
-                    content.append(part if settings.include_content else {'kind': 'text'})
-                elif isinstance(part, (ImageUrl, AudioUrl, DocumentUrl, VideoUrl)):
-                    content.append({'kind': part.kind, **({'url': part.url} if settings.include_content else {})})
-                elif isinstance(part, BinaryContent):
-                    converted_part = {'kind': part.kind, 'media_type': part.media_type}
-                    if settings.include_content and settings.include_binary_content:
-                        converted_part['binary_content'] = base64.b64encode(part.data).decode()
-                    content.append(converted_part)
-                else:
-                    content.append({'kind': part.kind})  # pragma: no cover
+        content = [{'kind': part.pop('type'), **part} for part in self._otel_message_parts(settings)]
+        content = [
+            part['content'] if part == {'kind': 'text', 'content': part.get('content')} else part for part in content
+        ]
+        if content in ([{'kind': 'text'}], [self.content]):
+            content = content[0]
         return Event('gen_ai.user.message', body={'content': content, 'role': 'user'})
+
+    def otel_message(self, settings: InstrumentationSettings) -> dict[str, Any]:
+        return {'role': 'user', 'parts': self._otel_message_parts(settings)}
+
+    def _otel_message_parts(self, settings: InstrumentationSettings) -> list[dict[str, Any]]:
+        parts: list[dict[str, Any]] = []
+        content = [self.content] if isinstance(self.content, str) else self.content
+        for part in content:
+            if isinstance(part, str):
+                parts.append({'type': 'text', **({'content': part} if settings.include_content else {})})
+            elif isinstance(part, (ImageUrl, AudioUrl, DocumentUrl, VideoUrl)):
+                parts.append(
+                    {
+                        'type': part.kind,
+                        **({'url': part.url} if settings.include_content else {}),
+                    }
+                )
+            elif isinstance(part, BinaryContent):
+                converted_part = {'type': part.kind, 'media_type': part.media_type}
+                if settings.include_content and settings.include_binary_content:
+                    converted_part['binary_content'] = base64.b64encode(part.data).decode()
+                parts.append(converted_part)
+            else:
+                parts.append({'type': part.kind})  # pragma: no cover
+        return parts
 
     __repr__ = _utils.dataclasses_no_defaults_repr
 
@@ -537,9 +562,12 @@ class ToolReturnPart:
         """Return a dictionary representation of the content, wrapping non-dict types appropriately."""
         # gemini supports JSON dict return values, but no other JSON types, hence we wrap anything else in a dict
         if isinstance(self.content, dict):
-            return tool_return_ta.dump_python(self.content, mode='json')  # pyright: ignore[reportUnknownMemberType]
+            return self._model_response_raw_object()
         else:
-            return {'return_value': tool_return_ta.dump_python(self.content, mode='json')}
+            return {'return_value': self._model_response_raw_object()}
+
+    def _model_response_raw_object(self):
+        return tool_return_ta.dump_python(self.content, mode='json')
 
     def otel_event(self, settings: InstrumentationSettings) -> Event:
         return Event(
@@ -551,6 +579,19 @@ class ToolReturnPart:
                 'name': self.tool_name,
             },
         )
+
+    def otel_message(self, settings: InstrumentationSettings) -> dict[str, Any]:
+        return {
+            'role': 'tool',
+            'parts': [
+                {
+                    **({'result': self._model_response_raw_object()} if settings.include_content else {}),
+                    'type': 'tool_call_response',
+                    'id': self.tool_call_id,
+                    'name': self.tool_name,
+                }
+            ],
+        }
 
     __repr__ = _utils.dataclasses_no_defaults_repr
 

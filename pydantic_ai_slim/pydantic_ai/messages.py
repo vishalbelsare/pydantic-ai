@@ -562,12 +562,9 @@ class ToolReturnPart:
         """Return a dictionary representation of the content, wrapping non-dict types appropriately."""
         # gemini supports JSON dict return values, but no other JSON types, hence we wrap anything else in a dict
         if isinstance(self.content, dict):
-            return self._model_response_raw_object()
+            return tool_return_ta.dump_python(self.content, mode='json')  # pyright: ignore[reportUnknownMemberType]
         else:
-            return {'return_value': self._model_response_raw_object()}
-
-    def _model_response_raw_object(self):
-        return tool_return_ta.dump_python(self.content, mode='json')
+            return {'return_value': tool_return_ta.dump_python(self.content, mode='json')}
 
     def otel_event(self, settings: InstrumentationSettings) -> Event:
         return Event(
@@ -585,7 +582,7 @@ class ToolReturnPart:
             'role': 'tool',
             'parts': [
                 {
-                    **({'result': self._model_response_raw_object()} if settings.include_content else {}),
+                    **({'result': self.content} if settings.include_content else {}),
                     'type': 'tool_call_response',
                     'id': self.tool_call_id,
                     'name': self.tool_name,

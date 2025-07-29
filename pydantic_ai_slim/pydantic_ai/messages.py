@@ -648,6 +648,19 @@ class RetryPromptPart:
                 },
             )
 
+    def otel_message_parts(self, settings: InstrumentationSettings) -> list[_otel_messages.MessagePart]:
+        if self.tool_name is None:
+            return [_otel_messages.TextPart(type='text', content=self.model_response())]
+        else:
+            return [
+                _otel_messages.ToolCallResponsePart(
+                    type='tool_call_response',
+                    id=self.tool_call_id,
+                    name=self.tool_name,
+                    **({'result': self.model_response()} if settings.include_content else {}),
+                )
+            ]
+
     __repr__ = _utils.dataclasses_no_defaults_repr
 
 

@@ -13,7 +13,7 @@ import pydantic_core
 from opentelemetry._events import Event  # pyright: ignore[reportPrivateImportUsage]
 from typing_extensions import TypeAlias, deprecated
 
-from . import _utils
+from . import _otel_messages, _utils
 from ._utils import (
     generate_tool_call_id as _generate_tool_call_id,
     now_utc as _now_utc,
@@ -82,16 +82,8 @@ class SystemPromptPart:
             body={'role': 'system', **({'content': self.content} if settings.include_content else {})},
         )
 
-    def otel_message(self, settings: InstrumentationSettings) -> dict[str, Any]:
-        return {
-            'role': 'system',
-            'parts': [
-                {
-                    'type': 'text',
-                    **({'content': self.content} if settings.include_content else {}),
-                }
-            ],
-        }
+    def otel_message_parts(self, settings: InstrumentationSettings) -> list[_otel_messages.MessagePart]:
+        return [_otel_messages.TextPart(type='text', **{'content': self.content} if settings.include_content else {})]
 
     __repr__ = _utils.dataclasses_no_defaults_repr
 
@@ -499,21 +491,23 @@ class UserPromptPart:
     def otel_message(self, settings: InstrumentationSettings) -> dict[str, Any]:
         return {'role': 'user', 'parts': self._otel_message_parts(settings)}
 
-    def _otel_message_parts(self, settings: InstrumentationSettings) -> list[dict[str, Any]]:
-        parts: list[dict[str, Any]] = []
+    def _otel_message_parts(self, settings: InstrumentationSettings) -> list[_otel_messages.MessagePart]:
+        parts: list[_otel_messages.MessagePart] = []
         content = [self.content] if isinstance(self.content, str) else self.content
         for part in content:
             if isinstance(part, str):
-                parts.append({'type': 'text', **({'content': part} if settings.include_content else {})})
+                parts.append(
+                    _otel_messages.TextPart(type='text', **({'content': part} if settings.include_content else {}))
+                )
             elif isinstance(part, (ImageUrl, AudioUrl, DocumentUrl, VideoUrl)):
                 parts.append(
-                    {
-                        'type': part.kind,
-                        **({'url': part.url} if settings.include_content else {}),
-                    }
+                    _otel_messages.MediaUrlPart(
+                        type=part.kind,
+                        **{'url': part.url} if settings.include_content else {},
+                    )
                 )
             elif isinstance(part, BinaryContent):
-                converted_part = {'type': part.kind, 'media_type': part.media_type}
+                converted_part = _otel_messages.BinaryDataPart(type='binary', media_type=part.media_type)
                 if settings.include_content and settings.include_binary_content:
                     converted_part['binary_content'] = base64.b64encode(part.data).decode()
                 parts.append(converted_part)

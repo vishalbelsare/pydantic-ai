@@ -36,7 +36,12 @@ class BinaryDataPart(TypedDict):
     binary_content: NotRequired[str]
 
 
-MessagePart: TypeAlias = 'TextPart | ToolCallPart | ToolCallResponsePart | MediaUrlPart | BinaryDataPart'
+class ThinkingPart(TypedDict):
+    type: Literal['thinking']
+    content: NotRequired[str]
+
+
+MessagePart: TypeAlias = 'TextPart | ToolCallPart | ToolCallResponsePart | MediaUrlPart | BinaryDataPart | ThinkingPart'
 
 
 Role = Literal['system', 'user', 'assistant']

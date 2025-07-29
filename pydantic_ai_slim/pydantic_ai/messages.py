@@ -867,6 +867,34 @@ class ModelResponse:
 
         return result
 
+    def otel_message_parts(self, settings: InstrumentationSettings) -> list[_otel_messages.MessagePart]:
+        parts: list[_otel_messages.MessagePart] = []
+        for part in self.parts:
+            if isinstance(part, TextPart):
+                parts.append(
+                    _otel_messages.TextPart(
+                        type='text',
+                        **({'content': part.content} if settings.include_content else {}),
+                    )
+                )
+            elif isinstance(part, ThinkingPart):
+                parts.append(
+                    _otel_messages.ThinkingPart(
+                        type='thinking',
+                        **({'content': part.content} if settings.include_content else {}),
+                    )
+                )
+            elif isinstance(part, ToolCallPart):
+                parts.append(
+                    _otel_messages.ToolCallPart(
+                        type='tool_call',
+                        id=part.tool_call_id,
+                        name=part.tool_name,
+                        **({'args': part.args_as_dict()} if settings.include_content else {}),
+                    )
+                )
+        return parts
+
     __repr__ = _utils.dataclasses_no_defaults_repr
 
 

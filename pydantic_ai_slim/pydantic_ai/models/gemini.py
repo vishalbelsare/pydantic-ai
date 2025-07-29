@@ -66,7 +66,11 @@ See [the Gemini API docs](https://ai.google.dev/gemini-api/docs/models/gemini#mo
 
 
 class GeminiModelSettings(ModelSettings, total=False):
-    """Settings used for a Gemini model request."""
+    """Settings used for a Gemini model request.
+
+    .. deprecated::
+        `GeminiModelSettings` is deprecated, use `GoogleModelSettings` from `pydantic_ai.models.google` instead.
+    """
 
     # ALL FIELDS MUST BE `gemini_` PREFIXED SO YOU CAN MERGE THEM WITH OTHER MODELS.
 
@@ -100,6 +104,10 @@ class GeminiModel(Model):
     available [here](https://ai.google.dev/api).
 
     Apart from `__init__`, all methods are private or match those of the base class.
+
+    .. deprecated::
+        `GeminiModel` is deprecated, use `GoogleModel` from `pydantic_ai.models.google` instead.
+        `GoogleModel` uses Google's official SDK and is more up-to-date with API changes.
     """
 
     client: httpx.AsyncClient = field(repr=False)
@@ -119,6 +127,10 @@ class GeminiModel(Model):
         settings: ModelSettings | None = None,
     ):
         """Initialize a Gemini model.
+
+        .. deprecated::
+            `GeminiModel` is deprecated, use `GoogleModel` from `pydantic_ai.models.google` instead.
+            `GoogleModel` uses Google's official SDK and is more up-to-date with API changes.
 
         Args:
             model_name: The name of the model to use.

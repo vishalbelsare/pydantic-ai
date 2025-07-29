@@ -480,7 +480,7 @@ class UserPromptPart:
     """Part type identifier, this is available on all parts as a discriminator."""
 
     def otel_event(self, settings: InstrumentationSettings) -> Event:
-        content = [{'kind': part.pop('type'), **part} for part in self._otel_message_parts(settings)]
+        content = [{'kind': part.pop('type'), **part} for part in self.otel_message_parts(settings)]
         content = [
             part['content'] if part == {'kind': 'text', 'content': part.get('content')} else part for part in content
         ]
@@ -488,10 +488,7 @@ class UserPromptPart:
             content = content[0]
         return Event('gen_ai.user.message', body={'content': content, 'role': 'user'})
 
-    def otel_message(self, settings: InstrumentationSettings) -> dict[str, Any]:
-        return {'role': 'user', 'parts': self._otel_message_parts(settings)}
-
-    def _otel_message_parts(self, settings: InstrumentationSettings) -> list[_otel_messages.MessagePart]:
+    def otel_message_parts(self, settings: InstrumentationSettings) -> list[_otel_messages.MessagePart]:
         parts: list[_otel_messages.MessagePart] = []
         content = [self.content] if isinstance(self.content, str) else self.content
         for part in content:
@@ -571,18 +568,15 @@ class ToolReturnPart:
             },
         )
 
-    def otel_message(self, settings: InstrumentationSettings) -> dict[str, Any]:
-        return {
-            'role': 'tool',
-            'parts': [
-                {
-                    **({'result': self.content} if settings.include_content else {}),
-                    'type': 'tool_call_response',
-                    'id': self.tool_call_id,
-                    'name': self.tool_name,
-                }
-            ],
-        }
+    def otel_message_parts(self, settings: InstrumentationSettings) -> list[_otel_messages.MessagePart]:
+        return [
+            _otel_messages.ToolCallResponsePart(
+                type='tool_call_response',
+                id=self.tool_call_id,
+                name=self.tool_name,
+                **({'result': self.model_response_object()} if settings.include_content else {}),
+            )
+        ]
 
     __repr__ = _utils.dataclasses_no_defaults_repr
 

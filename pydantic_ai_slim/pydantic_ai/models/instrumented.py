@@ -18,6 +18,7 @@ from opentelemetry.trace import Span, Tracer, TracerProvider, get_tracer_provide
 from opentelemetry.util.types import AttributeValue
 from pydantic import TypeAdapter
 
+from .. import _otel_messages
 from ..messages import (
     ModelMessage,
     ModelRequest,
@@ -181,6 +182,19 @@ class InstrumentationSettings:
         for event in events:
             event.body = InstrumentedModel.serialize_any(event.body)
         return events
+
+    def messages_to_otel_messages(self, messages: list[ModelMessage]) -> list[_otel_messages.ChatMessage]:
+        result: list[_otel_messages.ChatMessage] = []
+        for message in messages:
+            if isinstance(message, ModelRequest):
+                message_parts: list[_otel_messages.MessagePart] = []
+                for part in message.parts:
+                    if hasattr(part, 'otel_message_parts'):
+                        message_parts.extend(part.otel_message_parts(self))
+                result.append(_otel_messages.ChatMessage(role='user', parts=message_parts))
+            elif isinstance(message, ModelResponse):  # pragma: no branch
+                result.append(_otel_messages.ChatMessage(role='assistant', parts=message.otel_message_parts(self)))
+        return result
 
 
 GEN_AI_SYSTEM_ATTRIBUTE = 'gen_ai.system'

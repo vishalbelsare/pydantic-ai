@@ -569,12 +569,14 @@ class ToolReturnPart:
         )
 
     def otel_message_parts(self, settings: InstrumentationSettings) -> list[_otel_messages.MessagePart]:
+        from .models.instrumented import InstrumentedModel
+
         return [
             _otel_messages.ToolCallResponsePart(
                 type='tool_call_response',
                 id=self.tool_call_id,
                 name=self.tool_name,
-                **({'result': self.model_response_object()} if settings.include_content else {}),
+                **({'result': InstrumentedModel.serialize_any(self.content)} if settings.include_content else {}),
             )
         ]
 
@@ -885,14 +887,16 @@ class ModelResponse:
                     )
                 )
             elif isinstance(part, ToolCallPart):
-                parts.append(
-                    _otel_messages.ToolCallPart(
-                        type='tool_call',
-                        id=part.tool_call_id,
-                        name=part.tool_name,
-                        **({'args': part.args_as_dict()} if settings.include_content else {}),
-                    )
-                )
+                call_part = _otel_messages.ToolCallPart(type='tool_call', id=part.tool_call_id, name=part.tool_name)
+                if settings.include_content and part.args is not None:
+                    from .models.instrumented import InstrumentedModel
+
+                    if isinstance(part.args, str):
+                        call_part['arguments'] = part.args
+                    else:
+                        call_part['arguments'] = {k: InstrumentedModel.serialize_any(v) for k, v in part.args.items()}
+
+                parts.append(call_part)
         return parts
 
     __repr__ = _utils.dataclasses_no_defaults_repr

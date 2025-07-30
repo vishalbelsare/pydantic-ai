@@ -143,8 +143,8 @@ async def test_forecast():
             ],
             usage=Usage(
                 requests=1,
-                request_tokens=71,
-                response_tokens=7,
+                input_tokens=71,
+                output_tokens=7,
                 total_tokens=78,
                 details=None,
             ),
@@ -169,8 +169,8 @@ async def test_forecast():
             ],
             usage=Usage(
                 requests=1,
-                request_tokens=77,
-                response_tokens=16,
+                input_tokens=77,
+                output_tokens=16,
                 total_tokens=93,
                 details=None,
             ),

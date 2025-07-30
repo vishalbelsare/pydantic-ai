@@ -11,7 +11,7 @@ from pydantic_ai import Agent, ModelHTTPError
 from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse, TextPart, UserPromptPart
 from pydantic_ai.models.fallback import FallbackModel
 from pydantic_ai.models.function import AgentInfo, FunctionModel
-from pydantic_ai.usage import Usage
+from pydantic_ai.usage import RunUsage
 
 from ..conftest import IsNow, try_import
 
@@ -60,7 +60,7 @@ def test_first_successful() -> None:
             ),
             ModelResponse(
                 parts=[TextPart(content='success')],
-                usage=Usage(requests=1, request_tokens=51, response_tokens=1, total_tokens=52),
+                usage=RunUsage(requests=1, input_tokens=51, output_tokens=1, total_tokens=52),
                 model_name='function:success_response:',
                 timestamp=IsNow(tz=timezone.utc),
             ),
@@ -85,7 +85,7 @@ def test_first_failed() -> None:
             ),
             ModelResponse(
                 parts=[TextPart(content='success')],
-                usage=Usage(requests=1, request_tokens=51, response_tokens=1, total_tokens=52),
+                usage=RunUsage(requests=1, input_tokens=51, output_tokens=1, total_tokens=52),
                 model_name='function:success_response:',
                 timestamp=IsNow(tz=timezone.utc),
             ),
@@ -111,7 +111,7 @@ def test_first_failed_instrumented(capfire: CaptureLogfire) -> None:
             ),
             ModelResponse(
                 parts=[TextPart(content='success')],
-                usage=Usage(requests=1, request_tokens=51, response_tokens=1, total_tokens=52),
+                usage=RunUsage(requests=1, input_tokens=51, output_tokens=1, total_tokens=52),
                 model_name='function:success_response:',
                 timestamp=IsNow(tz=timezone.utc),
             ),
@@ -170,19 +170,19 @@ async def test_first_failed_instrumented_stream(capfire: CaptureLogfire) -> None
             [
                 ModelResponse(
                     parts=[TextPart(content='hello ')],
-                    usage=Usage(request_tokens=50, response_tokens=1, total_tokens=51),
+                    usage=RunUsage(input_tokens=50, output_tokens=1, total_tokens=51),
                     model_name='function::success_response_stream',
                     timestamp=IsNow(tz=timezone.utc),
                 ),
                 ModelResponse(
                     parts=[TextPart(content='hello world')],
-                    usage=Usage(request_tokens=50, response_tokens=2, total_tokens=52),
+                    usage=RunUsage(input_tokens=50, output_tokens=2, total_tokens=52),
                     model_name='function::success_response_stream',
                     timestamp=IsNow(tz=timezone.utc),
                 ),
                 ModelResponse(
                     parts=[TextPart(content='hello world')],
-                    usage=Usage(request_tokens=50, response_tokens=2, total_tokens=52),
+                    usage=RunUsage(input_tokens=50, output_tokens=2, total_tokens=52),
                     model_name='function::success_response_stream',
                     timestamp=IsNow(tz=timezone.utc),
                 ),
@@ -346,19 +346,19 @@ async def test_first_success_streaming() -> None:
             [
                 ModelResponse(
                     parts=[TextPart(content='hello ')],
-                    usage=Usage(request_tokens=50, response_tokens=1, total_tokens=51),
+                    usage=RunUsage(input_tokens=50, output_tokens=1, total_tokens=51),
                     model_name='function::success_response_stream',
                     timestamp=IsNow(tz=timezone.utc),
                 ),
                 ModelResponse(
                     parts=[TextPart(content='hello world')],
-                    usage=Usage(request_tokens=50, response_tokens=2, total_tokens=52),
+                    usage=RunUsage(input_tokens=50, output_tokens=2, total_tokens=52),
                     model_name='function::success_response_stream',
                     timestamp=IsNow(tz=timezone.utc),
                 ),
                 ModelResponse(
                     parts=[TextPart(content='hello world')],
-                    usage=Usage(request_tokens=50, response_tokens=2, total_tokens=52),
+                    usage=RunUsage(input_tokens=50, output_tokens=2, total_tokens=52),
                     model_name='function::success_response_stream',
                     timestamp=IsNow(tz=timezone.utc),
                 ),
@@ -375,19 +375,19 @@ async def test_first_failed_streaming() -> None:
             [
                 ModelResponse(
                     parts=[TextPart(content='hello ')],
-                    usage=Usage(request_tokens=50, response_tokens=1, total_tokens=51),
+                    usage=RunUsage(input_tokens=50, output_tokens=1, total_tokens=51),
                     model_name='function::success_response_stream',
                     timestamp=IsNow(tz=timezone.utc),
                 ),
                 ModelResponse(
                     parts=[TextPart(content='hello world')],
-                    usage=Usage(request_tokens=50, response_tokens=2, total_tokens=52),
+                    usage=RunUsage(input_tokens=50, output_tokens=2, total_tokens=52),
                     model_name='function::success_response_stream',
                     timestamp=IsNow(tz=timezone.utc),
                 ),
                 ModelResponse(
                     parts=[TextPart(content='hello world')],
-                    usage=Usage(request_tokens=50, response_tokens=2, total_tokens=52),
+                    usage=RunUsage(input_tokens=50, output_tokens=2, total_tokens=52),
                     model_name='function::success_response_stream',
                     timestamp=IsNow(tz=timezone.utc),
                 ),

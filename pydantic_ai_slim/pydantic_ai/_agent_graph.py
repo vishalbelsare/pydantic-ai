@@ -75,7 +75,7 @@ class GraphAgentState:
     """State kept across the execution of the agent graph."""
 
     message_history: list[_messages.ModelMessage]
-    usage: _usage.Usage
+    usage: _usage.RunUsage
     retries: int
     run_step: int
 
@@ -357,7 +357,7 @@ class ModelRequestNode(AgentNode[DepsT, NodeRunEndT]):
             ctx.state.message_history, ctx.deps.history_processors, build_run_context(ctx)
         )
         model_response = await ctx.deps.model.request(message_history, model_settings, model_request_parameters)
-        ctx.state.usage.incr(_usage.Usage())
+        ctx.state.usage.incr(_usage.RunUsage())
 
         return self._finish_handling(ctx, model_response)
 

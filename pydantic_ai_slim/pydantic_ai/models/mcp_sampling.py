@@ -62,7 +62,7 @@ class MCPSamplingModel(Model):
         if result.role == 'assistant':
             return ModelResponse(
                 parts=[_mcp.map_from_sampling_content(result.content)],
-                usage=usage.Usage(requests=1),
+                usage=usage.RequestUsage(requests=1),
                 model_name=result.model,
             )
         else:

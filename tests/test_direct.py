@@ -30,7 +30,7 @@ from pydantic_ai.models import ModelRequestParameters
 from pydantic_ai.models.instrumented import InstrumentedModel
 from pydantic_ai.models.test import TestModel
 from pydantic_ai.tools import ToolDefinition
-from pydantic_ai.usage import Usage
+from pydantic_ai.usage import RunUsage
 
 from .conftest import IsNow, IsStr
 
@@ -44,7 +44,7 @@ async def test_model_request():
             parts=[TextPart(content='success (no tool calls)')],
             model_name='test',
             timestamp=IsNow(tz=timezone.utc),
-            usage=Usage(requests=1, request_tokens=51, response_tokens=4, total_tokens=55),
+            usage=RunUsage(requests=1, input_tokens=51, output_tokens=4, total_tokens=55),
         )
     )
 
@@ -63,7 +63,7 @@ async def test_model_request_tool_call():
             parts=[ToolCallPart(tool_name='tool_name', args={}, tool_call_id=IsStr(regex='pyd_ai_.*'))],
             model_name='test',
             timestamp=IsNow(tz=timezone.utc),
-            usage=Usage(requests=1, request_tokens=51, response_tokens=2, total_tokens=53),
+            usage=RunUsage(requests=1, input_tokens=51, output_tokens=2, total_tokens=53),
         )
     )
 
@@ -75,7 +75,7 @@ def test_model_request_sync():
             parts=[TextPart(content='success (no tool calls)')],
             model_name='test',
             timestamp=IsNow(tz=timezone.utc),
-            usage=Usage(requests=1, request_tokens=51, response_tokens=4, total_tokens=55),
+            usage=RunUsage(requests=1, input_tokens=51, output_tokens=4, total_tokens=55),
         )
     )
 

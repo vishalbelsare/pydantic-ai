@@ -142,7 +142,7 @@ async def main():
             model_response=ModelResponse(
                 parts=[TextPart(content='Paris')],
                 usage=Usage(
-                    requests=1, request_tokens=56, response_tokens=1, total_tokens=57
+                    requests=1, input_tokens=56, output_tokens=1, total_tokens=57
                 ),
                 model_name='gpt-4o',
                 timestamp=datetime.datetime(...),
@@ -206,8 +206,8 @@ async def main():
                     parts=[TextPart(content='Paris')],
                     usage=Usage(
                         requests=1,
-                        request_tokens=56,
-                        response_tokens=1,
+                        input_tokens=56,
+                        output_tokens=1,
                         total_tokens=57,
                     ),
                     model_name='gpt-4o',
@@ -401,7 +401,7 @@ result_sync = agent.run_sync(
 print(result_sync.output)
 #> Rome
 print(result_sync.usage())
-#> Usage(requests=1, request_tokens=62, response_tokens=1, total_tokens=63)
+#> Usage(requests=1, input_tokens=62, output_tokens=1, total_tokens=63)
 
 try:
     result_sync = agent.run_sync(
@@ -410,7 +410,7 @@ try:
     )
 except UsageLimitExceeded as e:
     print(e)
-    #> Exceeded the response_tokens_limit of 10 (response_tokens=32)
+    #> Exceeded the response_tokens_limit of 10 (output_tokens=32)
 ```
 
 Restricting the number of requests can be useful in preventing infinite loops or excessive tool calling:
@@ -849,7 +849,7 @@ with capture_run_messages() as messages:  # (2)!
                     )
                 ],
                 usage=Usage(
-                    requests=1, request_tokens=62, response_tokens=4, total_tokens=66
+                    requests=1, input_tokens=62, output_tokens=4, total_tokens=66
                 ),
                 model_name='gpt-4o',
                 timestamp=datetime.datetime(...),
@@ -873,7 +873,7 @@ with capture_run_messages() as messages:  # (2)!
                     )
                 ],
                 usage=Usage(
-                    requests=1, request_tokens=72, response_tokens=8, total_tokens=80
+                    requests=1, input_tokens=72, output_tokens=8, total_tokens=80
                 ),
                 model_name='gpt-4o',
                 timestamp=datetime.datetime(...),

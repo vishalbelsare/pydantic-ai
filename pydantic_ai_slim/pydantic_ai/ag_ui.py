@@ -104,7 +104,7 @@ from .settings import ModelSettings
 from .tools import AgentDepsT, ToolDefinition
 from .toolsets import AbstractToolset
 from .toolsets.deferred import DeferredToolset
-from .usage import Usage, UsageLimits
+from .usage import RunUsage, UsageLimits
 
 __all__ = [
     'SSE_CONTENT_TYPE',
@@ -130,7 +130,7 @@ class AGUIApp(Generic[AgentDepsT, OutputDataT], Starlette):
         deps: AgentDepsT = None,
         model_settings: ModelSettings | None = None,
         usage_limits: UsageLimits | None = None,
-        usage: Usage | None = None,
+        usage: RunUsage | None = None,
         infer_name: bool = True,
         toolsets: Sequence[AbstractToolset[AgentDepsT]] | None = None,
         # Starlette parameters.
@@ -242,7 +242,7 @@ class _Adapter(Generic[AgentDepsT, OutputDataT]):
         deps: AgentDepsT = None,
         model_settings: ModelSettings | None = None,
         usage_limits: UsageLimits | None = None,
-        usage: Usage | None = None,
+        usage: RunUsage | None = None,
         infer_name: bool = True,
         toolsets: Sequence[AbstractToolset[AgentDepsT]] | None = None,
     ) -> AsyncGenerator[str, None]:

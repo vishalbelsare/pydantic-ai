@@ -55,7 +55,6 @@ from .toolsets import AbstractToolset
 from .toolsets.combined import CombinedToolset
 from .toolsets.function import FunctionToolset
 from .toolsets.prepared import PreparedToolset
-from .usage import Usage, UsageLimits
 
 # Re-exporting like this improves auto-import behavior in PyCharm
 capture_run_messages = _agent_graph.capture_run_messages
@@ -451,7 +450,7 @@ class Agent(Generic[AgentDepsT, OutputDataT]):
         deps: AgentDepsT = None,
         model_settings: ModelSettings | None = None,
         usage_limits: _usage.UsageLimits | None = None,
-        usage: _usage.Usage | None = None,
+        usage: _usage.RunUsage | None = None,
         infer_name: bool = True,
         toolsets: Sequence[AbstractToolset[AgentDepsT]] | None = None,
     ) -> AgentRunResult[OutputDataT]: ...
@@ -467,7 +466,7 @@ class Agent(Generic[AgentDepsT, OutputDataT]):
         deps: AgentDepsT = None,
         model_settings: ModelSettings | None = None,
         usage_limits: _usage.UsageLimits | None = None,
-        usage: _usage.Usage | None = None,
+        usage: _usage.RunUsage | None = None,
         infer_name: bool = True,
         toolsets: Sequence[AbstractToolset[AgentDepsT]] | None = None,
     ) -> AgentRunResult[RunOutputDataT]: ...
@@ -484,7 +483,7 @@ class Agent(Generic[AgentDepsT, OutputDataT]):
         deps: AgentDepsT = None,
         model_settings: ModelSettings | None = None,
         usage_limits: _usage.UsageLimits | None = None,
-        usage: _usage.Usage | None = None,
+        usage: _usage.RunUsage | None = None,
         infer_name: bool = True,
         toolsets: Sequence[AbstractToolset[AgentDepsT]] | None = None,
     ) -> AgentRunResult[RunOutputDataT]: ...
@@ -499,7 +498,7 @@ class Agent(Generic[AgentDepsT, OutputDataT]):
         deps: AgentDepsT = None,
         model_settings: ModelSettings | None = None,
         usage_limits: _usage.UsageLimits | None = None,
-        usage: _usage.Usage | None = None,
+        usage: _usage.RunUsage | None = None,
         infer_name: bool = True,
         toolsets: Sequence[AbstractToolset[AgentDepsT]] | None = None,
         **_deprecated_kwargs: Never,
@@ -576,7 +575,7 @@ class Agent(Generic[AgentDepsT, OutputDataT]):
         deps: AgentDepsT = None,
         model_settings: ModelSettings | None = None,
         usage_limits: _usage.UsageLimits | None = None,
-        usage: _usage.Usage | None = None,
+        usage: _usage.RunUsage | None = None,
         infer_name: bool = True,
         toolsets: Sequence[AbstractToolset[AgentDepsT]] | None = None,
         **_deprecated_kwargs: Never,
@@ -593,7 +592,7 @@ class Agent(Generic[AgentDepsT, OutputDataT]):
         deps: AgentDepsT = None,
         model_settings: ModelSettings | None = None,
         usage_limits: _usage.UsageLimits | None = None,
-        usage: _usage.Usage | None = None,
+        usage: _usage.RunUsage | None = None,
         infer_name: bool = True,
         toolsets: Sequence[AbstractToolset[AgentDepsT]] | None = None,
         **_deprecated_kwargs: Never,
@@ -611,7 +610,7 @@ class Agent(Generic[AgentDepsT, OutputDataT]):
         deps: AgentDepsT = None,
         model_settings: ModelSettings | None = None,
         usage_limits: _usage.UsageLimits | None = None,
-        usage: _usage.Usage | None = None,
+        usage: _usage.RunUsage | None = None,
         infer_name: bool = True,
         toolsets: Sequence[AbstractToolset[AgentDepsT]] | None = None,
     ) -> AbstractAsyncContextManager[AgentRun[AgentDepsT, Any]]: ...
@@ -627,7 +626,7 @@ class Agent(Generic[AgentDepsT, OutputDataT]):
         deps: AgentDepsT = None,
         model_settings: ModelSettings | None = None,
         usage_limits: _usage.UsageLimits | None = None,
-        usage: _usage.Usage | None = None,
+        usage: _usage.RunUsage | None = None,
         infer_name: bool = True,
         toolsets: Sequence[AbstractToolset[AgentDepsT]] | None = None,
         **_deprecated_kwargs: Never,
@@ -680,7 +679,7 @@ class Agent(Generic[AgentDepsT, OutputDataT]):
                     model_response=ModelResponse(
                         parts=[TextPart(content='Paris')],
                         usage=Usage(
-                            requests=1, request_tokens=56, response_tokens=1, total_tokens=57
+                            requests=1, input_tokens=56, output_tokens=1, total_tokens=57
                         ),
                         model_name='gpt-4o',
                         timestamp=datetime.datetime(...),
@@ -746,7 +745,7 @@ class Agent(Generic[AgentDepsT, OutputDataT]):
         )
 
         # Build the initial state
-        usage = usage or _usage.Usage()
+        usage = usage or _usage.RunUsage()
         state = _agent_graph.GraphAgentState(
             message_history=message_history[:] if message_history else [],
             usage=usage,
@@ -855,15 +854,14 @@ class Agent(Generic[AgentDepsT, OutputDataT]):
         finally:
             try:
                 if instrumentation_settings and run_span.is_recording():
-                    run_span.set_attributes(self._run_span_end_attributes(state, usage, instrumentation_settings))
+                    run_span.set_attributes(self._run_span_end_attributes(state, instrumentation_settings))
             finally:
                 run_span.end()
 
     def _run_span_end_attributes(
-        self, state: _agent_graph.GraphAgentState, usage: _usage.Usage, settings: InstrumentationSettings
-    ):
+        self, state: _agent_graph.GraphAgentState, settings: InstrumentationSettings
+    ) -> dict[str, str | int]:
         return {
-            **usage.opentelemetry_attributes(),
             'all_messages_events': json.dumps(
                 [InstrumentedModel.event_to_dict(e) for e in settings.messages_to_otel_events(state.message_history)]
             ),
@@ -888,7 +886,7 @@ class Agent(Generic[AgentDepsT, OutputDataT]):
         deps: AgentDepsT = None,
         model_settings: ModelSettings | None = None,
         usage_limits: _usage.UsageLimits | None = None,
-        usage: _usage.Usage | None = None,
+        usage: _usage.RunUsage | None = None,
         infer_name: bool = True,
         toolsets: Sequence[AbstractToolset[AgentDepsT]] | None = None,
     ) -> AgentRunResult[OutputDataT]: ...
@@ -904,7 +902,7 @@ class Agent(Generic[AgentDepsT, OutputDataT]):
         deps: AgentDepsT = None,
         model_settings: ModelSettings | None = None,
         usage_limits: _usage.UsageLimits | None = None,
-        usage: _usage.Usage | None = None,
+        usage: _usage.RunUsage | None = None,
         infer_name: bool = True,
         toolsets: Sequence[AbstractToolset[AgentDepsT]] | None = None,
     ) -> AgentRunResult[RunOutputDataT]: ...
@@ -921,7 +919,7 @@ class Agent(Generic[AgentDepsT, OutputDataT]):
         deps: AgentDepsT = None,
         model_settings: ModelSettings | None = None,
         usage_limits: _usage.UsageLimits | None = None,
-        usage: _usage.Usage | None = None,
+        usage: _usage.RunUsage | None = None,
         infer_name: bool = True,
         toolsets: Sequence[AbstractToolset[AgentDepsT]] | None = None,
     ) -> AgentRunResult[RunOutputDataT]: ...
@@ -936,7 +934,7 @@ class Agent(Generic[AgentDepsT, OutputDataT]):
         deps: AgentDepsT = None,
         model_settings: ModelSettings | None = None,
         usage_limits: _usage.UsageLimits | None = None,
-        usage: _usage.Usage | None = None,
+        usage: _usage.RunUsage | None = None,
         infer_name: bool = True,
         toolsets: Sequence[AbstractToolset[AgentDepsT]] | None = None,
         **_deprecated_kwargs: Never,
@@ -1009,7 +1007,7 @@ class Agent(Generic[AgentDepsT, OutputDataT]):
         deps: AgentDepsT = None,
         model_settings: ModelSettings | None = None,
         usage_limits: _usage.UsageLimits | None = None,
-        usage: _usage.Usage | None = None,
+        usage: _usage.RunUsage | None = None,
         infer_name: bool = True,
         toolsets: Sequence[AbstractToolset[AgentDepsT]] | None = None,
     ) -> AbstractAsyncContextManager[result.StreamedRunResult[AgentDepsT, OutputDataT]]: ...
@@ -1025,7 +1023,7 @@ class Agent(Generic[AgentDepsT, OutputDataT]):
         deps: AgentDepsT = None,
         model_settings: ModelSettings | None = None,
         usage_limits: _usage.UsageLimits | None = None,
-        usage: _usage.Usage | None = None,
+        usage: _usage.RunUsage | None = None,
         infer_name: bool = True,
         toolsets: Sequence[AbstractToolset[AgentDepsT]] | None = None,
     ) -> AbstractAsyncContextManager[result.StreamedRunResult[AgentDepsT, RunOutputDataT]]: ...
@@ -1042,7 +1040,7 @@ class Agent(Generic[AgentDepsT, OutputDataT]):
         deps: AgentDepsT = None,
         model_settings: ModelSettings | None = None,
         usage_limits: _usage.UsageLimits | None = None,
-        usage: _usage.Usage | None = None,
+        usage: _usage.RunUsage | None = None,
         infer_name: bool = True,
         toolsets: Sequence[AbstractToolset[AgentDepsT]] | None = None,
     ) -> AbstractAsyncContextManager[result.StreamedRunResult[AgentDepsT, RunOutputDataT]]: ...
@@ -1058,7 +1056,7 @@ class Agent(Generic[AgentDepsT, OutputDataT]):
         deps: AgentDepsT = None,
         model_settings: ModelSettings | None = None,
         usage_limits: _usage.UsageLimits | None = None,
-        usage: _usage.Usage | None = None,
+        usage: _usage.RunUsage | None = None,
         infer_name: bool = True,
         toolsets: Sequence[AbstractToolset[AgentDepsT]] | None = None,
         **_deprecated_kwargs: Never,
@@ -1856,8 +1854,8 @@ class Agent(Generic[AgentDepsT, OutputDataT]):
         model: models.Model | models.KnownModelName | str | None = None,
         deps: AgentDepsT = None,
         model_settings: ModelSettings | None = None,
-        usage_limits: UsageLimits | None = None,
-        usage: Usage | None = None,
+        usage_limits: _usage.UsageLimits | None = None,
+        usage: _usage.RunUsage | None = None,
         infer_name: bool = True,
         toolsets: Sequence[AbstractToolset[AgentDepsT]] | None = None,
         # Starlette
@@ -2091,7 +2089,7 @@ class AgentRun(Generic[AgentDepsT, OutputDataT]):
                 model_response=ModelResponse(
                     parts=[TextPart(content='Paris')],
                     usage=Usage(
-                        requests=1, request_tokens=56, response_tokens=1, total_tokens=57
+                        requests=1, input_tokens=56, output_tokens=1, total_tokens=57
                     ),
                     model_name='gpt-4o',
                     timestamp=datetime.datetime(...),
@@ -2229,8 +2227,8 @@ class AgentRun(Generic[AgentDepsT, OutputDataT]):
                             parts=[TextPart(content='Paris')],
                             usage=Usage(
                                 requests=1,
-                                request_tokens=56,
-                                response_tokens=1,
+                                input_tokens=56,
+                                output_tokens=1,
                                 total_tokens=57,
                             ),
                             model_name='gpt-4o',
@@ -2259,7 +2257,7 @@ class AgentRun(Generic[AgentDepsT, OutputDataT]):
         assert isinstance(next_node, End), f'Unexpected node type: {type(next_node)}'
         return next_node
 
-    def usage(self) -> _usage.Usage:
+    def usage(self) -> _usage.RunUsage:
         """Get usage statistics for the run so far, including token usage, model requests, and so on."""
         return self._graph_run.state.usage
 
@@ -2421,6 +2419,6 @@ class AgentRunResult(Generic[OutputDataT]):
         content = result.coalesce_deprecated_return_content(output_tool_return_content, result_tool_return_content)
         return _messages.ModelMessagesTypeAdapter.dump_json(self.new_messages(output_tool_return_content=content))
 
-    def usage(self) -> _usage.Usage:
+    def usage(self) -> _usage.RunUsage:
         """Return the usage of the whole run."""
         return self._state.usage

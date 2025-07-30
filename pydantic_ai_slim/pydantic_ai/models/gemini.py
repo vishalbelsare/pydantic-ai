@@ -281,8 +281,8 @@ class GeminiModel(Model):
             parts,
             response.get('model_version', self._model_name),
             usage,
-            vendor_id=vendor_id,
-            vendor_details=vendor_details,
+            provider_request_id=vendor_id,
+            provider_details=vendor_details,
         )
 
     async def _process_streamed_response(self, http_response: HTTPResponse) -> StreamedResponse:
@@ -661,7 +661,7 @@ def _function_call_part_from_call(tool: ToolCallPart) -> _GeminiFunctionCallPart
 def _process_response_from_parts(
     parts: Sequence[_GeminiPartUnion],
     model_name: GeminiModelName,
-    usage: usage.Usage,
+    usage: usage.RequestUsage,
     vendor_id: str | None,
     vendor_details: dict[str, Any] | None = None,
 ) -> ModelResponse:
@@ -681,7 +681,7 @@ def _process_response_from_parts(
                 f'Unsupported response from Gemini, expected all parts to be function calls or text, got: {part!r}'
             )
     return ModelResponse(
-        parts=items, usage=usage, model_name=model_name, vendor_id=vendor_id, vendor_details=vendor_details
+        parts=items, usage=usage, model_name=model_name, provider_request_id=vendor_id, provider_details=vendor_details
     )
 
 
@@ -847,10 +847,10 @@ class _GeminiUsageMetaData(TypedDict, total=False):
     ]
 
 
-def _metadata_as_usage(response: _GeminiResponse) -> usage.Usage:
+def _metadata_as_usage(response: _GeminiResponse) -> usage.RequestUsage:
     metadata = response.get('usage_metadata')
     if metadata is None:
-        return usage.Usage()  # pragma: no cover
+        return usage.RequestUsage()  # pragma: no cover
     details: dict[str, int] = {}
     if cached_content_token_count := metadata.get('cached_content_token_count'):
         details['cached_content_tokens'] = cached_content_token_count  # pragma: no cover
@@ -868,9 +868,9 @@ def _metadata_as_usage(response: _GeminiResponse) -> usage.Usage:
             for detail in metadata_details:
                 details[f'{detail["modality"].lower()}_{suffix}'] = detail['token_count']
 
-    return usage.Usage(
-        request_tokens=metadata.get('prompt_token_count', 0),
-        response_tokens=metadata.get('candidates_token_count', 0),
+    return usage.RequestUsage(
+        input_tokens=metadata.get('prompt_token_count', 0),
+        output_tokens=metadata.get('candidates_token_count', 0),
         total_tokens=metadata.get('total_token_count', 0),
         details=details,
     )

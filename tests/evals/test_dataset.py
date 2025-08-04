@@ -388,7 +388,7 @@ async def test_evaluate_with_failing_task(
                 inputs=TaskInput(query='What is 2+2?'),
                 metadata=TaskMetadata(difficulty='easy', category='general'),
                 expected_output=TaskOutput(answer='4', confidence=1.0),
-                error_msg='ValueError: Task error',
+                error_message='ValueError: Task error',
                 trace_id='00000000000000000000000000000001',
                 span_id='0000000000000003',
             )
@@ -428,7 +428,7 @@ async def test_evaluate_with_failing_evaluator(example_dataset: Dataset[TaskInpu
                 span_id='0000000000000003',
                 evaluator_failures=[
                     EvaluatorFailure(
-                        name='FailingEvaluator', error_msg='ValueError: Evaluator error', source=FailingEvaluator()
+                        name='FailingEvaluator', error_message='ValueError: Evaluator error', source=FailingEvaluator()
                     )
                 ],
             ),
@@ -449,7 +449,7 @@ async def test_evaluate_with_failing_evaluator(example_dataset: Dataset[TaskInpu
                 span_id='0000000000000007',
                 evaluator_failures=[
                     EvaluatorFailure(
-                        name='FailingEvaluator', error_msg='ValueError: Evaluator error', source=FailingEvaluator()
+                        name='FailingEvaluator', error_message='ValueError: Evaluator error', source=FailingEvaluator()
                     )
                 ],
             ),
@@ -845,7 +845,7 @@ async def test_invalid_evaluator_output_type(example_dataset: Dataset[TaskInput,
                 evaluator_failures=[
                     EvaluatorFailure(
                         name='Python',
-                        error_msg='ValueError: '
+                        error_message='ValueError: '
                         "Python(expression='...').evaluate "
                         'returned a value '
                         'of an invalid '
@@ -872,7 +872,7 @@ async def test_invalid_evaluator_output_type(example_dataset: Dataset[TaskInput,
                 evaluator_failures=[
                     EvaluatorFailure(
                         name='Python',
-                        error_msg='ValueError: '
+                        error_message='ValueError: '
                         "Python(expression='...').evaluate "
                         'returned a value '
                         'of an invalid '
@@ -901,7 +901,7 @@ async def test_dataset_evaluate_with_failing_task(example_dataset: Dataset[TaskI
                 inputs=TaskInput(query='What is 2+2?'),
                 metadata=TaskMetadata(difficulty='easy', category='general'),
                 expected_output=TaskOutput(answer='4', confidence=1.0),
-                error_msg='ValueError: Task failed',
+                error_message='ValueError: Task failed',
                 trace_id='00000000000000000000000000000001',
                 span_id='0000000000000003',
             ),
@@ -910,7 +910,7 @@ async def test_dataset_evaluate_with_failing_task(example_dataset: Dataset[TaskI
                 inputs=TaskInput(query='What is the capital of France?'),
                 metadata=TaskMetadata(difficulty='medium', category='geography'),
                 expected_output=TaskOutput(answer='Paris', confidence=1.0),
-                error_msg='ValueError: Task failed',
+                error_message='ValueError: Task failed',
                 trace_id='00000000000000000000000000000001',
                 span_id='0000000000000007',
             ),
@@ -950,7 +950,7 @@ async def test_dataset_evaluate_with_failing_evaluator(example_dataset: Dataset[
                 span_id='0000000000000003',
                 evaluator_failures=[
                     EvaluatorFailure(
-                        name='FailingEvaluator', error_msg='ValueError: Evaluator failed', source=FailingEvaluator()
+                        name='FailingEvaluator', error_message='ValueError: Evaluator failed', source=FailingEvaluator()
                     )
                 ],
             ),
@@ -971,7 +971,7 @@ async def test_dataset_evaluate_with_failing_evaluator(example_dataset: Dataset[
                 span_id='0000000000000007',
                 evaluator_failures=[
                     EvaluatorFailure(
-                        name='FailingEvaluator', error_msg='ValueError: Evaluator failed', source=FailingEvaluator()
+                        name='FailingEvaluator', error_message='ValueError: Evaluator failed', source=FailingEvaluator()
                     )
                 ],
             ),
@@ -1019,7 +1019,7 @@ async def test_dataset_evaluate_with_invalid_evaluator_result(
                 evaluator_failures=[
                     EvaluatorFailure(
                         name='InvalidEvaluator',
-                        error_msg='ValueError: '
+                        error_message='ValueError: '
                         'test_dataset_evaluate_with_invalid_evaluator_result.<locals>.InvalidEvaluator().evaluate '
                         'returned a value '
                         'of an invalid '
@@ -1047,7 +1047,7 @@ async def test_dataset_evaluate_with_invalid_evaluator_result(
                 evaluator_failures=[
                     EvaluatorFailure(
                         name='InvalidEvaluator',
-                        error_msg='ValueError: '
+                        error_message='ValueError: '
                         'test_dataset_evaluate_with_invalid_evaluator_result.<locals>.InvalidEvaluator().evaluate '
                         'returned a value '
                         'of an invalid '

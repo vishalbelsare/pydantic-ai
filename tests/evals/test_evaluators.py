@@ -281,7 +281,9 @@ async def test_evaluator_error_handling(test_context: EvaluatorContext[TaskInput
     # When called directly, it should raise an error
     result = await run_evaluator(evaluator, test_context)
     assert result == [
-        EvaluatorFailure(name='FailingEvaluator', error_msg='ValueError: Simulated error', source=FailingEvaluator())
+        EvaluatorFailure(
+            name='FailingEvaluator', error_message='ValueError: Simulated error', source=FailingEvaluator()
+        )
     ]
 
 

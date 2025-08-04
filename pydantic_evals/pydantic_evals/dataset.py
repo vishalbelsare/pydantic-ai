@@ -991,7 +991,7 @@ async def _run_task_and_evaluators(
             inputs=case.inputs,
             metadata=case.metadata,
             expected_output=case.expected_output,
-            error_msg=f'{type(exc).__name__}: {exc}',
+            error_message=f'{type(exc).__name__}: {exc}',
             trace_id=trace_id,
             span_id=span_id,
         )

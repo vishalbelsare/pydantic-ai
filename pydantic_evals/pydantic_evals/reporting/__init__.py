@@ -87,7 +87,7 @@ class ReportCaseFailure(Generic[InputsT, OutputT, MetadataT]):
     expected_output: OutputT | None
     """The expected output of the task, from [`Case.expected_output`][pydantic_evals.Case.expected_output]."""
 
-    error_msg: str
+    error_message: str
 
     # TODO(DavidM): Drop these once we can reference child spans in details panel:
     trace_id: str

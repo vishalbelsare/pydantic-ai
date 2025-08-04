@@ -37,7 +37,8 @@ async def run_evaluator(
         ctx: The context containing the inputs, outputs, and metadata for evaluation.
 
     Returns:
-        A list of evaluation results.
+        A list of evaluation results or evaluator failures. In the event of a failure,
+        the returned list will always contain precisely one item.
 
     Raises:
         ValueError: If the evaluator returns a value of an invalid type.
@@ -62,7 +63,7 @@ async def run_evaluator(
     except Exception as e:
         return [
             EvaluatorFailure(
-                name=evaluator.get_default_evaluation_name(), error_msg=f'{type(e).__name__}: {e}', source=evaluator
+                name=evaluator.get_default_evaluation_name(), error_message=f'{type(e).__name__}: {e}', source=evaluator
             )
         ]
 

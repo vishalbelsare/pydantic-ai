@@ -105,7 +105,7 @@ class EvaluatorFailure:
     """Represents a failure raised during the execution of an evaluator."""
 
     name: str
-    error_msg: str
+    error_message: str
     source: Evaluator
 
 

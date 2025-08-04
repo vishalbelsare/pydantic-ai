@@ -619,7 +619,7 @@ async def test_report_round_trip_serialization(example_dataset: Dataset[TaskInpu
                     },
                     assertions={},
                     task_duration=1.0,
-                    total_duration=6.0,
+                    total_duration=10.0,
                     trace_id='00000000000000000000000000000001',
                     span_id='0000000000000003',
                 ),
@@ -642,7 +642,7 @@ async def test_report_round_trip_serialization(example_dataset: Dataset[TaskInpu
                     },
                     assertions={},
                     task_duration=1.0,
-                    total_duration=4.0,
+                    total_duration=8.0,
                     trace_id='00000000000000000000000000000001',
                     span_id='0000000000000007',
                 ),
@@ -1026,7 +1026,9 @@ async def test_dataset_evaluate_with_failing_evaluator(example_dataset: Dataset[
                 span_id='0000000000000003',
                 evaluator_failures=[
                     EvaluatorFailure(
-                        name='FailingEvaluator', error_message='ValueError: Evaluator failed', source=FailingEvaluator()
+                        name='FailingEvaluator',
+                        error_message='ValueError: Evaluator failed',
+                        source=FailingEvaluator().as_spec(),
                     )
                 ],
             ),

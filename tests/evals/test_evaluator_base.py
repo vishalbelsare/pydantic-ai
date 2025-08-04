@@ -242,7 +242,9 @@ async def test_run_evaluator():
     # Test with simple boolean result
     evaluator = SimpleEvaluator()
     results = await run_evaluator(evaluator, ctx)
-    adapter = TypeAdapter(Sequence[Union[EvaluationResult, EvaluatorFailure]])
+    adapter = TypeAdapter[Union[Sequence[EvaluationResult], EvaluatorFailure]](
+        Union[Sequence[EvaluationResult], EvaluatorFailure]
+    )
     assert adapter.dump_python(results) == snapshot(
         [
             {

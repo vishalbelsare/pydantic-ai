@@ -160,6 +160,7 @@ async def test_evaluator_call(test_context: EvaluatorContext[TaskInput, TaskOutp
     evaluator = ExampleEvaluator()
     results = await run_evaluator(evaluator, test_context)
 
+    assert not isinstance(results, EvaluatorFailure)
     assert len(results) == 1
     first_result = results[0]
     assert isinstance(first_result, EvaluationResult)

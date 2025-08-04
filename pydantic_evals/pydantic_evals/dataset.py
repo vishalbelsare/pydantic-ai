@@ -957,9 +957,11 @@ async def _run_task_and_evaluators(
                 evaluator_outputs_by_task = await task_group_gather(
                     [lambda ev=ev: run_evaluator(ev, scoring_context) for ev in evaluators]
                 )
-                flattened = [out for outputs in evaluator_outputs_by_task for out in outputs]
-                evaluator_outputs += [o for o in flattened if not isinstance(o, EvaluatorFailure)]
-                evaluator_failures += [o for o in flattened if isinstance(o, EvaluatorFailure)]
+                for outputs in evaluator_outputs_by_task:
+                    if isinstance(outputs, EvaluatorFailure):
+                        evaluator_failures.append(outputs)
+                    else:
+                        evaluator_outputs.extend(outputs)
 
             assertions, scores, labels = _group_evaluator_outputs_by_type(evaluator_outputs)
             case_span.set_attribute('assertions', _evaluation_results_adapter.dump_python(assertions))

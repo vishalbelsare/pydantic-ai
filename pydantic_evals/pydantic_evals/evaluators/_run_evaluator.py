@@ -69,7 +69,9 @@ async def run_evaluator(
                 raise ValueError(f'{evaluator!r}.evaluate returned a value of an invalid type: {raw_results!r}.') from e
     except Exception as e:
         return EvaluatorFailure(
-            name=evaluator.get_default_evaluation_name(), error_message=f'{type(e).__name__}: {e}', source=evaluator
+            name=evaluator.get_default_evaluation_name(),
+            error_message=f'{type(e).__name__}: {e}',
+            source=evaluator.as_spec(),
         )
 
     results = _convert_to_mapping(results, scalar_name=evaluator.get_default_evaluation_name())
@@ -78,7 +80,9 @@ async def run_evaluator(
     for name, result in results.items():
         if not isinstance(result, EvaluationReason):
             result = EvaluationReason(value=result)
-        details.append(EvaluationResult(name=name, value=result.value, reason=result.reason, source=evaluator))
+        details.append(
+            EvaluationResult(name=name, value=result.value, reason=result.reason, source=evaluator.as_spec())
+        )
 
     return details
 

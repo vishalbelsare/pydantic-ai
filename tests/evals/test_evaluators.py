@@ -19,7 +19,6 @@ with try_import() as imports_successful:
     from logfire.testing import CaptureLogfire
 
     from pydantic_evals.evaluators._run_evaluator import run_evaluator
-    from pydantic_evals.evaluators._spec import EvaluatorSpec
     from pydantic_evals.evaluators.common import (
         Contains,
         Equals,
@@ -38,6 +37,7 @@ with try_import() as imports_successful:
         EvaluatorFailure,
         EvaluatorOutput,
     )
+    from pydantic_evals.evaluators.spec import EvaluatorSpec
     from pydantic_evals.otel._context_in_memory_span_exporter import context_subtree
     from pydantic_evals.otel.span_tree import SpanQuery, SpanTree
 
@@ -167,7 +167,7 @@ async def test_evaluator_call(test_context: EvaluatorContext[TaskInput, TaskOutp
     assert first_result.name == 'result'
     assert first_result.value == 'passed'
     assert first_result.reason is None
-    assert first_result.source is evaluator
+    assert first_result.source == EvaluatorSpec(name='ExampleEvaluator', arguments=None)
 
 
 async def test_is_instance_evaluator():
@@ -247,7 +247,14 @@ async def test_custom_evaluator_name(test_context: EvaluatorContext[TaskInput, T
     evaluator = CustomNameFieldEvaluator(result=123, evaluation_name='abc')
 
     assert to_jsonable_python(await run_evaluator(evaluator, test_context)) == snapshot(
-        [{'name': 'abc', 'reason': None, 'source': {'evaluation_name': 'abc', 'result': 123}, 'value': 123}]
+        [
+            {
+                'name': 'abc',
+                'reason': None,
+                'source': {'arguments': {'evaluation_name': 'abc', 'result': 123}, 'name': 'CustomNameFieldEvaluator'},
+                'value': 123,
+            }
+        ]
     )
 
     @dataclass
@@ -265,7 +272,14 @@ async def test_custom_evaluator_name(test_context: EvaluatorContext[TaskInput, T
     evaluator = CustomNamePropertyEvaluator(result=123, my_name='marcelo')
 
     assert to_jsonable_python(await run_evaluator(evaluator, test_context)) == snapshot(
-        [{'name': 'hello marcelo', 'reason': None, 'source': {'my_name': 'marcelo', 'result': 123}, 'value': 123}]
+        [
+            {
+                'name': 'hello marcelo',
+                'reason': None,
+                'source': {'arguments': {'my_name': 'marcelo', 'result': 123}, 'name': 'CustomNamePropertyEvaluator'},
+                'value': 123,
+            }
+        ]
     )
 
 
@@ -281,11 +295,9 @@ async def test_evaluator_error_handling(test_context: EvaluatorContext[TaskInput
 
     # When called directly, it should raise an error
     result = await run_evaluator(evaluator, test_context)
-    assert result == [
-        EvaluatorFailure(
-            name='FailingEvaluator', error_message='ValueError: Simulated error', source=FailingEvaluator()
-        )
-    ]
+    assert result == EvaluatorFailure(
+        name='FailingEvaluator', error_message='ValueError: Simulated error', source=FailingEvaluator().as_spec()
+    )
 
 
 async def test_evaluator_with_null_values():

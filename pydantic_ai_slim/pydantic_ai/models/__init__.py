@@ -137,12 +137,12 @@ KnownModelName = TypeAliasType(
         'google-gla:gemini-2.0-flash',
         'google-gla:gemini-2.0-flash-lite',
         'google-gla:gemini-2.5-flash',
-        'google-gla:gemini-2.5-flash-lite-preview-06-17',
+        'google-gla:gemini-2.5-flash-lite',
         'google-gla:gemini-2.5-pro',
         'google-vertex:gemini-2.0-flash',
         'google-vertex:gemini-2.0-flash-lite',
         'google-vertex:gemini-2.5-flash',
-        'google-vertex:gemini-2.5-flash-lite-preview-06-17',
+        'google-vertex:gemini-2.5-flash-lite',
         'google-vertex:gemini-2.5-pro',
         'gpt-3.5-turbo',
         'gpt-3.5-turbo-0125',
@@ -233,6 +233,15 @@ KnownModelName = TypeAliasType(
         'mistral:mistral-large-latest',
         'mistral:mistral-moderation-latest',
         'mistral:mistral-small-latest',
+        'moonshotai:moonshot-v1-8k',
+        'moonshotai:moonshot-v1-32k',
+        'moonshotai:moonshot-v1-128k',
+        'moonshotai:moonshot-v1-8k-vision-preview',
+        'moonshotai:moonshot-v1-32k-vision-preview',
+        'moonshotai:moonshot-v1-128k-vision-preview',
+        'moonshotai:kimi-latest',
+        'moonshotai:kimi-thinking-preview',
+        'moonshotai:kimi-k2-0711-preview',
         'o1',
         'o1-2024-12-17',
         'o1-mini',
@@ -615,7 +624,9 @@ def infer_model(model: Model | KnownModelName | str) -> Model:  # noqa: C901
         'deepseek',
         'azure',
         'openrouter',
+        'vercel',
         'grok',
+        'moonshotai',
         'fireworks',
         'together',
         'heroku',
@@ -758,9 +769,7 @@ async def download_item(
 
     data_type = media_type
     if type_format == 'extension':
-        data_type = data_type.split('/')[1]
-        if data_type == 'mpeg':  # pragma: no cover
-            data_type = 'mp3'
+        data_type = item.format
 
     data = response.content
     if data_format in ('base64', 'base64_uri'):

@@ -10,10 +10,10 @@ seamlessly with httpx clients. You can configure retry behavior for any provider
 
 ## Installation
 
-To use the retry transports, you need to install the `tenacity` dependency:
+To use the retry transports, you need to install `tenacity`, which you can do via the `retries` dependency group:
 
 ```bash
-pip/uv-add 'pydantic-ai-slim[tenacity]'
+pip/uv-add 'pydantic-ai-slim[retries]'
 ```
 
 ## Usage Example
@@ -106,7 +106,9 @@ from pydantic_ai.retries import AsyncTenacityTransport
 async_retrying = AsyncRetrying(stop=stop_after_attempt(3), reraise=True)
 
 def validator(response):
-    """Optional response validator."""
+    """Treat responses with HTTP status 4xx/5xx as failures that need to be retried.
+    Without a response validator, only network errors and timeouts will result in a retry.
+    """
     response.raise_for_status()
 
 # Create the transport
@@ -132,7 +134,9 @@ from pydantic_ai.retries import TenacityTransport
 retrying = Retrying(stop=stop_after_attempt(3), reraise=True)
 
 def validator(response):
-    """Optional response validator."""
+    """Treat responses with HTTP status 4xx/5xx as failures that need to be retried.
+    Without a response validator, only network errors and timeouts will result in a retry.
+    """
     response.raise_for_status()
 
 # Create the transport

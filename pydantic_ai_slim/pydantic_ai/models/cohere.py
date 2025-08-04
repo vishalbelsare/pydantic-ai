@@ -38,15 +38,15 @@ try:
         AssistantChatMessageV2,
         AsyncClientV2,
         ChatMessageV2,
-        ChatResponse,
         SystemChatMessageV2,
-        TextAssistantMessageContentItem,
+        TextAssistantMessageV2ContentItem,
         ToolCallV2,
         ToolCallV2Function,
         ToolChatMessageV2,
         ToolV2,
         ToolV2Function,
         UserChatMessageV2,
+        V2ChatResponse,
     )
     from cohere.core.api_error import ApiError
     from cohere.v2.client import OMIT
@@ -164,7 +164,7 @@ class CohereModel(Model):
         messages: list[ModelMessage],
         model_settings: CohereModelSettings,
         model_request_parameters: ModelRequestParameters,
-    ) -> ChatResponse:
+    ) -> V2ChatResponse:
         tools = self._get_tools(model_request_parameters)
         cohere_messages = self._map_messages(messages)
         try:
@@ -185,14 +185,14 @@ class CohereModel(Model):
                 raise ModelHTTPError(status_code=status_code, model_name=self.model_name, body=e.body) from e
             raise  # pragma: no cover
 
-    def _process_response(self, response: ChatResponse) -> ModelResponse:
+    def _process_response(self, response: V2ChatResponse) -> ModelResponse:
         """Process a non-streamed response, and prepare a message to return."""
         parts: list[ModelResponsePart] = []
         if response.message.content is not None and len(response.message.content) > 0:
             # While Cohere's API returns a list, it only does that for future proofing
             # and currently only one item is being returned.
             choice = response.message.content[0]
-            parts.extend(split_content_into_text_and_thinking(choice.text))
+            parts.extend(split_content_into_text_and_thinking(choice.text, self.profile.thinking_tags))
         for c in response.message.tool_calls or []:
             if c.function and c.function.name and c.function.arguments:  # pragma: no branch
                 parts.append(
@@ -227,7 +227,7 @@ class CohereModel(Model):
                         assert_never(item)
                 message_param = AssistantChatMessageV2(role='assistant')
                 if texts:
-                    message_param.content = [TextAssistantMessageContentItem(text='\n\n'.join(texts))]
+                    message_param.content = [TextAssistantMessageV2ContentItem(text='\n\n'.join(texts))]
                 if tool_calls:
                     message_param.tool_calls = tool_calls
                 cohere_messages.append(message_param)
@@ -294,7 +294,7 @@ class CohereModel(Model):
                 assert_never(part)
 
 
-def _map_usage(response: ChatResponse) -> usage.Usage:
+def _map_usage(response: V2ChatResponse) -> usage.Usage:
     u = response.usage
     if u is None:
         return usage.Usage()

@@ -14,7 +14,7 @@
 
 .PHONY: install
 install: .uv .pre-commit .deno ## Install the package, dependencies, and pre-commit for local development
-	uv sync --frozen --all-extras --all-packages --group lint --group docs
+	uv sync --frozen --all-extras --all-packages --group dev --group lint --group docs
 	pre-commit install --install-hooks
 
 .PHONY: install-all-python

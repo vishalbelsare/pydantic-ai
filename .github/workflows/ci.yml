@@ -163,10 +163,10 @@ jobs:
       - run: mkdir .coverage
 
       - name: test slim
-        run: uv run --group dev --package pydantic-ai-slim coverage run -m pytest -n auto --dist=loadgroup
+        run: cd pydantic_ai_slim && uv run --group dev coverage run -m pytest -n auto --dist=loadgroup && cd ..
         if: matrix.packages == 'slim'
         env:
-          COVERAGE_FILE: .coverage/.coverage.${{ runner.os }}-py${{ matrix.python-version }}-slim
+          COVERAGE_FILE: ../.coverage/.coverage.${{ runner.os }}-py${{ matrix.python-version }}-slim
 
       - name: test standard
         run: uv run --group dev coverage run -m pytest -n auto --dist=loadgroup

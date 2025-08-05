@@ -130,13 +130,14 @@ jobs:
           CO_API_KEY: ${{ secrets.COHERE_API_KEY }}
 
   test:
-    name: test on ${{ matrix.python-version }}
+    name: test ${{ matrix.packages }} on ${{ matrix.python-version }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
         python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+        packages: ["slim", "standard", "all-extras", "lowest-versions", "import-examples"]
     env:
       UV_PYTHON: ${{ matrix.python-version }}
       CI: true
@@ -154,29 +155,35 @@ jobs:
 
       - run: mkdir .coverage
 
-      # run tests with just `pydantic-ai-slim` dependencies
-      - run: uv run --package pydantic-ai-slim coverage run -m pytest -n auto --dist=loadgroup
+      - name: test slim
+        run: uv run --package pydantic-ai-slim coverage run -m pytest -n auto --dist=loadgroup
+        if: matrix.packages == 'slim'
         env:
           COVERAGE_FILE: .coverage/.coverage.${{ runner.os }}-py${{ matrix.python-version }}-slim
 
-      - run: uv run coverage run -m pytest -n auto --dist=loadgroup
+      - name: test standard
+        run: uv run coverage run -m pytest -n auto --dist=loadgroup
+        if: matrix.packages == 'standard'
         env:
           COVERAGE_FILE: .coverage/.coverage.${{ runner.os }}-py${{ matrix.python-version }}-standard
 
-      - run: uv run --all-extras coverage run -m pytest -n auto --dist=loadgroup
+      - name: test all extras
+        run: uv run --all-extras coverage run -m pytest -n auto --dist=loadgroup
+        if: matrix.packages == 'all-extras'
         env:
           COVERAGE_FILE: .coverage/.coverage.${{ runner.os }}-py${{ matrix.python-version }}-all-extras
 
-      - run: uv run --all-extras python tests/import_examples.py
-
-      # this must run last as it modifies the environment!
       - name: test lowest versions
-        if: matrix.python-version != '3.9'
+        if: matrix.python-version != '3.9' && matrix.packages == 'lowest-versions'
         run: |
           unset UV_FROZEN
           uv run --all-extras --resolution lowest-direct coverage run -m pytest -n auto --dist=loadgroup
         env:
           COVERAGE_FILE: .coverage/.coverage.${{ runner.os }}-py${{ matrix.python-version }}-lowest-versions
+
+      - name: test import examples
+        if: matrix.python-version != '3.9' && matrix.python-version != '3.10' && matrix.packages == 'import-examples'
+        run: uv run --all-extras python tests/import_examples.py
 
       - name: store coverage files
         uses: actions/upload-artifact@v4

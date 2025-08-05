@@ -137,7 +137,14 @@ jobs:
       fail-fast: false
       matrix:
         python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
-        packages: ["slim", "standard", "all-extras", "lowest-versions", "import-examples"]
+        packages: [slim, standard, all-extras, lowest-versions, import-examples]
+        exclude:
+          - python-version: "3.9"
+            packages: lowest-versions
+          - python-version: "3.9"
+            packages: import-examples
+          - python-version: "3.10"
+            packages: import-examples
     env:
       UV_PYTHON: ${{ matrix.python-version }}
       CI: true
@@ -156,33 +163,33 @@ jobs:
       - run: mkdir .coverage
 
       - name: test slim
-        run: uv run --package pydantic-ai-slim coverage run -m pytest -n auto --dist=loadgroup
+        run: uv run --with coverage --package pydantic-ai-slim coverage run -m pytest -n auto --dist=loadgroup
         if: matrix.packages == 'slim'
         env:
           COVERAGE_FILE: .coverage/.coverage.${{ runner.os }}-py${{ matrix.python-version }}-slim
 
       - name: test standard
-        run: uv run coverage run -m pytest -n auto --dist=loadgroup
+        run: uv run --with coverage coverage run -m pytest -n auto --dist=loadgroup
         if: matrix.packages == 'standard'
         env:
           COVERAGE_FILE: .coverage/.coverage.${{ runner.os }}-py${{ matrix.python-version }}-standard
 
       - name: test all extras
-        run: uv run --all-extras coverage run -m pytest -n auto --dist=loadgroup
+        run: uv run --with coverage --all-extras coverage run -m pytest -n auto --dist=loadgroup
         if: matrix.packages == 'all-extras'
         env:
           COVERAGE_FILE: .coverage/.coverage.${{ runner.os }}-py${{ matrix.python-version }}-all-extras
 
       - name: test lowest versions
-        if: matrix.python-version != '3.9' && matrix.packages == 'lowest-versions'
+        if: matrix.packages == 'lowest-versions'
         run: |
           unset UV_FROZEN
-          uv run --all-extras --resolution lowest-direct coverage run -m pytest -n auto --dist=loadgroup
+          uv run --with coverage --all-extras --resolution lowest-direct coverage run -m pytest -n auto --dist=loadgroup
         env:
           COVERAGE_FILE: .coverage/.coverage.${{ runner.os }}-py${{ matrix.python-version }}-lowest-versions
 
       - name: test import examples
-        if: matrix.python-version != '3.9' && matrix.python-version != '3.10' && matrix.packages == 'import-examples'
+        if: matrix.packages == 'import-examples'
         run: uv run --all-extras python tests/import_examples.py
 
       - name: store coverage files

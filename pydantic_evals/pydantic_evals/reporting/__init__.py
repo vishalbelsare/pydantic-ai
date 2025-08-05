@@ -978,7 +978,7 @@ class EvaluationRenderer:
 
         if self.include_averages:  # pragma: no branch
             average = report.averages()
-            if average:
+            if average:  # pragma: no branch
                 table.add_row(*case_renderer.build_aggregate_row(average))
         return table
 

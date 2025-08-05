@@ -291,6 +291,72 @@ async def test_evaluate_sync(
     )
 
 
+async def test_evaluate_with_retried_task_failure(
+    example_dataset: Dataset[TaskInput, TaskOutput, TaskMetadata],
+    simple_evaluator: type[Evaluator[TaskInput, TaskOutput, TaskMetadata]],
+):
+    try:
+        from tenacity import AsyncRetrying, stop_after_attempt
+    except ImportError:
+        # Just pass the test if tenacity isn't installed
+        return
+
+    example_dataset.add_evaluator(simple_evaluator())
+
+    attempt = 0
+
+    async def mock_async_task(inputs: TaskInput) -> TaskOutput:
+        nonlocal attempt
+        if attempt < 3:
+            attempt += 1
+            raise RuntimeError(f'failure {attempt}')
+        if inputs.query == 'What is 2+2?':
+            return TaskOutput(answer='4')
+        elif inputs.query == 'What is the capital of France?':
+            return TaskOutput(answer='Paris')
+        return TaskOutput(answer='Unknown')  # pragma: no cover
+
+    report = await example_dataset.evaluate(mock_async_task, retry=AsyncRetrying(stop=stop_after_attempt(3)))
+
+    assert attempt == 3
+
+    assert report is not None
+    assert len(report.cases) == 2
+    assert ReportCaseAdapter.dump_python(report.cases[0]) == snapshot(
+        {
+            'assertions': {
+                'correct': {
+                    'name': 'correct',
+                    'reason': None,
+                    'source': {'name': 'SimpleEvaluator', 'arguments': None},
+                    'value': True,
+                }
+            },
+            'attributes': {},
+            'evaluator_failures': [],
+            'expected_output': {'answer': '4', 'confidence': 1.0},
+            'inputs': {'query': 'What is 2+2?'},
+            'labels': {},
+            'metadata': {'category': 'general', 'difficulty': 'easy'},
+            'metrics': {},
+            'name': 'case1',
+            'output': {'answer': '4', 'confidence': 1.0},
+            'scores': {
+                'confidence': {
+                    'name': 'confidence',
+                    'reason': None,
+                    'source': {'name': 'SimpleEvaluator', 'arguments': None},
+                    'value': 1.0,
+                }
+            },
+            'span_id': '0000000000000003',
+            'task_duration': 1.0,
+            'total_duration': 20.0,
+            'trace_id': '00000000000000000000000000000001',
+        }
+    )
+
+
 async def test_evaluate_with_concurrency(
     example_dataset: Dataset[TaskInput, TaskOutput, TaskMetadata],
     simple_evaluator: type[Evaluator[TaskInput, TaskOutput, TaskMetadata]],

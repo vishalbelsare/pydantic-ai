@@ -414,10 +414,10 @@ def model(
 ) -> Model:  # pragma: lax no cover
     try:
         if request.param == 'openai':
-            from pydantic_ai.models.openai import OpenAIChatCompletionsModel
+            from pydantic_ai.models.openai import OpenAIChatModel
             from pydantic_ai.providers.openai import OpenAIProvider
 
-            return OpenAIChatCompletionsModel('o3-mini', provider=OpenAIProvider(api_key=openai_api_key))
+            return OpenAIChatModel('o3-mini', provider=OpenAIProvider(api_key=openai_api_key))
         elif request.param == 'anthropic':
             from pydantic_ai.models.anthropic import AnthropicModel
             from pydantic_ai.providers.anthropic import AnthropicProvider

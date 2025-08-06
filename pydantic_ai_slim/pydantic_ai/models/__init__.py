@@ -621,9 +621,9 @@ def infer_model(model: Model | KnownModelName | str) -> Model:  # noqa: C901
         'heroku',
         'github',
     ):
-        from .openai import OpenAIChatCompletionsModel
+        from .openai import OpenAIChatModel
 
-        return OpenAIChatCompletionsModel(model_name, provider=provider)
+        return OpenAIChatModel(model_name, provider=provider)
     elif provider in ('google-gla', 'google-vertex'):
         from .google import GoogleModel
 

@@ -11,7 +11,7 @@ from uuid import uuid4
 import httpx
 import pydantic
 from httpx import USE_CLIENT_DEFAULT, Response as HTTPResponse
-from typing_extensions import NotRequired, TypedDict, assert_never
+from typing_extensions import NotRequired, TypedDict, assert_never, deprecated
 
 from pydantic_ai.providers import Provider, infer_provider
 
@@ -51,7 +51,7 @@ LatestGeminiModelNames = Literal[
     'gemini-2.0-flash',
     'gemini-2.0-flash-lite',
     'gemini-2.5-flash',
-    'gemini-2.5-flash-lite-preview-06-17',
+    'gemini-2.5-flash-lite',
     'gemini-2.5-pro',
 ]
 """Latest Gemini models."""
@@ -92,6 +92,7 @@ class GeminiModelSettings(ModelSettings, total=False):
     """
 
 
+@deprecated('Use `GoogleModel` instead. See <https://ai.pydantic.dev/models/google/> for more details.')
 @dataclass(init=False)
 class GeminiModel(Model):
     """A model that uses Gemini via `generativelanguage.googleapis.com` API.
@@ -236,7 +237,7 @@ class GeminiModel(Model):
 
         if gemini_labels := model_settings.get('gemini_labels'):
             if self._system == 'google-vertex':
-                request_data['labels'] = gemini_labels
+                request_data['labels'] = gemini_labels  # pragma: lax no cover
 
         headers = {'Content-Type': 'application/json', 'User-Agent': get_user_agent()}
         url = f'/{self._model_name}:{"streamGenerateContent" if streamed else "generateContent"}'
@@ -366,11 +367,11 @@ class GeminiModel(Model):
                             inline_data={'data': downloaded_item['data'], 'mime_type': downloaded_item['data_type']}
                         )
                         content.append(inline_data)
-                    else:
+                    else:  # pragma: lax no cover
                         file_data = _GeminiFileDataPart(file_data={'file_uri': item.url, 'mime_type': item.media_type})
                         content.append(file_data)
                 else:
-                    assert_never(item)
+                    assert_never(item)  # pragma: lax no cover
         return content
 
     def _map_response_schema(self, o: OutputObjectDefinition) -> dict[str, Any]:
@@ -438,7 +439,11 @@ class GeminiStreamedResponse(StreamedResponse):
                 if 'text' in gemini_part:
                     # Using vendor_part_id=None means we can produce multiple text parts if their deltas are sprinkled
                     # amongst the tool call deltas
-                    yield self._parts_manager.handle_text_delta(vendor_part_id=None, content=gemini_part['text'])
+                    maybe_event = self._parts_manager.handle_text_delta(
+                        vendor_part_id=None, content=gemini_part['text']
+                    )
+                    if maybe_event is not None:  # pragma: no branch
+                        yield maybe_event
 
                 elif 'function_call' in gemini_part:
                     # Here, we assume all function_call parts are complete and don't have deltas.

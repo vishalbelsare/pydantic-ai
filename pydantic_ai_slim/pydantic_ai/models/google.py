@@ -76,7 +76,7 @@ LatestGoogleModelNames = Literal[
     'gemini-2.0-flash',
     'gemini-2.0-flash-lite',
     'gemini-2.5-flash',
-    'gemini-2.5-flash-lite-preview-06-17',
+    'gemini-2.5-flash-lite',
     'gemini-2.5-pro',
 ]
 """Latest Gemini models."""
@@ -407,16 +407,23 @@ class GoogleModel(Model):
                     content.append(inline_data_dict)  # type: ignore
                 elif isinstance(item, VideoUrl) and item.is_youtube:
                     file_data_dict = {'file_data': {'file_uri': item.url, 'mime_type': item.media_type}}
-                    if item.vendor_metadata:
+                    if item.vendor_metadata:  # pragma: no branch
                         file_data_dict['video_metadata'] = item.vendor_metadata
                     content.append(file_data_dict)  # type: ignore
                 elif isinstance(item, FileUrl):
-                    if self.system == 'google-gla' or item.force_download:
+                    if item.force_download or (
+                        # google-gla does not support passing file urls directly, except for youtube videos
+                        # (see above) and files uploaded to the file API (which cannot be downloaded anyway)
+                        self.system == 'google-gla'
+                        and not item.url.startswith(r'https://generativelanguage.googleapis.com/v1beta/files')
+                    ):
                         downloaded_item = await download_item(item, data_format='base64')
                         inline_data = {'data': downloaded_item['data'], 'mime_type': downloaded_item['data_type']}
                         content.append({'inline_data': inline_data})  # type: ignore
                     else:
-                        content.append({'file_data': {'file_uri': item.url, 'mime_type': item.media_type}})
+                        content.append(
+                            {'file_data': {'file_uri': item.url, 'mime_type': item.media_type}}
+                        )  # pragma: lax no cover
                 else:
                     assert_never(item)
         return content
@@ -453,7 +460,9 @@ class GeminiStreamedResponse(StreamedResponse):
                     if part.thought:
                         yield self._parts_manager.handle_thinking_delta(vendor_part_id='thinking', content=part.text)
                     else:
-                        yield self._parts_manager.handle_text_delta(vendor_part_id='content', content=part.text)
+                        maybe_event = self._parts_manager.handle_text_delta(vendor_part_id='content', content=part.text)
+                        if maybe_event is not None:  # pragma: no branch
+                            yield maybe_event
                 elif part.function_call:
                     maybe_event = self._parts_manager.handle_tool_call_delta(
                         vendor_part_id=uuid4(),

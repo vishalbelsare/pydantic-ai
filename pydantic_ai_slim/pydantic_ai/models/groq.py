@@ -30,7 +30,7 @@ from ..messages import (
     ToolReturnPart,
     UserPromptPart,
 )
-from ..profiles import ModelProfileSpec
+from ..profiles import ModelProfile, ModelProfileSpec
 from ..providers import Provider, infer_provider
 from ..settings import ModelSettings
 from ..tools import ToolDefinition
@@ -249,7 +249,7 @@ class GroqModel(Model):
         except APIStatusError as e:
             if (status_code := e.status_code) >= 400:
                 raise ModelHTTPError(status_code=status_code, model_name=self.model_name, body=e.body) from e
-            raise  # pragma: no cover
+            raise  # pragma: lax no cover
 
     def _process_response(self, response: chat.ChatCompletion) -> ModelResponse:
         """Process a non-streamed response, and prepare a message to return."""
@@ -261,7 +261,7 @@ class GroqModel(Model):
             items.append(ThinkingPart(content=choice.message.reasoning))
         if choice.message.content is not None:
             # NOTE: The `<think>` tag is only present if `groq_reasoning_format` is set to `raw`.
-            items.extend(split_content_into_text_and_thinking(choice.message.content))
+            items.extend(split_content_into_text_and_thinking(choice.message.content, self.profile.thinking_tags))
         if choice.message.tool_calls is not None:
             for c in choice.message.tool_calls:
                 items.append(ToolCallPart(tool_name=c.function.name, args=c.function.arguments, tool_call_id=c.id))
@@ -281,6 +281,7 @@ class GroqModel(Model):
         return GroqStreamedResponse(
             _response=peekable_response,
             _model_name=self._model_name,
+            _model_profile=self.profile,
             _timestamp=number_to_datetime(first_chunk.created),
         )
 
@@ -400,6 +401,7 @@ class GroqStreamedResponse(StreamedResponse):
     """Implementation of `StreamedResponse` for Groq models."""
 
     _model_name: GroqModelName
+    _model_profile: ModelProfile
     _response: AsyncIterable[chat.ChatCompletionChunk]
     _timestamp: datetime
 
@@ -415,7 +417,13 @@ class GroqStreamedResponse(StreamedResponse):
             # Handle the text part of the response
             content = choice.delta.content
             if content is not None:
-                yield self._parts_manager.handle_text_delta(vendor_part_id='content', content=content)
+                maybe_event = self._parts_manager.handle_text_delta(
+                    vendor_part_id='content',
+                    content=content,
+                    thinking_tags=self._model_profile.thinking_tags,
+                )
+                if maybe_event is not None:  # pragma: no branch
+                    yield maybe_event
 
             # Handle the tool calls
             for dtc in choice.delta.tool_calls or []:
@@ -444,7 +452,7 @@ def _map_usage(completion: chat.ChatCompletionChunk | chat.ChatCompletion) -> us
     if isinstance(completion, chat.ChatCompletion):
         response_usage = completion.usage
     elif completion.x_groq is not None:
-        response_usage = completion.x_groq.usage  # pragma: no cover
+        response_usage = completion.x_groq.usage
 
     if response_usage is None:
         return usage.Usage()

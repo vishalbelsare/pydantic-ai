@@ -297,7 +297,7 @@ async def test_evaluate_with_retried_task_failure(
 ):
     try:
         from tenacity import AsyncRetrying, stop_after_attempt
-    except ImportError:
+    except ImportError:  # pragma no cover
         # Just pass the test if tenacity isn't installed
         return
 

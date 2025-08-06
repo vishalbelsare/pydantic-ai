@@ -47,7 +47,7 @@ Pydantic AI uses a few key terms to describe how it interacts with different LLM
 - **Provider**: This refers to provider-specific classes which handle the authentication and connections
   to an LLM vendor. Passing a non-default _Provider_ as a parameter to a Model is how you can ensure
   that your agent will make requests to a specific endpoint, or make use of a specific approach to
-  authentication (e.g., you can use Azure auth with the `OpenAIModel` by way of the `AzureProvider`).
+  authentication (e.g., you can use Azure auth with the `OpenAIChatModel` by way of the `AzureProvider`).
   In particular, this is how you can make use of an AI gateway, or an LLM vendor that offers API compatibility
   with the vendor SDK used by an existing Model (such as `OpenAIChatModel`).
 - **Profile**: This refers to a description of how requests to a specific model or family of models need to be

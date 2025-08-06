@@ -76,8 +76,10 @@ except ImportError as _import_error:
 __all__ = (
     'OpenAIChatModel',
     'OpenAIModel',
+    'OpenAIChatModel',
     'OpenAIResponsesModel',
     'OpenAIModelSettings',
+    'OpenAIChatModelSettings',
     'OpenAIResponsesModelSettings',
     'OpenAIModelName',
 )
@@ -97,7 +99,7 @@ allows this model to be used more easily with other model types (ie, Ollama, Dee
 OpenAISystemPromptRole = Literal['system', 'developer', 'user']
 
 
-class OpenAIModelSettings(ModelSettings, total=False):
+class OpenAIChatModelSettings(ModelSettings, total=False):
     """Settings used for an OpenAI model request."""
 
     # ALL FIELDS MUST BE `openai_` PREFIXED SO YOU CAN MERGE THEM WITH OTHER MODELS.
@@ -135,7 +137,15 @@ class OpenAIModelSettings(ModelSettings, total=False):
     """
 
 
-class OpenAIResponsesModelSettings(OpenAIModelSettings, total=False):
+@deprecated('Use OpenAIChatModelSettings instead')
+class OpenAIModelSettings(OpenAIChatModelSettings, total=False):
+    """A model that uses the OpenAI Chat Completions API.
+
+    This class was renamed to `OpenAIChatModelSettings`.
+    """
+
+
+class OpenAIResponsesModelSettings(OpenAIChatModelSettings, total=False):
     """Settings used for an OpenAI Responses model request.
 
     ALL FIELDS MUST BE `openai_` PREFIXED SO YOU CAN MERGE THEM WITH OTHER MODELS.
@@ -243,7 +253,7 @@ class OpenAIChatModel(Model):
     ) -> ModelResponse:
         check_allow_model_requests()
         response = await self._completions_create(
-            messages, False, cast(OpenAIModelSettings, model_settings or {}), model_request_parameters
+            messages, False, cast(OpenAIChatModelSettings, model_settings or {}), model_request_parameters
         )
         model_response = self._process_response(response)
         model_response.usage.requests = 1
@@ -258,7 +268,7 @@ class OpenAIChatModel(Model):
     ) -> AsyncIterator[StreamedResponse]:
         check_allow_model_requests()
         response = await self._completions_create(
-            messages, True, cast(OpenAIModelSettings, model_settings or {}), model_request_parameters
+            messages, True, cast(OpenAIChatModelSettings, model_settings or {}), model_request_parameters
         )
         async with response:
             yield await self._process_streamed_response(response)
@@ -278,7 +288,7 @@ class OpenAIChatModel(Model):
         self,
         messages: list[ModelMessage],
         stream: Literal[True],
-        model_settings: OpenAIModelSettings,
+        model_settings: OpenAIChatModelSettings,
         model_request_parameters: ModelRequestParameters,
     ) -> AsyncStream[ChatCompletionChunk]: ...
 
@@ -287,7 +297,7 @@ class OpenAIChatModel(Model):
         self,
         messages: list[ModelMessage],
         stream: Literal[False],
-        model_settings: OpenAIModelSettings,
+        model_settings: OpenAIChatModelSettings,
         model_request_parameters: ModelRequestParameters,
     ) -> chat.ChatCompletion: ...
 
@@ -295,7 +305,7 @@ class OpenAIChatModel(Model):
         self,
         messages: list[ModelMessage],
         stream: bool,
-        model_settings: OpenAIModelSettings,
+        model_settings: OpenAIChatModelSettings,
         model_request_parameters: ModelRequestParameters,
     ) -> chat.ChatCompletion | AsyncStream[ChatCompletionChunk]:
         tools = self._get_tools(model_request_parameters)
@@ -324,7 +334,7 @@ class OpenAIChatModel(Model):
         sampling_settings = (
             model_settings
             if OpenAIModelProfile.from_profile(self.profile).openai_supports_sampling_settings
-            else OpenAIModelSettings()
+            else OpenAIChatModelSettings()
         )
 
         try:

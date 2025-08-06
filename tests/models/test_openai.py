@@ -66,7 +66,7 @@ with try_import() as imports_successful:
     from pydantic_ai.models.google import GoogleModel
     from pydantic_ai.models.openai import (
         OpenAIChatModel,
-        OpenAIModelSettings,
+        OpenAIChatModelSettings,
         OpenAIResponsesModel,
         OpenAIResponsesModelSettings,
         OpenAISystemPromptRole,
@@ -1050,7 +1050,7 @@ async def test_multiple_agent_tool_calls(allow_model_requests: None, gemini_api_
 async def test_extra_headers(allow_model_requests: None, openai_api_key: str):
     # This test doesn't do anything, it's just here to ensure that calls with `extra_headers` don't cause errors, including type.
     m = OpenAIChatModel('gpt-4o', provider=OpenAIProvider(api_key=openai_api_key))
-    agent = Agent(m, model_settings=OpenAIModelSettings(extra_headers={'Extra-Header-Key': 'Extra-Header-Value'}))
+    agent = Agent(m, model_settings=OpenAIChatModelSettings(extra_headers={'Extra-Header-Key': 'Extra-Header-Value'}))
     await agent.run('hello')
 
 
@@ -1059,7 +1059,7 @@ async def test_user_id(allow_model_requests: None, openai_api_key: str):
     # This test doesn't do anything, it's just here to ensure that calls with `user` don't cause errors, including type.
     # Since we use VCR, creating tests with an `httpx.Transport` is not possible.
     m = OpenAIChatModel('gpt-4o', provider=OpenAIProvider(api_key=openai_api_key))
-    agent = Agent(m, model_settings=OpenAIModelSettings(openai_user='user_id'))
+    agent = Agent(m, model_settings=OpenAIChatModelSettings(openai_user='user_id'))
     await agent.run('hello')
 
 
@@ -2115,7 +2115,7 @@ async def test_openai_instructions_with_logprobs(allow_model_requests: None):
     )
     result = await agent.run(
         'What is the capital of Minas Gerais?',
-        model_settings=OpenAIModelSettings(openai_logprobs=True),
+        model_settings=OpenAIChatModelSettings(openai_logprobs=True),
     )
     messages = result.all_messages()
     response = cast(Any, messages[1])
@@ -2133,7 +2133,7 @@ async def test_openai_instructions_with_logprobs(allow_model_requests: None):
 @pytest.mark.vcr()
 async def test_reasoning_model_with_temperature(allow_model_requests: None, openai_api_key: str):
     m = OpenAIChatModel('o3-mini', provider=OpenAIProvider(api_key=openai_api_key))
-    agent = Agent(m, model_settings=OpenAIModelSettings(temperature=0.5))
+    agent = Agent(m, model_settings=OpenAIChatModelSettings(temperature=0.5))
     result = await agent.run('What is the capital of Mexico?')
     assert result.output == snapshot(
         'The capital of Mexico is Mexico City. It is not only the seat of the federal government but also a major cultural, political, and economic center in the country.'

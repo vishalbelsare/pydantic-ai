@@ -408,10 +408,10 @@ With that key you can instantiate the [`MoonshotAIProvider`][pydantic_ai.provide
 
 ```python
 from pydantic_ai import Agent
-from pydantic_ai.models.openai import OpenAIModel
+from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.moonshotai import MoonshotAIProvider
 
-model = OpenAIModel(
+model = OpenAIChatModel(
     'kimi-k2-0711-preview',
     provider=MoonshotAIProvider(api_key='your-moonshot-api-key'),
 )

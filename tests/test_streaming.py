@@ -870,16 +870,18 @@ async def test_iter_stream_output():
         == Usage(requests=1, request_tokens=51, response_tokens=7, total_tokens=58, details=None)
     )
 
-    assert messages == [
-        '',
-        'The ',
-        'The cat ',
-        'The bat sat ',
-        'The bat sat on ',
-        'The bat sat on the ',
-        'The bat sat on the mat.',
-        'The bat sat on the mat.',
-    ]
+    assert messages == snapshot(
+        [
+            'The ',
+            'The ',
+            'The cat ',
+            'The bat sat ',
+            'The bat sat on ',
+            'The bat sat on the ',
+            'The bat sat on the mat.',
+            'The bat sat on the mat.',
+        ]
+    )
 
 
 async def test_iter_stream_responses():
@@ -913,8 +915,8 @@ async def test_iter_stream_responses():
             kind='response',
         )
         for text in [
-            '',
-            '',
+            'The ',
+            'The ',
             'The ',
             'The cat ',
             'The cat sat ',

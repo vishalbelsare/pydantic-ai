@@ -166,7 +166,10 @@ def model_request_stream(
             print(chunks)
             '''
             [
-                PartStartEvent(index=0, part=TextPart(content='Albert Einstein was ')),
+                PartStartEvent(index=0, part=TextPart(content='')),
+                PartDeltaEvent(
+                    index=0, delta=TextPartDelta(content_delta='Albert Einstein was ')
+                ),
                 PartDeltaEvent(
                     index=0, delta=TextPartDelta(content_delta='a German-born theoretical ')
                 ),
@@ -222,7 +225,10 @@ def model_request_stream_sync(
         print(chunks)
         '''
         [
-            PartStartEvent(index=0, part=TextPart(content='Albert Einstein was ')),
+            PartStartEvent(index=0, part=TextPart(content='')),
+            PartDeltaEvent(
+                index=0, delta=TextPartDelta(content_delta='Albert Einstein was ')
+            ),
             PartDeltaEvent(
                 index=0, delta=TextPartDelta(content_delta='a German-born theoretical ')
             ),

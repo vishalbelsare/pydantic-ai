@@ -82,11 +82,12 @@ async def test_deepseek_model_thinking_stream(allow_model_requests: None, deepse
                 0: PartStartEvent(index=0, part=ThinkingPart(content='H')),
                 1: PartDeltaEvent(index=0, delta=ThinkingPartDelta(content_delta='mm')),
                 2: PartDeltaEvent(index=0, delta=ThinkingPartDelta(content_delta=',')),
-                198: PartStartEvent(index=1, part=TextPart(content='Hello')),
+                198: PartStartEvent(index=1, part=TextPart(content='')),
                 199: FinalResultEvent(tool_name=None, tool_call_id=None),
-                200: PartDeltaEvent(index=1, delta=TextPartDelta(content_delta=' there')),
-                201: PartDeltaEvent(index=1, delta=TextPartDelta(content_delta='!')),
+                200: PartDeltaEvent(index=1, delta=TextPartDelta(content_delta='Hello')),
+                201: PartDeltaEvent(index=1, delta=TextPartDelta(content_delta=' there')),
+                202: PartDeltaEvent(index=1, delta=TextPartDelta(content_delta='!')),
             },
-            length=210,
+            length=211,
         )
     )

@@ -389,8 +389,9 @@ async def test_google_model_iter_stream(allow_model_requests: None, google_provi
                     tool_name='get_temperature', content='30°C', tool_call_id=IsStr(), timestamp=IsDatetime()
                 )
             ),
-            PartStartEvent(index=0, part=TextPart(content='The temperature in Paris')),
+            PartStartEvent(index=0, part=TextPart(content='')),
             FinalResultEvent(tool_name=None, tool_call_id=None),
+            PartDeltaEvent(index=0, delta=TextPartDelta(content_delta='The temperature in Paris')),
             PartDeltaEvent(index=0, delta=TextPartDelta(content_delta=' is 30°C.\n')),
         ]
     )
@@ -717,6 +718,12 @@ async def test_google_model_thinking_part_iter(allow_model_requests: None, googl
             PartDeltaEvent(index=1, delta=IsInstance(TextPartDelta)),
             PartDeltaEvent(index=1, delta=IsInstance(TextPartDelta)),
             PartDeltaEvent(index=1, delta=IsInstance(TextPartDelta)),
+            PartDeltaEvent(
+                index=1,
+                delta=TextPartDelta(
+                    content_delta='alert** and **predictable** is the key to crossing any street safely.'
+                ),
+            ),
         ]
     )
 

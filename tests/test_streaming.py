@@ -76,8 +76,8 @@ async def test_streamed_text_response():
             Usage(
                 requests=2,
                 request_tokens=103,
-                response_tokens=5,
-                total_tokens=108,
+                response_tokens=8,
+                total_tokens=111,
             )
         )
         response = await result.get_output()
@@ -173,7 +173,7 @@ async def test_streamed_text_stream():
         # typehint to test (via static typing) that the stream type is correctly inferred
         chunks: list[str] = [c async for c in result.stream()]
         # two chunks with `stream()` due to not-final vs. final
-        assert chunks == snapshot(['The cat sat on the mat.', 'The cat sat on the mat.'])
+        assert chunks == snapshot(['The ', 'The cat sat on the mat.', 'The cat sat on the mat.'])
         assert result.is_complete
 
     async with agent.run_stream('Hello') as result:
@@ -206,6 +206,7 @@ async def test_streamed_text_stream():
         assert [c async for c in result.stream(debounce_by=None)] == snapshot(
             [
                 'THE ',
+                'THE ',
                 'THE CAT ',
                 'THE CAT SAT ',
                 'THE CAT SAT ON ',
@@ -218,6 +219,12 @@ async def test_streamed_text_stream():
     async with agent.run_stream('Hello') as result:
         assert [c async for c, _is_last in result.stream_structured(debounce_by=None)] == snapshot(
             [
+                ModelResponse(
+                    parts=[TextPart(content='The ')],
+                    usage=Usage(request_tokens=51, response_tokens=1, total_tokens=52),
+                    model_name='test',
+                    timestamp=IsNow(tz=timezone.utc),
+                ),
                 ModelResponse(
                     parts=[TextPart(content='The ')],
                     usage=Usage(request_tokens=51, response_tokens=1, total_tokens=52),

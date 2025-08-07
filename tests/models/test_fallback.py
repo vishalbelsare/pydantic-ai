@@ -176,6 +176,12 @@ async def test_first_failed_instrumented_stream(capfire: CaptureLogfire) -> None
                     timestamp=IsNow(tz=timezone.utc),
                 ),
                 ModelResponse(
+                    parts=[TextPart(content='hello ')],
+                    usage=Usage(request_tokens=50, response_tokens=1, total_tokens=51),
+                    model_name='function::success_response_stream',
+                    timestamp=IsNow(tz=timezone.utc),
+                ),
+                ModelResponse(
                     parts=[TextPart(content='hello world')],
                     usage=Usage(request_tokens=50, response_tokens=2, total_tokens=52),
                     model_name='function::success_response_stream',
@@ -361,6 +367,12 @@ async def test_first_success_streaming() -> None:
                     timestamp=IsNow(tz=timezone.utc),
                 ),
                 ModelResponse(
+                    parts=[TextPart(content='hello ')],
+                    usage=Usage(request_tokens=50, response_tokens=1, total_tokens=51),
+                    model_name='function::success_response_stream',
+                    timestamp=IsNow(tz=timezone.utc),
+                ),
+                ModelResponse(
                     parts=[TextPart(content='hello world')],
                     usage=Usage(request_tokens=50, response_tokens=2, total_tokens=52),
                     model_name='function::success_response_stream',
@@ -383,6 +395,12 @@ async def test_first_failed_streaming() -> None:
     async with agent.run_stream('input') as result:
         assert [c async for c, _is_last in result.stream_structured(debounce_by=None)] == snapshot(
             [
+                ModelResponse(
+                    parts=[TextPart(content='hello ')],
+                    usage=Usage(request_tokens=50, response_tokens=1, total_tokens=51),
+                    model_name='function::success_response_stream',
+                    timestamp=IsNow(tz=timezone.utc),
+                ),
                 ModelResponse(
                     parts=[TextPart(content='hello ')],
                     usage=Usage(request_tokens=50, response_tokens=1, total_tokens=51),

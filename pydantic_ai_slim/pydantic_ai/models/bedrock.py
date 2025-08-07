@@ -636,9 +636,8 @@ class BedrockStreamedResponse(StreamedResponse):
                             UserWarning,
                         )
                 if 'text' in delta:
-                    maybe_event = self._parts_manager.handle_text_delta(vendor_part_id=index, content=delta['text'])
-                    if maybe_event is not None:
-                        yield maybe_event
+                    for event in self._parts_manager.handle_text_delta(vendor_part_id=index, content=delta['text']):
+                        yield event
                 if 'toolUse' in delta:
                     tool_use = delta['toolUse']
                     maybe_event = self._parts_manager.handle_tool_call_delta(

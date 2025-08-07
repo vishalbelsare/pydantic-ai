@@ -1026,13 +1026,12 @@ class OpenAIStreamedResponse(StreamedResponse):
             # Handle the text part of the response
             content = choice.delta.content
             if content:
-                maybe_event = self._parts_manager.handle_text_delta(
+                for event in self._parts_manager.handle_text_delta(
                     vendor_part_id='content',
                     content=content,
                     thinking_tags=self._model_profile.thinking_tags,
-                )
-                if maybe_event is not None:  # pragma: no branch
-                    yield maybe_event
+                ):
+                    yield event
 
             # Handle reasoning part of the response, present in DeepSeek models
             if reasoning_content := getattr(choice.delta, 'reasoning_content', None):
@@ -1149,11 +1148,10 @@ class OpenAIResponsesStreamedResponse(StreamedResponse):
                 )
 
             elif isinstance(chunk, responses.ResponseTextDeltaEvent):
-                maybe_event = self._parts_manager.handle_text_delta(
+                for event in self._parts_manager.handle_text_delta(
                     vendor_part_id=chunk.content_index, content=chunk.delta
-                )
-                if maybe_event is not None:  # pragma: no branch
-                    yield maybe_event
+                ):
+                    yield event
 
             elif isinstance(chunk, responses.ResponseTextDoneEvent):
                 pass  # there's nothing we need to do here

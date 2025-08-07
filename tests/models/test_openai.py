@@ -567,6 +567,7 @@ async def test_stream_native_output(allow_model_requests: None):
         assert [dict(c) async for c in result.stream(debounce_by=None)] == snapshot(
             [
                 {'first': 'One'},
+                {'first': 'One'},
                 {'first': 'One', 'second': 'Two'},
                 {'first': 'One', 'second': 'Two'},
                 {'first': 'One', 'second': 'Two'},
@@ -2117,11 +2118,12 @@ async def test_openai_model_thinking_part_iter(allow_model_requests: None, opena
             positions={
                 0: PartStartEvent(index=0, part=ThinkingPart(content='', signature=IsStr())),
                 1: PartDeltaEvent(index=0, delta=IsInstance(ThinkingPartDelta)),
-                87: PartStartEvent(index=1, part=TextPart(content="I'm")),
+                87: PartStartEvent(index=1, part=TextPart(content='')),
                 88: FinalResultEvent(tool_name=None, tool_call_id=None),
-                89: PartDeltaEvent(index=1, delta=IsInstance(TextPartDelta)),
+                89: PartDeltaEvent(index=1, delta=TextPartDelta(content_delta="I'm")),
+                90: PartDeltaEvent(index=1, delta=IsInstance(TextPartDelta)),
             },
-            length=443,
+            length=444,
         )
     )
 

@@ -72,7 +72,7 @@ class ModelResponsePartsManager:
         vendor_part_id: VendorId | None,
         content: str,
         thinking_tags: tuple[str, str] | None = None,
-    ) -> ModelResponseStreamEvent | None:
+    ) -> list[ModelResponseStreamEvent]:
         """Handle incoming text content, creating or updating a TextPart in the manager as appropriate.
 
         When `vendor_part_id` is None, the latest part is updated if it exists and is a TextPart;
@@ -114,9 +114,9 @@ class ModelResponsePartsManager:
                     if content == thinking_tags[1]:
                         # When we see the thinking end tag, we're done with the thinking part and the next text delta will need a new part
                         self._vendor_id_to_part_index.pop(vendor_part_id)
-                        return None
+                        return []
                     else:
-                        return self.handle_thinking_delta(vendor_part_id=vendor_part_id, content=content)
+                        return [self.handle_thinking_delta(vendor_part_id=vendor_part_id, content=content)]
                 elif isinstance(existing_part, TextPart):
                     existing_text_part_and_index = existing_part, part_index
                 else:
@@ -125,14 +125,14 @@ class ModelResponsePartsManager:
         if thinking_tags and content == thinking_tags[0]:
             # When we see a thinking start tag (which is a single token), we'll build a new thinking part instead
             self._vendor_id_to_part_index.pop(vendor_part_id, None)
-            return self.handle_thinking_delta(vendor_part_id=vendor_part_id, content='')
+            return [self.handle_thinking_delta(vendor_part_id=vendor_part_id, content='')]
 
         if existing_text_part_and_index is None:
             # If the first text delta is all whitespace, don't emit a new part yet.
             # This is a workaround for models that emit `<think>\n</think>\n\n` ahead of tool calls (e.g. Ollama + Qwen3),
             # which we don't want to end up treating as a final result.
-            if content.isspace():
-                return None
+            if len(content) == 0 or content.isspace():
+                return []
 
             # There is no existing text part that should be updated, so create a new one
             new_part_index = len(self._parts)
@@ -140,13 +140,24 @@ class ModelResponsePartsManager:
             if vendor_part_id is not None:
                 self._vendor_id_to_part_index[vendor_part_id] = new_part_index
             self._parts.append(part)
-            return PartStartEvent(index=new_part_index, part=part)
+
+            # We emit an empty `TextPart` followed by a `TextPartDelta` with the actual content,
+            # because a `FinalResultEvent` will be injected after the first `PartStartEvent`,
+            # and some user implementations of `agent.iter` were only streaming the deltas _after_ `FinalResultEvent`,
+            # which used to work fine with models that always emitted a blank chunk before the actual content,
+            # but the blank chunks are being removed as of https://github.com/pydantic/pydantic-ai/pull/2294,
+            # resulting in them seeing dropped initial tokens.
+            # See https://github.com/pydantic/pydantic-ai/issues/2428.
+            return [
+                PartStartEvent(index=new_part_index, part=TextPart(content='')),
+                PartDeltaEvent(index=new_part_index, delta=TextPartDelta(content_delta=content)),
+            ]
         else:
             # Update the existing TextPart with the new content delta
             existing_text_part, part_index = existing_text_part_and_index
             part_delta = TextPartDelta(content_delta=content)
             self._parts[part_index] = part_delta.apply(existing_text_part)
-            return PartDeltaEvent(index=part_index, delta=part_delta)
+            return [PartDeltaEvent(index=part_index, delta=part_delta)]
 
     def handle_thinking_delta(
         self,

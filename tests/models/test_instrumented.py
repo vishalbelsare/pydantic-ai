@@ -97,12 +97,10 @@ class MyModel(Model):
 class MyResponseStream(StreamedResponse):
     async def _get_event_iterator(self) -> AsyncIterator[ModelResponseStreamEvent]:
         self._usage = Usage(request_tokens=300, response_tokens=400)
-        maybe_event = self._parts_manager.handle_text_delta(vendor_part_id=0, content='text1')
-        if maybe_event is not None:  # pragma: no branch
-            yield maybe_event
-        maybe_event = self._parts_manager.handle_text_delta(vendor_part_id=0, content='text2')
-        if maybe_event is not None:  # pragma: no branch
-            yield maybe_event
+        for event in self._parts_manager.handle_text_delta(vendor_part_id=0, content='text1'):
+            yield event
+        for event in self._parts_manager.handle_text_delta(vendor_part_id=0, content='text2'):
+            yield event
 
     @property
     def model_name(self) -> str:
@@ -357,7 +355,8 @@ async def test_instrumented_model_stream(capfire: CaptureLogfire):
     ) as response_stream:
         assert [event async for event in response_stream] == snapshot(
             [
-                PartStartEvent(index=0, part=TextPart(content='text1')),
+                PartStartEvent(index=0, part=TextPart(content='')),
+                PartDeltaEvent(index=0, delta=TextPartDelta(content_delta='text1')),
                 PartDeltaEvent(index=0, delta=TextPartDelta(content_delta='text2')),
             ]
         )
@@ -446,7 +445,7 @@ async def test_instrumented_model_stream_break(capfire: CaptureLogfire):
             ),
         ) as response_stream:
             async for event in response_stream:  # pragma: no branch
-                assert event == PartStartEvent(index=0, part=TextPart(content='text1'))
+                assert event == PartStartEvent(index=0, part=TextPart(content=''))
                 raise RuntimeError
 
     assert capfire.exporter.exported_spans_as_dict() == snapshot(

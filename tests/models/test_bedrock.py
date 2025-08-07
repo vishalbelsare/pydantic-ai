@@ -379,8 +379,9 @@ async def test_bedrock_model_iter_stream(allow_model_requests: None, bedrock_pro
 
     assert event_parts == snapshot(
         [
-            PartStartEvent(index=0, part=TextPart(content='<thinking')),
+            PartStartEvent(index=0, part=TextPart(content='')),
             FinalResultEvent(tool_name=None, tool_call_id=None),
+            PartDeltaEvent(index=0, delta=TextPartDelta(content_delta='<thinking')),
             PartDeltaEvent(index=0, delta=TextPartDelta(content_delta='> To find')),
             PartDeltaEvent(index=0, delta=TextPartDelta(content_delta=' the temperature')),
             PartDeltaEvent(index=0, delta=TextPartDelta(content_delta=' of the capital of France,')),
@@ -415,8 +416,9 @@ async def test_bedrock_model_iter_stream(allow_model_requests: None, bedrock_pro
                     timestamp=IsDatetime(),
                 )
             ),
-            PartStartEvent(index=0, part=TextPart(content='The')),
+            PartStartEvent(index=0, part=TextPart(content='')),
             FinalResultEvent(tool_name=None, tool_call_id=None),
+            PartDeltaEvent(index=0, delta=TextPartDelta(content_delta='The')),
             PartDeltaEvent(index=0, delta=TextPartDelta(content_delta=' current temperature in Paris, the')),
             PartDeltaEvent(index=0, delta=TextPartDelta(content_delta=' capital of France,')),
             PartDeltaEvent(index=0, delta=TextPartDelta(content_delta=' is 30°C')),
@@ -1150,9 +1152,10 @@ Also\
             PartDeltaEvent(index=0, delta=ThinkingPartDelta(content_delta=' all together.\n')),
             PartStartEvent(
                 index=1,
-                part=TextPart(content='Crossing the'),
+                part=TextPart(content=''),
             ),
             FinalResultEvent(tool_name=None, tool_call_id=None),
+            PartDeltaEvent(index=1, delta=TextPartDelta(content_delta='Crossing the')),
             PartDeltaEvent(index=1, delta=TextPartDelta(content_delta=' street safely involves')),
             PartDeltaEvent(index=1, delta=TextPartDelta(content_delta=' careful')),
             PartDeltaEvent(index=1, delta=TextPartDelta(content_delta=' observation')),

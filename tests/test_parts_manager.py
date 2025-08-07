@@ -27,136 +27,129 @@ def test_handle_text_deltas(vendor_part_id: str | None):
     manager = ModelResponsePartsManager()
     assert manager.get_parts() == []
 
-    event = manager.handle_text_delta(vendor_part_id=vendor_part_id, content='hello ')
-    assert event == snapshot(
-        PartStartEvent(index=0, part=TextPart(content='hello ', part_kind='text'), event_kind='part_start')
+    events = manager.handle_text_delta(vendor_part_id=vendor_part_id, content='hello ')
+    assert events == snapshot(
+        [
+            PartStartEvent(index=0, part=TextPart(content='')),
+            PartDeltaEvent(index=0, delta=TextPartDelta(content_delta='hello ')),
+        ]
     )
-    assert manager.get_parts() == snapshot([TextPart(content='hello ', part_kind='text')])
+    assert manager.get_parts() == snapshot([TextPart(content='hello ')])
 
-    event = manager.handle_text_delta(vendor_part_id=vendor_part_id, content='world')
-    assert event == snapshot(
-        PartDeltaEvent(
-            index=0, delta=TextPartDelta(content_delta='world', part_delta_kind='text'), event_kind='part_delta'
-        )
-    )
-    assert manager.get_parts() == snapshot([TextPart(content='hello world', part_kind='text')])
+    events = manager.handle_text_delta(vendor_part_id=vendor_part_id, content='world')
+    assert events == snapshot([PartDeltaEvent(index=0, delta=TextPartDelta(content_delta='world'))])
+    assert manager.get_parts() == snapshot([TextPart(content='hello world')])
 
 
 def test_handle_dovetailed_text_deltas():
     manager = ModelResponsePartsManager()
 
-    event = manager.handle_text_delta(vendor_part_id='first', content='hello ')
-    assert event == snapshot(
-        PartStartEvent(index=0, part=TextPart(content='hello ', part_kind='text'), event_kind='part_start')
+    events = manager.handle_text_delta(vendor_part_id='first', content='hello ')
+    assert events == snapshot(
+        [
+            PartStartEvent(index=0, part=TextPart(content='')),
+            PartDeltaEvent(index=0, delta=TextPartDelta(content_delta='hello ')),
+        ]
     )
-    assert manager.get_parts() == snapshot([TextPart(content='hello ', part_kind='text')])
+    assert manager.get_parts() == snapshot([TextPart(content='hello ')])
 
-    event = manager.handle_text_delta(vendor_part_id='second', content='goodbye ')
-    assert event == snapshot(
-        PartStartEvent(index=1, part=TextPart(content='goodbye ', part_kind='text'), event_kind='part_start')
+    events = manager.handle_text_delta(vendor_part_id='second', content='goodbye ')
+    assert events == snapshot(
+        [
+            PartStartEvent(index=1, part=TextPart(content='')),
+            PartDeltaEvent(index=1, delta=TextPartDelta(content_delta='goodbye ')),
+        ]
     )
-    assert manager.get_parts() == snapshot(
-        [TextPart(content='hello ', part_kind='text'), TextPart(content='goodbye ', part_kind='text')]
-    )
+    assert manager.get_parts() == snapshot([TextPart(content='hello '), TextPart(content='goodbye ')])
 
-    event = manager.handle_text_delta(vendor_part_id='first', content='world')
-    assert event == snapshot(
-        PartDeltaEvent(
-            index=0, delta=TextPartDelta(content_delta='world', part_delta_kind='text'), event_kind='part_delta'
-        )
-    )
-    assert manager.get_parts() == snapshot(
-        [TextPart(content='hello world', part_kind='text'), TextPart(content='goodbye ', part_kind='text')]
-    )
+    events = manager.handle_text_delta(vendor_part_id='first', content='world')
+    assert events == snapshot([PartDeltaEvent(index=0, delta=TextPartDelta(content_delta='world'))])
+    assert manager.get_parts() == snapshot([TextPart(content='hello world'), TextPart(content='goodbye ')])
 
-    event = manager.handle_text_delta(vendor_part_id='second', content='Samuel')
-    assert event == snapshot(
-        PartDeltaEvent(
-            index=1, delta=TextPartDelta(content_delta='Samuel', part_delta_kind='text'), event_kind='part_delta'
-        )
-    )
-    assert manager.get_parts() == snapshot(
-        [TextPart(content='hello world', part_kind='text'), TextPart(content='goodbye Samuel', part_kind='text')]
-    )
+    events = manager.handle_text_delta(vendor_part_id='second', content='Samuel')
+    assert events == snapshot([PartDeltaEvent(index=1, delta=TextPartDelta(content_delta='Samuel'))])
+    assert manager.get_parts() == snapshot([TextPart(content='hello world'), TextPart(content='goodbye Samuel')])
 
 
 def test_handle_text_deltas_with_think_tags():
     manager = ModelResponsePartsManager()
     thinking_tags = ('<think>', '</think>')
 
-    event = manager.handle_text_delta(vendor_part_id='content', content='pre-', thinking_tags=thinking_tags)
-    assert event == snapshot(
-        PartStartEvent(index=0, part=TextPart(content='pre-', part_kind='text'), event_kind='part_start')
+    events = manager.handle_text_delta(vendor_part_id='content', content='pre-', thinking_tags=thinking_tags)
+    assert events == snapshot(
+        [
+            PartStartEvent(index=0, part=TextPart(content='')),
+            PartDeltaEvent(index=0, delta=TextPartDelta(content_delta='pre-')),
+        ]
     )
-    assert manager.get_parts() == snapshot([TextPart(content='pre-', part_kind='text')])
+    assert manager.get_parts() == snapshot([TextPart(content='pre-')])
 
-    event = manager.handle_text_delta(vendor_part_id='content', content='thinking', thinking_tags=thinking_tags)
-    assert event == snapshot(
-        PartDeltaEvent(
-            index=0, delta=TextPartDelta(content_delta='thinking', part_delta_kind='text'), event_kind='part_delta'
-        )
+    events = manager.handle_text_delta(vendor_part_id='content', content='thinking', thinking_tags=thinking_tags)
+    assert events == snapshot([PartDeltaEvent(index=0, delta=TextPartDelta(content_delta='thinking'))])
+    assert manager.get_parts() == snapshot([TextPart(content='pre-thinking')])
+
+    events = manager.handle_text_delta(vendor_part_id='content', content='<think>', thinking_tags=thinking_tags)
+    assert events == snapshot([PartStartEvent(index=1, part=ThinkingPart(content='', part_kind='thinking'))])
+    assert manager.get_parts() == snapshot(
+        [TextPart(content='pre-thinking'), ThinkingPart(content='', part_kind='thinking')]
     )
-    assert manager.get_parts() == snapshot([TextPart(content='pre-thinking', part_kind='text')])
 
-    event = manager.handle_text_delta(vendor_part_id='content', content='<think>', thinking_tags=thinking_tags)
-    assert event == snapshot(
-        PartStartEvent(index=1, part=ThinkingPart(content='', part_kind='thinking'), event_kind='part_start')
+    events = manager.handle_text_delta(vendor_part_id='content', content='thinking', thinking_tags=thinking_tags)
+    assert events == snapshot(
+        [
+            PartDeltaEvent(
+                index=1,
+                delta=ThinkingPartDelta(content_delta='thinking', part_delta_kind='thinking'),
+                event_kind='part_delta',
+            )
+        ]
     )
     assert manager.get_parts() == snapshot(
-        [TextPart(content='pre-thinking', part_kind='text'), ThinkingPart(content='', part_kind='thinking')]
+        [TextPart(content='pre-thinking'), ThinkingPart(content='thinking', part_kind='thinking')]
     )
 
-    event = manager.handle_text_delta(vendor_part_id='content', content='thinking', thinking_tags=thinking_tags)
-    assert event == snapshot(
-        PartDeltaEvent(
-            index=1,
-            delta=ThinkingPartDelta(content_delta='thinking', part_delta_kind='thinking'),
-            event_kind='part_delta',
-        )
-    )
-    assert manager.get_parts() == snapshot(
-        [TextPart(content='pre-thinking', part_kind='text'), ThinkingPart(content='thinking', part_kind='thinking')]
-    )
-
-    event = manager.handle_text_delta(vendor_part_id='content', content=' more', thinking_tags=thinking_tags)
-    assert event == snapshot(
-        PartDeltaEvent(
-            index=1, delta=ThinkingPartDelta(content_delta=' more', part_delta_kind='thinking'), event_kind='part_delta'
-        )
+    events = manager.handle_text_delta(vendor_part_id='content', content=' more', thinking_tags=thinking_tags)
+    assert events == snapshot(
+        [
+            PartDeltaEvent(
+                index=1,
+                delta=ThinkingPartDelta(content_delta=' more', part_delta_kind='thinking'),
+                event_kind='part_delta',
+            )
+        ]
     )
     assert manager.get_parts() == snapshot(
         [
-            TextPart(content='pre-thinking', part_kind='text'),
+            TextPart(content='pre-thinking'),
             ThinkingPart(content='thinking more', part_kind='thinking'),
         ]
     )
 
-    event = manager.handle_text_delta(vendor_part_id='content', content='</think>', thinking_tags=thinking_tags)
-    assert event is None
+    events = manager.handle_text_delta(vendor_part_id='content', content='</think>', thinking_tags=thinking_tags)
+    assert events == []
 
-    event = manager.handle_text_delta(vendor_part_id='content', content='post-', thinking_tags=thinking_tags)
-    assert event == snapshot(
-        PartStartEvent(index=2, part=TextPart(content='post-', part_kind='text'), event_kind='part_start')
+    events = manager.handle_text_delta(vendor_part_id='content', content='post-', thinking_tags=thinking_tags)
+    assert events == snapshot(
+        [
+            PartStartEvent(index=2, part=TextPart(content='')),
+            PartDeltaEvent(index=2, delta=TextPartDelta(content_delta='post-')),
+        ]
     )
     assert manager.get_parts() == snapshot(
         [
-            TextPart(content='pre-thinking', part_kind='text'),
+            TextPart(content='pre-thinking'),
             ThinkingPart(content='thinking more', part_kind='thinking'),
-            TextPart(content='post-', part_kind='text'),
+            TextPart(content='post-'),
         ]
     )
 
-    event = manager.handle_text_delta(vendor_part_id='content', content='thinking', thinking_tags=thinking_tags)
-    assert event == snapshot(
-        PartDeltaEvent(
-            index=2, delta=TextPartDelta(content_delta='thinking', part_delta_kind='text'), event_kind='part_delta'
-        )
-    )
+    events = manager.handle_text_delta(vendor_part_id='content', content='thinking', thinking_tags=thinking_tags)
+    assert events == snapshot([PartDeltaEvent(index=2, delta=TextPartDelta(content_delta='thinking'))])
     assert manager.get_parts() == snapshot(
         [
-            TextPart(content='pre-thinking', part_kind='text'),
+            TextPart(content='pre-thinking'),
             ThinkingPart(content='thinking more', part_kind='thinking'),
-            TextPart(content='post-thinking', part_kind='text'),
+            TextPart(content='post-thinking'),
         ]
     )
 
@@ -375,11 +368,14 @@ def test_handle_tool_call_part():
 def test_handle_mixed_deltas_without_text_part_id(text_vendor_part_id: str | None, tool_vendor_part_id: str | None):
     manager = ModelResponsePartsManager()
 
-    event = manager.handle_text_delta(vendor_part_id=text_vendor_part_id, content='hello ')
-    assert event == snapshot(
-        PartStartEvent(index=0, part=TextPart(content='hello ', part_kind='text'), event_kind='part_start')
+    events = manager.handle_text_delta(vendor_part_id=text_vendor_part_id, content='hello ')
+    assert events == snapshot(
+        [
+            PartStartEvent(index=0, part=TextPart(content='')),
+            PartDeltaEvent(index=0, delta=TextPartDelta(content_delta='hello ')),
+        ]
     )
-    assert manager.get_parts() == snapshot([TextPart(content='hello ', part_kind='text')])
+    assert manager.get_parts() == snapshot([TextPart(content='hello ')])
 
     event = manager.handle_tool_call_delta(
         vendor_part_id=tool_vendor_part_id, tool_name='tool1', args='{"arg1":', tool_call_id='abc'
@@ -392,31 +388,34 @@ def test_handle_mixed_deltas_without_text_part_id(text_vendor_part_id: str | Non
         )
     )
 
-    event = manager.handle_text_delta(vendor_part_id=text_vendor_part_id, content='world')
+    events = manager.handle_text_delta(vendor_part_id=text_vendor_part_id, content='world')
     if text_vendor_part_id is None:
-        assert event == snapshot(
-            PartStartEvent(
-                index=2,
-                part=TextPart(content='world', part_kind='text'),
-                event_kind='part_start',
-            )
+        assert events == snapshot(
+            [
+                PartStartEvent(
+                    index=2,
+                    part=TextPart(content=''),
+                    event_kind='part_start',
+                ),
+                PartDeltaEvent(
+                    index=2,
+                    delta=TextPartDelta(content_delta='world'),
+                    event_kind='part_delta',
+                ),
+            ]
         )
         assert manager.get_parts() == snapshot(
             [
-                TextPart(content='hello ', part_kind='text'),
+                TextPart(content='hello '),
                 ToolCallPart(tool_name='tool1', args='{"arg1":', tool_call_id='abc', part_kind='tool-call'),
-                TextPart(content='world', part_kind='text'),
+                TextPart(content='world'),
             ]
         )
     else:
-        assert event == snapshot(
-            PartDeltaEvent(
-                index=0, delta=TextPartDelta(content_delta='world', part_delta_kind='text'), event_kind='part_delta'
-            )
-        )
+        assert events == snapshot([PartDeltaEvent(index=0, delta=TextPartDelta(content_delta='world'))])
         assert manager.get_parts() == snapshot(
             [
-                TextPart(content='hello world', part_kind='text'),
+                TextPart(content='hello world'),
                 ToolCallPart(tool_name='tool1', args='{"arg1":', tool_call_id='abc', part_kind='tool-call'),
             ]
         )

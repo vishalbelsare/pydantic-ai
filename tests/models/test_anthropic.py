@@ -672,12 +672,7 @@ async def test_stream_structured(allow_model_requests: None):
 
         # The tool output doesn't echo any content to the stream, so we only get the final payload once when
         # the block starts and once when it ends.
-        assert chunks == snapshot(
-            [
-                'FINAL_PAYLOAD',
-                'FINAL_PAYLOAD',
-            ]
-        )
+        assert chunks == snapshot(['FINAL_PAYLOAD', 'FINAL_PAYLOAD', 'FINAL_PAYLOAD'])
         assert result.is_complete
         assert result.usage() == snapshot(
             Usage(
@@ -1088,6 +1083,7 @@ async def test_anthropic_model_thinking_part_stream(allow_model_requests: None, 
             PartDeltaEvent(index=0, delta=IsInstance(ThinkingPartDelta)),
             PartStartEvent(index=1, part=IsInstance(TextPart)),
             FinalResultEvent(tool_name=None, tool_call_id=None),
+            PartDeltaEvent(index=1, delta=TextPartDelta(content_delta='# How to Cross a Street Safely')),
             PartDeltaEvent(
                 index=1,
                 delta=TextPartDelta(

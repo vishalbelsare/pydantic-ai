@@ -184,11 +184,6 @@ class AgentStream(Generic[AgentDepsT, OutputDataT]):
             # yields tuples of (text_content, part_index)
             # we don't currently make use of the part_index, but in principle this may be useful
             # so we retain it here for now to make possible future refactors simpler
-            msg = self._raw_stream_response.get()
-            for i, part in enumerate(msg.parts):
-                if isinstance(part, _messages.TextPart) and part.content:
-                    yield part.content, i
-
             async for event in self._raw_stream_response:
                 if (
                     isinstance(event, _messages.PartStartEvent)

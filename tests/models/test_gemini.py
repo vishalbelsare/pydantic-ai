@@ -815,6 +815,7 @@ async def test_stream_text(get_gemini_client: GetGeminiClient):
         assert chunks == snapshot(
             [
                 'Hello ',
+                'Hello ',
                 'Hello world',
                 # This last value is repeated due to the debounce_by=None combined with the need to emit
                 # a final empty chunk to signal the end of the stream
@@ -857,7 +858,7 @@ async def test_stream_invalid_unicode_text(get_gemini_client: GetGeminiClient):
 
     async with agent.run_stream('Hello') as result:
         chunks = [chunk async for chunk in result.stream(debounce_by=None)]
-        assert chunks == snapshot(['abc', 'abc€def', 'abc€def'])
+        assert chunks == snapshot(['abc', 'abc', 'abc€def', 'abc€def'])
     assert result.usage() == snapshot(Usage(requests=1, request_tokens=1, response_tokens=2, total_tokens=3))
 
 

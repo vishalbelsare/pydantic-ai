@@ -571,10 +571,10 @@ async def test_openai_responses_model_web_search_tool_stream(allow_model_request
                     async for event in request_stream:
                         event_parts.append(event)
 
-    assert event_parts.pop(0) == snapshot(PartStartEvent(index=0, part=TextPart(content='Here')))
+    assert event_parts.pop(0) == snapshot(PartStartEvent(index=0, part=TextPart(content='')))
     assert event_parts.pop(0) == snapshot(FinalResultEvent(tool_name=None, tool_call_id=None))
     assert ''.join(event.delta.content_delta for event in event_parts) == snapshot("""\
- are the top three news stories from around the world as of August 7, 2025:
+Here are the top three news stories from around the world as of August 7, 2025:
 
 1. **U.S. Imposes New Tariffs Amid Market Optimism**
 
@@ -615,8 +615,9 @@ async def test_openai_responses_code_execution_tool_stream(allow_model_requests:
 
     assert event_parts == snapshot(
         [
-            PartStartEvent(index=0, part=TextPart(content='\\(')),
+            PartStartEvent(index=0, part=TextPart(content='')),
             FinalResultEvent(tool_name=None, tool_call_id=None),
+            PartDeltaEvent(index=0, delta=TextPartDelta(content_delta='\\(')),
             PartDeltaEvent(index=0, delta=TextPartDelta(content_delta='3')),
             PartDeltaEvent(index=0, delta=TextPartDelta(content_delta=' \\')),
             PartDeltaEvent(index=0, delta=TextPartDelta(content_delta='times')),

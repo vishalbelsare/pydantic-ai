@@ -2138,12 +2138,10 @@ async def test_anthropic_web_search_tool_stream(allow_model_requests: None, anth
                     async for event in request_stream:
                         event_parts.append(event)
 
-    assert event_parts.pop(0) == snapshot(
-        PartStartEvent(index=0, part=TextPart(content="I'll search for the latest world"))
-    )
+    assert event_parts.pop(0) == snapshot(PartStartEvent(index=0, part=TextPart(content='')))
     assert event_parts.pop(0) == snapshot(FinalResultEvent(tool_name=None, tool_call_id=None))
     assert ''.join(event.delta.content_delta for event in event_parts) == snapshot("""\
- news to get you the top 3 stories from today.Let me search for more specific and recent global news stories from today.Let me search for more specific global news stories from today.Based on my search results, here are the top 3 global news stories from today, July 16, 2025:
+I'll search for the latest world news to get you the top 3 stories from today.Let me search for more specific and recent global news stories from today.Let me search for more specific global news stories from today.Based on my search results, here are the top 3 global news stories from today, July 16, 2025:
 
 ## 1. Trump's Ukraine Special Envoy Visits Kyiv
 

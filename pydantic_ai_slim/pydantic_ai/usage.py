@@ -14,16 +14,11 @@ __all__ = 'RequestUsage', 'RunUsage', 'UsageLimits'
 
 class UsageBase:
     input_tokens: int | None = None
-    """Total number of text input/prompt tokens."""
-
     output_tokens: int | None = None
-    """Total number of text output/completion tokens."""
-
     details: dict[str, int] | None = None
-    """Any extra details returned by the model."""
 
     def opentelemetry_attributes(self) -> dict[str, int]:
-        """Get the token limits as OpenTelemetry attributes."""
+        """Get the token usage values as OpenTelemetry attributes."""
         result: dict[str, int] = {}
         if self.input_tokens:
             result['gen_ai.usage.input_tokens'] = self.input_tokens

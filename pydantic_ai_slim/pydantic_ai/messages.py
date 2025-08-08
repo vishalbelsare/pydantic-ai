@@ -846,11 +846,11 @@ class ModelResponse:
     If the model provides a timestamp in the response (as OpenAI does) that will be used.
     """
 
-    provider_name: str | None = None
-    """The name of the LLM provider that generated the response."""
-
     kind: Literal['response'] = 'response'
     """Message type identifier, this is available on all parts as a discriminator."""
+
+    provider_name: str | None = None
+    """The name of the LLM provider that generated the response."""
 
     provider_details: dict[str, Any] | None = field(default=None)
     """Additional provider-specific details in a serializable format.

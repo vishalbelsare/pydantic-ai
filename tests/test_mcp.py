@@ -207,9 +207,6 @@ async def test_agent_with_stdio_server(allow_model_requests: None, agent: Agent)
                         output_tokens=19,
                         input_audio_tokens=0,
                         details={
-                            'completion_tokens': 19,
-                            'prompt_tokens': 195,
-                            'total_tokens': 214,
                             'accepted_prediction_tokens': 0,
                             'audio_tokens': 0,
                             'reasoning_tokens': 0,
@@ -238,9 +235,6 @@ async def test_agent_with_stdio_server(allow_model_requests: None, agent: Agent)
                         output_tokens=13,
                         input_audio_tokens=0,
                         details={
-                            'completion_tokens': 13,
-                            'prompt_tokens': 227,
-                            'total_tokens': 240,
                             'accepted_prediction_tokens': 0,
                             'audio_tokens': 0,
                             'reasoning_tokens': 0,
@@ -347,9 +341,6 @@ async def test_tool_returning_str(allow_model_requests: None, agent: Agent):
                         output_tokens=18,
                         input_audio_tokens=0,
                         details={
-                            'completion_tokens': 18,
-                            'prompt_tokens': 194,
-                            'total_tokens': 212,
                             'accepted_prediction_tokens': 0,
                             'audio_tokens': 0,
                             'reasoning_tokens': 0,
@@ -382,9 +373,6 @@ async def test_tool_returning_str(allow_model_requests: None, agent: Agent):
                         output_tokens=19,
                         input_audio_tokens=0,
                         details={
-                            'completion_tokens': 19,
-                            'prompt_tokens': 234,
-                            'total_tokens': 253,
                             'accepted_prediction_tokens': 0,
                             'audio_tokens': 0,
                             'reasoning_tokens': 0,
@@ -428,9 +416,6 @@ async def test_tool_returning_text_resource(allow_model_requests: None, agent: A
                         output_tokens=12,
                         input_audio_tokens=0,
                         details={
-                            'completion_tokens': 12,
-                            'prompt_tokens': 200,
-                            'total_tokens': 212,
                             'accepted_prediction_tokens': 0,
                             'audio_tokens': 0,
                             'reasoning_tokens': 0,
@@ -459,9 +444,6 @@ async def test_tool_returning_text_resource(allow_model_requests: None, agent: A
                         output_tokens=12,
                         input_audio_tokens=0,
                         details={
-                            'completion_tokens': 12,
-                            'prompt_tokens': 224,
-                            'total_tokens': 236,
                             'accepted_prediction_tokens': 0,
                             'audio_tokens': 0,
                             'reasoning_tokens': 0,
@@ -505,9 +487,6 @@ async def test_tool_returning_text_resource_link(allow_model_requests: None, age
                         output_tokens=12,
                         input_audio_tokens=0,
                         details={
-                            'completion_tokens': 12,
-                            'prompt_tokens': 305,
-                            'total_tokens': 317,
                             'accepted_prediction_tokens': 0,
                             'audio_tokens': 0,
                             'reasoning_tokens': 0,
@@ -536,9 +515,6 @@ async def test_tool_returning_text_resource_link(allow_model_requests: None, age
                         output_tokens=11,
                         input_audio_tokens=0,
                         details={
-                            'completion_tokens': 11,
-                            'prompt_tokens': 332,
-                            'total_tokens': 343,
                             'accepted_prediction_tokens': 0,
                             'audio_tokens': 0,
                             'reasoning_tokens': 0,
@@ -584,9 +560,6 @@ async def test_tool_returning_image_resource(allow_model_requests: None, agent: 
                         output_tokens=12,
                         input_audio_tokens=0,
                         details={
-                            'completion_tokens': 12,
-                            'prompt_tokens': 191,
-                            'total_tokens': 203,
                             'accepted_prediction_tokens': 0,
                             'audio_tokens': 0,
                             'reasoning_tokens': 0,
@@ -620,9 +593,6 @@ async def test_tool_returning_image_resource(allow_model_requests: None, agent: 
                         output_tokens=19,
                         input_audio_tokens=0,
                         details={
-                            'completion_tokens': 19,
-                            'prompt_tokens': 1332,
-                            'total_tokens': 1351,
                             'accepted_prediction_tokens': 0,
                             'audio_tokens': 0,
                             'reasoning_tokens': 0,
@@ -670,9 +640,6 @@ async def test_tool_returning_image_resource_link(
                         output_tokens=12,
                         input_audio_tokens=0,
                         details={
-                            'completion_tokens': 12,
-                            'prompt_tokens': 305,
-                            'total_tokens': 317,
                             'accepted_prediction_tokens': 0,
                             'audio_tokens': 0,
                             'reasoning_tokens': 0,
@@ -706,9 +673,6 @@ async def test_tool_returning_image_resource_link(
                         output_tokens=29,
                         input_audio_tokens=0,
                         details={
-                            'completion_tokens': 29,
-                            'prompt_tokens': 1452,
-                            'total_tokens': 1481,
                             'accepted_prediction_tokens': 0,
                             'audio_tokens': 0,
                             'reasoning_tokens': 0,
@@ -858,9 +822,6 @@ async def test_tool_returning_image(allow_model_requests: None, agent: Agent, im
                         output_tokens=11,
                         input_audio_tokens=0,
                         details={
-                            'completion_tokens': 11,
-                            'prompt_tokens': 190,
-                            'total_tokens': 201,
                             'accepted_prediction_tokens': 0,
                             'audio_tokens': 0,
                             'reasoning_tokens': 0,
@@ -896,9 +857,6 @@ async def test_tool_returning_image(allow_model_requests: None, agent: Agent, im
                         output_tokens=15,
                         input_audio_tokens=0,
                         details={
-                            'completion_tokens': 15,
-                            'prompt_tokens': 1329,
-                            'total_tokens': 1344,
                             'accepted_prediction_tokens': 0,
                             'audio_tokens': 0,
                             'reasoning_tokens': 0,
@@ -936,9 +894,6 @@ async def test_tool_returning_dict(allow_model_requests: None, agent: Agent):
                         output_tokens=11,
                         input_audio_tokens=0,
                         details={
-                            'completion_tokens': 11,
-                            'prompt_tokens': 195,
-                            'total_tokens': 206,
                             'accepted_prediction_tokens': 0,
                             'audio_tokens': 0,
                             'reasoning_tokens': 0,
@@ -967,9 +922,6 @@ async def test_tool_returning_dict(allow_model_requests: None, agent: Agent):
                         output_tokens=11,
                         input_audio_tokens=0,
                         details={
-                            'completion_tokens': 11,
-                            'prompt_tokens': 222,
-                            'total_tokens': 233,
                             'accepted_prediction_tokens': 0,
                             'audio_tokens': 0,
                             'reasoning_tokens': 0,
@@ -1015,9 +967,6 @@ async def test_tool_returning_error(allow_model_requests: None, agent: Agent):
                         output_tokens=15,
                         input_audio_tokens=0,
                         details={
-                            'completion_tokens': 15,
-                            'prompt_tokens': 203,
-                            'total_tokens': 218,
                             'accepted_prediction_tokens': 0,
                             'audio_tokens': 0,
                             'reasoning_tokens': 0,
@@ -1052,9 +1001,6 @@ async def test_tool_returning_error(allow_model_requests: None, agent: Agent):
                         output_tokens=15,
                         input_audio_tokens=0,
                         details={
-                            'completion_tokens': 15,
-                            'prompt_tokens': 250,
-                            'total_tokens': 265,
                             'accepted_prediction_tokens': 0,
                             'audio_tokens': 0,
                             'reasoning_tokens': 0,
@@ -1087,9 +1033,6 @@ async def test_tool_returning_error(allow_model_requests: None, agent: Agent):
                         output_tokens=22,
                         input_audio_tokens=0,
                         details={
-                            'completion_tokens': 22,
-                            'prompt_tokens': 277,
-                            'total_tokens': 299,
                             'accepted_prediction_tokens': 0,
                             'audio_tokens': 0,
                             'reasoning_tokens': 0,
@@ -1127,9 +1070,6 @@ async def test_tool_returning_none(allow_model_requests: None, agent: Agent):
                         output_tokens=11,
                         input_audio_tokens=0,
                         details={
-                            'completion_tokens': 11,
-                            'prompt_tokens': 193,
-                            'total_tokens': 204,
                             'accepted_prediction_tokens': 0,
                             'audio_tokens': 0,
                             'reasoning_tokens': 0,
@@ -1158,9 +1098,6 @@ async def test_tool_returning_none(allow_model_requests: None, agent: Agent):
                         output_tokens=11,
                         input_audio_tokens=0,
                         details={
-                            'completion_tokens': 11,
-                            'prompt_tokens': 212,
-                            'total_tokens': 223,
                             'accepted_prediction_tokens': 0,
                             'audio_tokens': 0,
                             'reasoning_tokens': 0,
@@ -1206,9 +1143,6 @@ async def test_tool_returning_multiple_items(allow_model_requests: None, agent: 
                         output_tokens=12,
                         input_audio_tokens=0,
                         details={
-                            'completion_tokens': 12,
-                            'prompt_tokens': 195,
-                            'total_tokens': 207,
                             'accepted_prediction_tokens': 0,
                             'audio_tokens': 0,
                             'reasoning_tokens': 0,
@@ -1253,9 +1187,6 @@ async def test_tool_returning_multiple_items(allow_model_requests: None, agent: 
                         output_tokens=24,
                         input_audio_tokens=0,
                         details={
-                            'completion_tokens': 24,
-                            'prompt_tokens': 1355,
-                            'total_tokens': 1379,
                             'accepted_prediction_tokens': 0,
                             'audio_tokens': 0,
                             'reasoning_tokens': 0,

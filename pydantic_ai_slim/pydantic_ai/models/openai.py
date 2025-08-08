@@ -1258,7 +1258,11 @@ def _map_usage(response: chat.ChatCompletion | ChatCompletionChunk | responses.R
         )
     else:
         details = {
-            key: value for key, value in response_usage.model_dump(exclude_none=True).items() if isinstance(value, int)
+            key: value
+            for key, value in response_usage.model_dump(
+                exclude_none=True, exclude={'prompt_tokens', 'completion_tokens', 'total_tokens'}
+            ).items()
+            if isinstance(value, int)
         }
         u = usage.RequestUsage(
             input_tokens=response_usage.prompt_tokens,

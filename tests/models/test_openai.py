@@ -235,7 +235,6 @@ async def test_request_simple_usage(allow_model_requests: None):
         RunUsage(
             requests=1,
             input_tokens=2,
-            details={'completion_tokens': 1, 'prompt_tokens': 2, 'total_tokens': 3},
             output_tokens=1,
         )
     )
@@ -365,7 +364,7 @@ async def test_request_tool_call(allow_model_requests: None):
                     input_tokens=2,
                     cache_read_tokens=1,
                     output_tokens=1,
-                    details={'completion_tokens': 1, 'prompt_tokens': 2, 'total_tokens': 3},
+                    details={},
                 ),
                 model_name='gpt-4o-123',
                 timestamp=datetime(2024, 1, 1, tzinfo=timezone.utc),
@@ -393,7 +392,7 @@ async def test_request_tool_call(allow_model_requests: None):
                     input_tokens=3,
                     cache_read_tokens=2,
                     output_tokens=2,
-                    details={'completion_tokens': 2, 'prompt_tokens': 3, 'total_tokens': 6},
+                    details={},
                 ),
                 model_name='gpt-4o-123',
                 timestamp=datetime(2024, 1, 1, tzinfo=timezone.utc),
@@ -417,15 +416,7 @@ async def test_request_tool_call(allow_model_requests: None):
             ),
         ]
     )
-    assert result.usage() == snapshot(
-        RunUsage(
-            requests=3,
-            cache_read_tokens=3,
-            input_tokens=5,
-            output_tokens=3,
-            details={'completion_tokens': 3, 'prompt_tokens': 5, 'total_tokens': 9},
-        )
-    )
+    assert result.usage() == snapshot(RunUsage(requests=3, cache_read_tokens=3, input_tokens=5, output_tokens=3))
 
 
 FinishReason = Literal['stop', 'length', 'tool_calls', 'content_filter', 'function_call']
@@ -458,14 +449,7 @@ async def test_stream_text(allow_model_requests: None):
         assert not result.is_complete
         assert [c async for c in result.stream_text(debounce_by=None)] == snapshot(['hello ', 'hello world'])
         assert result.is_complete
-        assert result.usage() == snapshot(
-            RunUsage(
-                requests=1,
-                input_tokens=6,
-                output_tokens=3,
-                details={'completion_tokens': 3, 'prompt_tokens': 6, 'total_tokens': 9},
-            )
-        )
+        assert result.usage() == snapshot(RunUsage(requests=1, input_tokens=6, output_tokens=3))
 
 
 async def test_stream_text_finish_reason(allow_model_requests: None):
@@ -537,14 +521,7 @@ async def test_stream_structured(allow_model_requests: None):
             ]
         )
         assert result.is_complete
-        assert result.usage() == snapshot(
-            RunUsage(
-                requests=1,
-                input_tokens=20,
-                output_tokens=10,
-                details={'completion_tokens': 10, 'prompt_tokens': 20, 'total_tokens': 30},
-            )
-        )
+        assert result.usage() == snapshot(RunUsage(requests=1, input_tokens=20, output_tokens=10))
         # double check usage matches stream count
         assert result.usage().output_tokens == len(stream)
 
@@ -693,14 +670,7 @@ async def test_no_delta(allow_model_requests: None):
         assert not result.is_complete
         assert [c async for c in result.stream_text(debounce_by=None)] == snapshot(['hello ', 'hello world'])
         assert result.is_complete
-        assert result.usage() == snapshot(
-            RunUsage(
-                requests=1,
-                input_tokens=6,
-                output_tokens=3,
-                details={'completion_tokens': 3, 'prompt_tokens': 6, 'total_tokens': 9},
-            )
-        )
+        assert result.usage() == snapshot(RunUsage(requests=1, input_tokens=6, output_tokens=3))
 
 
 @pytest.mark.parametrize('system_prompt_role', ['system', 'developer', 'user', None])
@@ -857,9 +827,6 @@ async def test_image_url_tool_response(allow_model_requests: None, openai_api_ke
                     output_tokens=11,
                     input_audio_tokens=0,
                     details={
-                        'completion_tokens': 11,
-                        'prompt_tokens': 46,
-                        'total_tokens': 57,
                         'accepted_prediction_tokens': 0,
                         'audio_tokens': 0,
                         'reasoning_tokens': 0,
@@ -897,9 +864,6 @@ async def test_image_url_tool_response(allow_model_requests: None, openai_api_ke
                     output_tokens=8,
                     input_audio_tokens=0,
                     details={
-                        'completion_tokens': 8,
-                        'prompt_tokens': 503,
-                        'total_tokens': 511,
                         'accepted_prediction_tokens': 0,
                         'audio_tokens': 0,
                         'reasoning_tokens': 0,
@@ -944,9 +908,6 @@ async def test_image_as_binary_content_tool_response(
                     output_tokens=11,
                     input_audio_tokens=0,
                     details={
-                        'completion_tokens': 11,
-                        'prompt_tokens': 46,
-                        'total_tokens': 57,
                         'accepted_prediction_tokens': 0,
                         'audio_tokens': 0,
                         'reasoning_tokens': 0,
@@ -982,9 +943,6 @@ async def test_image_as_binary_content_tool_response(
                     output_tokens=9,
                     input_audio_tokens=0,
                     details={
-                        'completion_tokens': 9,
-                        'prompt_tokens': 1185,
-                        'total_tokens': 1194,
                         'accepted_prediction_tokens': 0,
                         'audio_tokens': 0,
                         'reasoning_tokens': 0,
@@ -1874,9 +1832,6 @@ async def test_openai_instructions(allow_model_requests: None, openai_api_key: s
                     output_tokens=8,
                     input_audio_tokens=0,
                     details={
-                        'completion_tokens': 8,
-                        'prompt_tokens': 24,
-                        'total_tokens': 32,
                         'accepted_prediction_tokens': 0,
                         'audio_tokens': 0,
                         'reasoning_tokens': 0,
@@ -1923,9 +1878,6 @@ async def test_openai_instructions_with_tool_calls_keep_instructions(allow_model
                     output_tokens=15,
                     input_audio_tokens=0,
                     details={
-                        'completion_tokens': 15,
-                        'prompt_tokens': 50,
-                        'total_tokens': 65,
                         'accepted_prediction_tokens': 0,
                         'audio_tokens': 0,
                         'reasoning_tokens': 0,
@@ -1952,9 +1904,6 @@ async def test_openai_instructions_with_tool_calls_keep_instructions(allow_model
                     output_tokens=15,
                     input_audio_tokens=0,
                     details={
-                        'completion_tokens': 15,
-                        'prompt_tokens': 75,
-                        'total_tokens': 90,
                         'accepted_prediction_tokens': 0,
                         'audio_tokens': 0,
                         'reasoning_tokens': 0,
@@ -2113,9 +2062,6 @@ async def test_openai_model_thinking_part(allow_model_requests: None, openai_api
                     output_tokens=2437,
                     input_audio_tokens=0,
                     details={
-                        'completion_tokens': 2437,
-                        'prompt_tokens': 822,
-                        'total_tokens': 3259,
                         'accepted_prediction_tokens': 0,
                         'audio_tokens': 0,
                         'reasoning_tokens': 1792,
@@ -2425,9 +2371,6 @@ async def test_openai_tool_output(allow_model_requests: None, openai_api_key: st
                     output_tokens=12,
                     input_audio_tokens=0,
                     details={
-                        'completion_tokens': 12,
-                        'prompt_tokens': 68,
-                        'total_tokens': 80,
                         'accepted_prediction_tokens': 0,
                         'audio_tokens': 0,
                         'reasoning_tokens': 0,
@@ -2462,9 +2405,6 @@ async def test_openai_tool_output(allow_model_requests: None, openai_api_key: st
                     output_tokens=36,
                     input_audio_tokens=0,
                     details={
-                        'completion_tokens': 36,
-                        'prompt_tokens': 89,
-                        'total_tokens': 125,
                         'accepted_prediction_tokens': 0,
                         'audio_tokens': 0,
                         'reasoning_tokens': 0,
@@ -2525,9 +2465,6 @@ async def test_openai_text_output_function(allow_model_requests: None, openai_ap
                     output_tokens=11,
                     input_audio_tokens=0,
                     details={
-                        'completion_tokens': 11,
-                        'prompt_tokens': 42,
-                        'total_tokens': 53,
                         'accepted_prediction_tokens': 0,
                         'audio_tokens': 0,
                         'reasoning_tokens': 0,
@@ -2556,9 +2493,6 @@ async def test_openai_text_output_function(allow_model_requests: None, openai_ap
                     output_tokens=10,
                     input_audio_tokens=0,
                     details={
-                        'completion_tokens': 10,
-                        'prompt_tokens': 63,
-                        'total_tokens': 73,
                         'accepted_prediction_tokens': 0,
                         'audio_tokens': 0,
                         'reasoning_tokens': 0,
@@ -2612,9 +2546,6 @@ async def test_openai_native_output(allow_model_requests: None, openai_api_key: 
                     output_tokens=12,
                     input_audio_tokens=0,
                     details={
-                        'completion_tokens': 12,
-                        'prompt_tokens': 71,
-                        'total_tokens': 83,
                         'accepted_prediction_tokens': 0,
                         'audio_tokens': 0,
                         'reasoning_tokens': 0,
@@ -2643,9 +2574,6 @@ async def test_openai_native_output(allow_model_requests: None, openai_api_key: 
                     output_tokens=15,
                     input_audio_tokens=0,
                     details={
-                        'completion_tokens': 15,
-                        'prompt_tokens': 92,
-                        'total_tokens': 107,
                         'accepted_prediction_tokens': 0,
                         'audio_tokens': 0,
                         'reasoning_tokens': 0,
@@ -2701,9 +2629,6 @@ async def test_openai_native_output_multiple(allow_model_requests: None, openai_
                     output_tokens=11,
                     input_audio_tokens=0,
                     details={
-                        'completion_tokens': 11,
-                        'prompt_tokens': 160,
-                        'total_tokens': 171,
                         'accepted_prediction_tokens': 0,
                         'audio_tokens': 0,
                         'reasoning_tokens': 0,
@@ -2736,9 +2661,6 @@ async def test_openai_native_output_multiple(allow_model_requests: None, openai_
                     output_tokens=25,
                     input_audio_tokens=0,
                     details={
-                        'completion_tokens': 25,
-                        'prompt_tokens': 181,
-                        'total_tokens': 206,
                         'accepted_prediction_tokens': 0,
                         'audio_tokens': 0,
                         'reasoning_tokens': 0,
@@ -2797,9 +2719,6 @@ Don't include any text or Markdown fencing before or after.\
                     output_tokens=11,
                     input_audio_tokens=0,
                     details={
-                        'completion_tokens': 11,
-                        'prompt_tokens': 109,
-                        'total_tokens': 120,
                         'accepted_prediction_tokens': 0,
                         'audio_tokens': 0,
                         'reasoning_tokens': 0,
@@ -2835,9 +2754,6 @@ Don't include any text or Markdown fencing before or after.\
                     output_tokens=11,
                     input_audio_tokens=0,
                     details={
-                        'completion_tokens': 11,
-                        'prompt_tokens': 130,
-                        'total_tokens': 141,
                         'accepted_prediction_tokens': 0,
                         'audio_tokens': 0,
                         'reasoning_tokens': 0,
@@ -2900,9 +2816,6 @@ Don't include any text or Markdown fencing before or after.\
                     output_tokens=11,
                     input_audio_tokens=0,
                     details={
-                        'completion_tokens': 11,
-                        'prompt_tokens': 273,
-                        'total_tokens': 284,
                         'accepted_prediction_tokens': 0,
                         'audio_tokens': 0,
                         'reasoning_tokens': 0,
@@ -2942,9 +2855,6 @@ Don't include any text or Markdown fencing before or after.\
                     output_tokens=21,
                     input_audio_tokens=0,
                     details={
-                        'completion_tokens': 21,
-                        'prompt_tokens': 294,
-                        'total_tokens': 315,
                         'accepted_prediction_tokens': 0,
                         'audio_tokens': 0,
                         'reasoning_tokens': 0,

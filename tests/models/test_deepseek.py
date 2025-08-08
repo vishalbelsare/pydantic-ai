@@ -49,9 +49,6 @@ async def test_deepseek_model_thinking_part(allow_model_requests: None, deepseek
                     cache_read_tokens=0,
                     output_tokens=789,
                     details={
-                        'completion_tokens': 789,
-                        'prompt_tokens': 12,
-                        'total_tokens': 801,
                         'prompt_cache_hit_tokens': 0,
                         'prompt_cache_miss_tokens': 12,
                         'reasoning_tokens': 415,

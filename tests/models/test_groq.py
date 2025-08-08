@@ -926,7 +926,7 @@ async def test_groq_model_thinking_part(allow_model_requests: None, groq_api_key
                 usage=RequestUsage(input_tokens=21, output_tokens=1414),
                 model_name='deepseek-r1-distill-llama-70b',
                 timestamp=IsDatetime(),
-                provider_request_id=IsStr(),
+                provider_request_id='chatcmpl-9748c1af-1065-410a-969a-d7fb48039fbb',
             ),
             ModelRequest(
                 parts=[
@@ -942,7 +942,7 @@ async def test_groq_model_thinking_part(allow_model_requests: None, groq_api_key
                 usage=RequestUsage(input_tokens=524, output_tokens=1590),
                 model_name='deepseek-r1-distill-llama-70b',
                 timestamp=IsDatetime(),
-                provider_request_id=IsStr(),
+                provider_request_id='chatcmpl-994aa228-883a-498c-8b20-9655d770b697',
             ),
         ]
     )

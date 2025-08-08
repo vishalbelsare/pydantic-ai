@@ -15,7 +15,7 @@ from pydantic_ai.messages import (
     UserPromptPart,
 )
 from pydantic_ai.models.test import TestModel
-from pydantic_ai.usage import RunUsage, UsageLimits
+from pydantic_ai.usage import RequestUsage, RunUsage, UsageLimits
 
 from .conftest import IsNow, IsStr
 
@@ -25,9 +25,9 @@ pytestmark = pytest.mark.anyio
 def test_request_token_limit() -> None:
     test_agent = Agent(TestModel())
 
-    with pytest.raises(UsageLimitExceeded, match=re.escape('Exceeded the request_tokens_limit of 5 (input_tokens=59)')):
+    with pytest.raises(UsageLimitExceeded, match=re.escape('Exceeded the input_tokens_limit of 5 (input_tokens=59)')):
         test_agent.run_sync(
-            'Hello, this prompt exceeds the request tokens limit.', usage_limits=UsageLimits(request_tokens_limit=5)
+            'Hello, this prompt exceeds the request tokens limit.', usage_limits=UsageLimits(input_tokens_limit=5)
         )
 
 
@@ -36,10 +36,8 @@ def test_response_token_limit() -> None:
         TestModel(custom_output_text='Unfortunately, this response exceeds the response tokens limit by a few!')
     )
 
-    with pytest.raises(
-        UsageLimitExceeded, match=re.escape('Exceeded the response_tokens_limit of 5 (output_tokens=11)')
-    ):
-        test_agent.run_sync('Hello', usage_limits=UsageLimits(response_tokens_limit=5))
+    with pytest.raises(UsageLimitExceeded, match=re.escape('Exceeded the output_tokens_limit of 5 (output_tokens=11)')):
+        test_agent.run_sync('Hello', usage_limits=UsageLimits(output_tokens_limit=5))
 
 
 def test_total_token_limit() -> None:
@@ -77,9 +75,9 @@ async def test_streamed_text_limits() -> None:
     succeeded = False
 
     with pytest.raises(
-        UsageLimitExceeded, match=re.escape('Exceeded the response_tokens_limit of 10 (output_tokens=11)')
+        UsageLimitExceeded, match=re.escape('Exceeded the output_tokens_limit of 10 (output_tokens=11)')
     ):
-        async with test_agent.run_stream('Hello', usage_limits=UsageLimits(response_tokens_limit=10)) as result:
+        async with test_agent.run_stream('Hello', usage_limits=UsageLimits(output_tokens_limit=10)) as result:
             assert test_agent.name == 'test_agent'
             assert not result.is_complete
             assert result.all_messages() == snapshot(
@@ -93,11 +91,7 @@ async def test_streamed_text_limits() -> None:
                                 tool_call_id=IsStr(),
                             )
                         ],
-                        usage=RunUsage(
-                            input_tokens=51,
-                            output_tokens=0,
-                            total_tokens=51,
-                        ),
+                        usage=RequestUsage(input_tokens=51, output_tokens=0),
                         model_name='test',
                         timestamp=IsNow(tz=timezone.utc),
                     ),
@@ -118,7 +112,6 @@ async def test_streamed_text_limits() -> None:
                     requests=2,
                     input_tokens=103,
                     output_tokens=5,
-                    total_tokens=108,
                 )
             )
             succeeded = True
@@ -135,7 +128,7 @@ def test_usage_so_far() -> None:
         test_agent.run_sync(
             'Hello, this prompt exceeds the request tokens limit.',
             usage_limits=UsageLimits(total_tokens_limit=105),
-            usage=RunUsage(total_tokens=100),
+            usage=RunUsage(input_tokens=50, output_tokens=50),
         )
 
 
@@ -150,13 +143,13 @@ async def test_multi_agent_usage_no_incr():
         delegate_result = await delegate_agent.run(sentence)
         delegate_usage = delegate_result.usage()
         run_1_usages.append(delegate_usage)
-        assert delegate_usage == snapshot(RunUsage(requests=1, input_tokens=51, output_tokens=4, total_tokens=55))
+        assert delegate_usage == snapshot(RunUsage(input_tokens=51, output_tokens=4))
         return delegate_result.output
 
     result1 = await controller_agent1.run('foobar')
     assert result1.output == snapshot('{"delegate_to_other_agent1":0}')
     run_1_usages.append(result1.usage())
-    assert result1.usage() == snapshot(RunUsage(requests=2, input_tokens=103, output_tokens=13, total_tokens=116))
+    assert result1.usage() == snapshot(RunUsage(input_tokens=103, output_tokens=13))
 
     controller_agent2 = Agent(TestModel())
 
@@ -164,12 +157,12 @@ async def test_multi_agent_usage_no_incr():
     async def delegate_to_other_agent2(ctx: RunContext[None], sentence: str) -> int:
         delegate_result = await delegate_agent.run(sentence, usage=ctx.usage)
         delegate_usage = delegate_result.usage()
-        assert delegate_usage == snapshot(RunUsage(requests=2, input_tokens=102, output_tokens=9, total_tokens=111))
+        assert delegate_usage == snapshot(RunUsage(input_tokens=102, output_tokens=9))
         return delegate_result.output
 
     result2 = await controller_agent2.run('foobar')
     assert result2.output == snapshot('{"delegate_to_other_agent2":0}')
-    assert result2.usage() == snapshot(RunUsage(requests=3, input_tokens=154, output_tokens=17, total_tokens=171))
+    assert result2.usage() == snapshot(RunUsage(input_tokens=154, output_tokens=17))
 
     # confirm the usage from result2 is the sum of the usage from result1
     assert result2.usage() == functools.reduce(operator.add, run_1_usages)
@@ -190,10 +183,10 @@ async def test_multi_agent_usage_sync():
 
     @controller_agent.tool
     def delegate_to_other_agent(ctx: RunContext[None], sentence: str) -> int:
-        new_usage = RunUsage(requests=5, input_tokens=2, output_tokens=3, total_tokens=4)
+        new_usage = RunUsage(requests=5, input_tokens=2, output_tokens=3)
         ctx.usage.incr(new_usage)
         return 0
 
     result = await controller_agent.run('foobar')
     assert result.output == snapshot('{"delegate_to_other_agent":0}')
-    assert result.usage() == snapshot(RunUsage(requests=7, input_tokens=105, output_tokens=16, total_tokens=120))
+    assert result.usage() == snapshot(RunUsage(requests=5, input_tokens=105, output_tokens=16))

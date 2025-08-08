@@ -19,7 +19,7 @@ from pydantic_ai.messages import (
     UserPromptPart,
 )
 from pydantic_ai.models.function import AgentInfo, FunctionModel
-from pydantic_ai.usage import RunUsage
+from pydantic_ai.usage import RequestUsage
 
 from .conftest import IsDatetime, IsStr, try_import
 
@@ -612,7 +612,7 @@ async def test_a2a_multiple_tasks_same_context():
                                 tool_name='final_result', args='{"response": ["foo", "bar"]}', tool_call_id=IsStr()
                             )
                         ],
-                        usage=RunUsage(requests=1, input_tokens=52, output_tokens=7, total_tokens=59),
+                        usage=RequestUsage(input_tokens=52, output_tokens=7),
                         model_name='function:track_messages:',
                         timestamp=IsDatetime(),
                     ),

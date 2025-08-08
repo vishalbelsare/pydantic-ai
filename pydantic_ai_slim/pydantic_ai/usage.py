@@ -12,8 +12,41 @@ from .exceptions import UsageLimitExceeded
 __all__ = 'RequestUsage', 'RunUsage', 'UsageLimits'
 
 
+class UsageBase:
+    input_tokens: int | None = None
+    """Total number of text input/prompt tokens."""
+
+    output_tokens: int | None = None
+    """Total number of text output/completion tokens."""
+
+    details: dict[str, int] | None = None
+    """Any extra details returned by the model."""
+
+    def opentelemetry_attributes(self) -> dict[str, int]:
+        """Get the token limits as OpenTelemetry attributes."""
+        result: dict[str, int] = {}
+        if self.input_tokens:
+            result['gen_ai.usage.input_tokens'] = self.input_tokens
+        if self.output_tokens:
+            result['gen_ai.usage.output_tokens'] = self.output_tokens
+        details = self.details
+        if details:
+            prefix = 'gen_ai.usage.details.'
+            for key, value in details.items():
+                # Skipping check for value since spec implies all detail values are relevant
+                if value:
+                    result[prefix + key] = value
+        return result
+
+    __repr__ = _utils.dataclasses_no_defaults_repr
+
+    def has_values(self) -> bool:
+        """Whether any values are set and non-zero."""
+        return any(dataclasses.asdict(self).values())  # type: ignore
+
+
 @dataclass(repr=False)
-class RequestUsage:
+class RequestUsage(UsageBase):
     """LLM usage associated with a single request.
 
     This is an implementation of `genai_prices.types.AbstractUsage` so it can be used to calculate the price of the
@@ -41,9 +74,13 @@ class RequestUsage:
     details: dict[str, int] | None = None
     """Any extra details returned by the model."""
 
-    # not used but present so RequestUsage is a valid AbstractUsage
-    output_audio_tokens: None = dataclasses.field(default=None, init=False)
-    requests: int = dataclasses.field(default=1, init=False)
+    @property
+    def output_audio_tokens(self):
+        return None
+
+    @property
+    def requests(self):
+        return 1
 
     @property
     @deprecated('`request_tokens` is deprecated, use `input_tokens` instead')
@@ -79,27 +116,9 @@ class RequestUsage:
         new_usage.incr(other)
         return new_usage
 
-    def opentelemetry_attributes(self) -> dict[str, int]:
-        """Get the token limits as OpenTelemetry attributes."""
-        result: dict[str, int] = {}
-        if self.input_tokens:
-            result['gen_ai.usage.input_tokens'] = self.input_tokens
-        if self.output_tokens:
-            result['gen_ai.usage.output_tokens'] = self.output_tokens
-        details = self.details
-        if details:
-            prefix = 'gen_ai.usage.details.'
-            for key, value in details.items():
-                # Skipping check for value since spec implies all detail values are relevant
-                if value:
-                    result[prefix + key] = value
-        return result
-
-    __repr__ = _utils.dataclasses_no_defaults_repr
-
 
 @dataclass(repr=False)
-class RunUsage:
+class RunUsage(UsageBase):
     """LLM usage associated with an agent run.
 
     Responsibility for calculating request usage is on the model; Pydantic AI simply sums the usage information across requests.
@@ -167,12 +186,6 @@ class RunUsage:
         new_usage = copy(self)
         new_usage.incr(other)
         return new_usage
-
-    def has_values(self) -> bool:
-        """Whether any values are set and non-zero."""
-        return any(dataclasses.asdict(self).values())
-
-    __repr__ = _utils.dataclasses_no_defaults_repr
 
 
 def _incr_usage_tokens(slf: RunUsage | RequestUsage, incr_usage: RunUsage | RequestUsage) -> None:

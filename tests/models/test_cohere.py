@@ -10,6 +10,8 @@ import pytest
 from inline_snapshot import snapshot
 
 from pydantic_ai import Agent, ModelHTTPError, ModelRetry
+from pydantic_ai.builtin_tools import WebSearchTool
+from pydantic_ai.exceptions import UserError
 from pydantic_ai.messages import (
     ImageUrl,
     ModelRequest,
@@ -23,7 +25,7 @@ from pydantic_ai.messages import (
     UserPromptPart,
 )
 from pydantic_ai.tools import RunContext
-from pydantic_ai.usage import RunUsage
+from pydantic_ai.usage import RequestUsage, RunUsage
 
 from ..conftest import IsDatetime, IsInstance, IsNow, raise_if_exception, try_import
 
@@ -102,27 +104,25 @@ async def test_request_simple_success(allow_model_requests: None):
 
     result = await agent.run('hello')
     assert result.output == 'world'
-    assert result.usage() == snapshot(RunUsage(requests=1))
+    assert result.usage() == snapshot(RunUsage())
 
     # reset the index so we get the same response again
     mock_client.index = 0  # type: ignore
 
     result = await agent.run('hello', message_history=result.new_messages())
     assert result.output == 'world'
-    assert result.usage() == snapshot(RunUsage(requests=1))
+    assert result.usage() == snapshot(RunUsage())
     assert result.all_messages() == snapshot(
         [
             ModelRequest(parts=[UserPromptPart(content='hello', timestamp=IsNow(tz=timezone.utc))]),
             ModelResponse(
                 parts=[TextPart(content='world')],
-                usage=RunUsage(requests=1),
                 model_name='command-r7b-12-2024',
                 timestamp=IsNow(tz=timezone.utc),
             ),
             ModelRequest(parts=[UserPromptPart(content='hello', timestamp=IsNow(tz=timezone.utc))]),
             ModelResponse(
                 parts=[TextPart(content='world')],
-                usage=RunUsage(requests=1),
                 model_name='command-r7b-12-2024',
                 timestamp=IsNow(tz=timezone.utc),
             ),
@@ -149,10 +149,8 @@ async def test_request_simple_usage(allow_model_requests: None):
     assert result.output == 'world'
     assert result.usage() == snapshot(
         RunUsage(
-            requests=1,
             input_tokens=1,
             output_tokens=1,
-            total_tokens=2,
             details={
                 'input_tokens': 1,
                 'output_tokens': 1,
@@ -192,7 +190,6 @@ async def test_request_structured_response(allow_model_requests: None):
                         tool_call_id='123',
                     )
                 ],
-                usage=RunUsage(requests=1),
                 model_name='command-r7b-12-2024',
                 timestamp=IsNow(tz=timezone.utc),
             ),
@@ -279,7 +276,7 @@ async def test_request_tool_call(allow_model_requests: None):
                         tool_call_id='1',
                     )
                 ],
-                usage=RunUsage(requests=1, total_tokens=0, details={}),
+                usage=RequestUsage(details={}),
                 model_name='command-r7b-12-2024',
                 timestamp=IsNow(tz=timezone.utc),
             ),
@@ -301,13 +298,7 @@ async def test_request_tool_call(allow_model_requests: None):
                         tool_call_id='2',
                     )
                 ],
-                usage=RunUsage(
-                    requests=1,
-                    input_tokens=5,
-                    output_tokens=3,
-                    total_tokens=8,
-                    details={'input_tokens': 4, 'output_tokens': 2},
-                ),
+                usage=RequestUsage(input_tokens=5, output_tokens=3, details={'input_tokens': 4, 'output_tokens': 2}),
                 model_name='command-r7b-12-2024',
                 timestamp=IsNow(tz=timezone.utc),
             ),
@@ -323,7 +314,6 @@ async def test_request_tool_call(allow_model_requests: None):
             ),
             ModelResponse(
                 parts=[TextPart(content='final response')],
-                usage=RunUsage(requests=1),
                 model_name='command-r7b-12-2024',
                 timestamp=IsNow(tz=timezone.utc),
             ),
@@ -331,10 +321,8 @@ async def test_request_tool_call(allow_model_requests: None):
     )
     assert result.usage() == snapshot(
         RunUsage(
-            requests=3,
             input_tokens=5,
             output_tokens=3,
-            total_tokens=8,
             details={'input_tokens': 4, 'output_tokens': 2},
         )
     )
@@ -401,12 +389,8 @@ async def test_cohere_model_instructions(allow_model_requests: None, co_api_key:
                         content="The capital of France is Paris. It is the country's largest city and serves as the economic, cultural, and political center of France. Paris is known for its rich history, iconic landmarks such as the Eiffel Tower and the Louvre Museum, and its significant influence on fashion, cuisine, and the arts."
                     )
                 ],
-                usage=RunUsage(
-                    requests=1,
-                    input_tokens=542,
-                    output_tokens=63,
-                    total_tokens=605,
-                    details={'input_tokens': 13, 'output_tokens': 61},
+                usage=RequestUsage(
+                    input_tokens=542, output_tokens=63, details={'input_tokens': 13, 'output_tokens': 61}
                 ),
                 model_name='command-r7b-12-2024',
                 timestamp=IsDatetime(),
@@ -447,11 +431,8 @@ async def test_cohere_model_thinking_part(allow_model_requests: None, co_api_key
                     IsInstance(ThinkingPart),
                     IsInstance(TextPart),
                 ],
-                usage=RunUsage(
-                    input_tokens=13,
-                    output_tokens=1909,
-                    total_tokens=1922,
-                    details={'reasoning_tokens': 1472, 'cached_tokens': 0},
+                usage=RequestUsage(
+                    input_tokens=13, cache_read_tokens=0, output_tokens=1909, details={'reasoning_tokens': 1472}
                 ),
                 model_name='o3-mini-2025-01-31',
                 timestamp=IsDatetime(),
@@ -476,11 +457,8 @@ async def test_cohere_model_thinking_part(allow_model_requests: None, co_api_key
                     IsInstance(ThinkingPart),
                     IsInstance(TextPart),
                 ],
-                usage=RunUsage(
-                    input_tokens=13,
-                    output_tokens=1909,
-                    total_tokens=1922,
-                    details={'reasoning_tokens': 1472, 'cached_tokens': 0},
+                usage=RequestUsage(
+                    input_tokens=13, cache_read_tokens=0, output_tokens=1909, details={'reasoning_tokens': 1472}
                 ),
                 model_name='o3-mini-2025-01-31',
                 timestamp=IsDatetime(),
@@ -496,15 +474,18 @@ async def test_cohere_model_thinking_part(allow_model_requests: None, co_api_key
             ),
             ModelResponse(
                 parts=[IsInstance(TextPart)],
-                usage=RunUsage(
-                    requests=1,
-                    input_tokens=1457,
-                    output_tokens=807,
-                    total_tokens=2264,
-                    details={'input_tokens': 954, 'output_tokens': 805},
+                usage=RequestUsage(
+                    input_tokens=1457, output_tokens=807, details={'input_tokens': 954, 'output_tokens': 805}
                 ),
                 model_name='command-r7b-12-2024',
                 timestamp=IsDatetime(),
             ),
         ]
     )
+
+
+async def test_cohere_model_builtin_tools(allow_model_requests: None, co_api_key: str):
+    m = CohereModel('command-r7b-12-2024', provider=CohereProvider(api_key=co_api_key))
+    agent = Agent(m, builtin_tools=[WebSearchTool()])
+    with pytest.raises(UserError, match='Cohere does not support built-in tools'):
+        await agent.run('Hello')

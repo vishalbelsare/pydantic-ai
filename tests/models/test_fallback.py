@@ -3,6 +3,7 @@ from __future__ import annotations
 import sys
 from collections.abc import AsyncIterator
 from datetime import timezone
+from typing import Any
 
 import pytest
 from inline_snapshot import snapshot
@@ -11,7 +12,7 @@ from pydantic_ai import Agent, ModelHTTPError
 from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse, TextPart, UserPromptPart
 from pydantic_ai.models.fallback import FallbackModel
 from pydantic_ai.models.function import AgentInfo, FunctionModel
-from pydantic_ai.usage import RunUsage
+from pydantic_ai.usage import RequestUsage
 
 from ..conftest import IsNow, try_import
 
@@ -60,7 +61,7 @@ def test_first_successful() -> None:
             ),
             ModelResponse(
                 parts=[TextPart(content='success')],
-                usage=RunUsage(requests=1, input_tokens=51, output_tokens=1, total_tokens=52),
+                usage=RequestUsage(input_tokens=51, output_tokens=1),
                 model_name='function:success_response:',
                 timestamp=IsNow(tz=timezone.utc),
             ),
@@ -85,7 +86,7 @@ def test_first_failed() -> None:
             ),
             ModelResponse(
                 parts=[TextPart(content='success')],
-                usage=RunUsage(requests=1, input_tokens=51, output_tokens=1, total_tokens=52),
+                usage=RequestUsage(input_tokens=51, output_tokens=1),
                 model_name='function:success_response:',
                 timestamp=IsNow(tz=timezone.utc),
             ),
@@ -111,7 +112,7 @@ def test_first_failed_instrumented(capfire: CaptureLogfire) -> None:
             ),
             ModelResponse(
                 parts=[TextPart(content='success')],
-                usage=RunUsage(requests=1, input_tokens=51, output_tokens=1, total_tokens=52),
+                usage=RequestUsage(input_tokens=51, output_tokens=1),
                 model_name='function:success_response:',
                 timestamp=IsNow(tz=timezone.utc),
             ),
@@ -127,7 +128,7 @@ def test_first_failed_instrumented(capfire: CaptureLogfire) -> None:
                 'end_time': 3000000000,
                 'attributes': {
                     'gen_ai.operation.name': 'chat',
-                    'model_request_parameters': '{"function_tools": [], "output_mode": "text", "output_object": null, "output_tools": [], "allow_text_output": true}',
+                    'model_request_parameters': '{"function_tools": [], "builtin_tools": [], "output_mode": "text", "output_object": null, "output_tools": [], "allow_text_output": true}',
                     'logfire.span_type': 'span',
                     'logfire.msg': 'chat fallback:function:failure_response:,function:success_response:',
                     'gen_ai.system': 'function',
@@ -170,19 +171,19 @@ async def test_first_failed_instrumented_stream(capfire: CaptureLogfire) -> None
             [
                 ModelResponse(
                     parts=[TextPart(content='hello ')],
-                    usage=RunUsage(input_tokens=50, output_tokens=1, total_tokens=51),
+                    usage=RequestUsage(input_tokens=50, output_tokens=1),
                     model_name='function::success_response_stream',
                     timestamp=IsNow(tz=timezone.utc),
                 ),
                 ModelResponse(
                     parts=[TextPart(content='hello world')],
-                    usage=RunUsage(input_tokens=50, output_tokens=2, total_tokens=52),
+                    usage=RequestUsage(input_tokens=50, output_tokens=2),
                     model_name='function::success_response_stream',
                     timestamp=IsNow(tz=timezone.utc),
                 ),
                 ModelResponse(
                     parts=[TextPart(content='hello world')],
-                    usage=RunUsage(input_tokens=50, output_tokens=2, total_tokens=52),
+                    usage=RequestUsage(input_tokens=50, output_tokens=2),
                     model_name='function::success_response_stream',
                     timestamp=IsNow(tz=timezone.utc),
                 ),
@@ -200,7 +201,7 @@ async def test_first_failed_instrumented_stream(capfire: CaptureLogfire) -> None
                 'end_time': 3000000000,
                 'attributes': {
                     'gen_ai.operation.name': 'chat',
-                    'model_request_parameters': '{"function_tools": [], "output_mode": "text", "output_object": null, "output_tools": [], "allow_text_output": true}',
+                    'model_request_parameters': '{"function_tools": [], "builtin_tools": [], "output_mode": "text", "output_object": null, "output_tools": [], "allow_text_output": true}',
                     'logfire.span_type': 'span',
                     'logfire.msg': 'chat fallback:function::failure_response_stream,function::success_response_stream',
                     'gen_ai.system': 'function',
@@ -247,6 +248,14 @@ def test_all_failed() -> None:
     assert exceptions[0].body == {'error': 'test error'}
 
 
+def add_missing_response_model(spans: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    for span in spans:
+        attrs = span.setdefault('attributes', {})
+        if 'gen_ai.request.model' in attrs:
+            attrs.setdefault('gen_ai.response.model', attrs['gen_ai.request.model'])
+    return spans
+
+
 @pytest.mark.skipif(not logfire_imports_successful(), reason='logfire not installed')
 def test_all_failed_instrumented(capfire: CaptureLogfire) -> None:
     fallback_model = FallbackModel(failure_model, failure_model)
@@ -260,7 +269,7 @@ def test_all_failed_instrumented(capfire: CaptureLogfire) -> None:
     assert exceptions[0].status_code == 500
     assert exceptions[0].model_name == 'test-function-model'
     assert exceptions[0].body == {'error': 'test error'}
-    assert capfire.exporter.exported_spans_as_dict() == snapshot(
+    assert add_missing_response_model(capfire.exporter.exported_spans_as_dict()) == snapshot(
         [
             {
                 'name': 'chat fallback:function:failure_response:,function:failure_response:',
@@ -272,11 +281,12 @@ def test_all_failed_instrumented(capfire: CaptureLogfire) -> None:
                     'gen_ai.operation.name': 'chat',
                     'gen_ai.system': 'fallback:function,function',
                     'gen_ai.request.model': 'fallback:function:failure_response:,function:failure_response:',
-                    'model_request_parameters': '{"function_tools": [], "output_mode": "text", "output_object": null, "output_tools": [], "allow_text_output": true}',
+                    'model_request_parameters': '{"function_tools": [], "builtin_tools": [], "output_mode": "text", "output_object": null, "output_tools": [], "allow_text_output": true}',
                     'logfire.json_schema': '{"type": "object", "properties": {"model_request_parameters": {"type": "object"}}}',
                     'logfire.span_type': 'span',
                     'logfire.msg': 'chat fallback:function:failure_response:,function:failure_response:',
                     'logfire.level_num': 17,
+                    'gen_ai.response.model': 'fallback:function:failure_response:,function:failure_response:',
                 },
                 'events': [
                     {
@@ -346,19 +356,19 @@ async def test_first_success_streaming() -> None:
             [
                 ModelResponse(
                     parts=[TextPart(content='hello ')],
-                    usage=RunUsage(input_tokens=50, output_tokens=1, total_tokens=51),
+                    usage=RequestUsage(input_tokens=50, output_tokens=1),
                     model_name='function::success_response_stream',
                     timestamp=IsNow(tz=timezone.utc),
                 ),
                 ModelResponse(
                     parts=[TextPart(content='hello world')],
-                    usage=RunUsage(input_tokens=50, output_tokens=2, total_tokens=52),
+                    usage=RequestUsage(input_tokens=50, output_tokens=2),
                     model_name='function::success_response_stream',
                     timestamp=IsNow(tz=timezone.utc),
                 ),
                 ModelResponse(
                     parts=[TextPart(content='hello world')],
-                    usage=RunUsage(input_tokens=50, output_tokens=2, total_tokens=52),
+                    usage=RequestUsage(input_tokens=50, output_tokens=2),
                     model_name='function::success_response_stream',
                     timestamp=IsNow(tz=timezone.utc),
                 ),
@@ -375,19 +385,19 @@ async def test_first_failed_streaming() -> None:
             [
                 ModelResponse(
                     parts=[TextPart(content='hello ')],
-                    usage=RunUsage(input_tokens=50, output_tokens=1, total_tokens=51),
+                    usage=RequestUsage(input_tokens=50, output_tokens=1),
                     model_name='function::success_response_stream',
                     timestamp=IsNow(tz=timezone.utc),
                 ),
                 ModelResponse(
                     parts=[TextPart(content='hello world')],
-                    usage=RunUsage(input_tokens=50, output_tokens=2, total_tokens=52),
+                    usage=RequestUsage(input_tokens=50, output_tokens=2),
                     model_name='function::success_response_stream',
                     timestamp=IsNow(tz=timezone.utc),
                 ),
                 ModelResponse(
                     parts=[TextPart(content='hello world')],
-                    usage=RunUsage(input_tokens=50, output_tokens=2, total_tokens=52),
+                    usage=RequestUsage(input_tokens=50, output_tokens=2),
                     model_name='function::success_response_stream',
                     timestamp=IsNow(tz=timezone.utc),
                 ),

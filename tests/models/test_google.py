@@ -11,10 +11,13 @@ from pydantic import BaseModel
 from typing_extensions import TypedDict
 
 from pydantic_ai.agent import Agent
+from pydantic_ai.builtin_tools import CodeExecutionTool, WebSearchTool
 from pydantic_ai.exceptions import ModelRetry, UnexpectedModelBehavior, UserError
 from pydantic_ai.messages import (
     AudioUrl,
     BinaryContent,
+    BuiltinToolCallPart,
+    BuiltinToolReturnPart,
     DocumentUrl,
     FinalResultEvent,
     FunctionToolCallEvent,
@@ -37,11 +40,13 @@ from pydantic_ai.messages import (
 )
 from pydantic_ai.output import NativeOutput, PromptedOutput, TextOutput, ToolOutput
 from pydantic_ai.result import RunUsage
+from pydantic_ai.usage import RequestUsage
 
 from ..conftest import IsDatetime, IsInstance, IsStr, try_import
+from ..parts_from_messages import part_types_from_messages
 
 with try_import() as imports_successful:
-    from google.genai.types import HarmBlockThreshold, HarmCategory
+    from google.genai.types import CodeExecutionResult, HarmBlockThreshold, HarmCategory, Language, Outcome
 
     from pydantic_ai.models.google import GoogleModel, GoogleModelSettings
     from pydantic_ai.providers.google import GoogleProvider
@@ -68,10 +73,8 @@ async def test_google_model(allow_model_requests: None, google_provider: GoogleP
     assert result.output == snapshot('Hello there! How can I help you today?\n')
     assert result.usage() == snapshot(
         RunUsage(
-            requests=1,
             input_tokens=7,
             output_tokens=11,
-            total_tokens=18,
             details={'text_prompt_tokens': 7, 'text_candidates_tokens': 11},
         )
     )
@@ -91,12 +94,8 @@ async def test_google_model(allow_model_requests: None, google_provider: GoogleP
             ),
             ModelResponse(
                 parts=[TextPart(content='Hello there! How can I help you today?\n')],
-                usage=RunUsage(
-                    requests=1,
-                    input_tokens=7,
-                    output_tokens=11,
-                    total_tokens=18,
-                    details={'text_prompt_tokens': 7, 'text_candidates_tokens': 11},
+                usage=RequestUsage(
+                    input_tokens=7, output_tokens=11, details={'text_candidates_tokens': 11, 'text_prompt_tokens': 7}
                 ),
                 model_name='gemini-1.5-flash',
                 timestamp=IsDatetime(),
@@ -132,10 +131,8 @@ async def test_google_model_structured_output(allow_model_requests: None, google
     assert result.output == snapshot({'temperature': '30°C', 'date': datetime.date(2022, 1, 1), 'city': 'London'})
     assert result.usage() == snapshot(
         RunUsage(
-            requests=2,
             input_tokens=224,
             output_tokens=35,
-            total_tokens=259,
             details={'text_prompt_tokens': 224, 'text_candidates_tokens': 35},
         )
     )
@@ -159,12 +156,10 @@ async def test_google_model_structured_output(allow_model_requests: None, google
                         tool_name='temperature', args={'date': '2022-01-01', 'city': 'London'}, tool_call_id=IsStr()
                     )
                 ],
-                usage=RunUsage(
-                    requests=1,
+                usage=RequestUsage(
                     input_tokens=101,
                     output_tokens=14,
-                    total_tokens=115,
-                    details={'text_prompt_tokens': 101, 'text_candidates_tokens': 14},
+                    details={'text_candidates_tokens': 14, 'text_prompt_tokens': 101},
                 ),
                 model_name='gemini-1.5-flash',
                 timestamp=IsDatetime(),
@@ -185,12 +180,10 @@ async def test_google_model_structured_output(allow_model_requests: None, google
                         tool_call_id=IsStr(),
                     )
                 ],
-                usage=RunUsage(
-                    requests=1,
+                usage=RequestUsage(
                     input_tokens=123,
                     output_tokens=21,
-                    total_tokens=144,
-                    details={'text_prompt_tokens': 123, 'text_candidates_tokens': 21},
+                    details={'text_candidates_tokens': 21, 'text_prompt_tokens': 123},
                 ),
                 model_name='gemini-1.5-flash',
                 timestamp=IsDatetime(),
@@ -244,12 +237,8 @@ async def test_google_model_retry(allow_model_requests: None, google_provider: G
             ),
             ModelResponse(
                 parts=[ToolCallPart(tool_name='get_capital', args={'country': 'France'}, tool_call_id=IsStr())],
-                usage=RunUsage(
-                    requests=1,
-                    input_tokens=57,
-                    output_tokens=15,
-                    total_tokens=227,
-                    details={'thoughts_tokens': 155, 'text_prompt_tokens': 57},
+                usage=RequestUsage(
+                    input_tokens=57, output_tokens=15, details={'thoughts_tokens': 155, 'text_prompt_tokens': 57}
                 ),
                 model_name='models/gemini-2.5-pro',
                 timestamp=IsDatetime(),
@@ -271,12 +260,8 @@ async def test_google_model_retry(allow_model_requests: None, google_provider: G
                         content='I am sorry, I cannot fulfill this request. The country "France" is not supported by my system.'
                     )
                 ],
-                usage=RunUsage(
-                    requests=1,
-                    input_tokens=104,
-                    output_tokens=22,
-                    total_tokens=304,
-                    details={'thoughts_tokens': 178, 'text_prompt_tokens': 104},
+                usage=RequestUsage(
+                    input_tokens=104, output_tokens=22, details={'thoughts_tokens': 178, 'text_prompt_tokens': 104}
                 ),
                 model_name='models/gemini-2.5-pro',
                 timestamp=IsDatetime(),
@@ -318,7 +303,9 @@ async def test_google_model_gla_labels_raises_value_error(allow_model_requests: 
         await agent.run('What is the capital of France?')
 
 
-async def test_google_model_vertex_provider(allow_model_requests: None, vertex_provider: GoogleProvider):
+async def test_google_model_vertex_provider(
+    allow_model_requests: None, vertex_provider: GoogleProvider
+):  # pragma: lax no cover
     model = GoogleModel('gemini-2.0-flash', provider=vertex_provider)
     agent = Agent(model=model, system_prompt='You are a helpful chatbot.')
     result = await agent.run('What is the capital of France?')
@@ -546,12 +533,8 @@ async def test_google_model_instructions(allow_model_requests: None, google_prov
             ),
             ModelResponse(
                 parts=[TextPart(content='The capital of France is Paris.\n')],
-                usage=RunUsage(
-                    requests=1,
-                    input_tokens=13,
-                    output_tokens=8,
-                    total_tokens=21,
-                    details={'text_prompt_tokens': 13, 'text_candidates_tokens': 8},
+                usage=RequestUsage(
+                    input_tokens=13, output_tokens=8, details={'text_candidates_tokens': 8, 'text_prompt_tokens': 13}
                 ),
                 model_name='gemini-2.0-flash',
                 timestamp=IsDatetime(),
@@ -596,6 +579,287 @@ async def test_google_model_safety_settings(allow_model_requests: None, google_p
         await agent.run('Tell me a joke about a Brazilians.')
 
 
+async def test_google_model_web_search_tool(allow_model_requests: None, google_provider: GoogleProvider):
+    m = GoogleModel('gemini-2.0-flash', provider=google_provider)
+    agent = Agent(m, system_prompt='You are a helpful chatbot.', builtin_tools=[WebSearchTool()])
+
+    result = await agent.run('What day is today in Utrecht?')
+    assert result.output == snapshot('Today is Wednesday, May 28, 2025, in Utrecht.\n')
+
+
+async def test_google_model_code_execution_tool(allow_model_requests: None, google_provider: GoogleProvider):
+    m = GoogleModel('gemini-2.0-flash', provider=google_provider)
+    agent = Agent(m, system_prompt='You are a helpful chatbot.', builtin_tools=[CodeExecutionTool()])
+
+    result = await agent.run('What day is today in Utrecht?')
+    assert result.all_messages() == snapshot(
+        [
+            ModelRequest(
+                parts=[
+                    SystemPromptPart(content='You are a helpful chatbot.', timestamp=IsDatetime()),
+                    UserPromptPart(content='What day is today in Utrecht?', timestamp=IsDatetime()),
+                ]
+            ),
+            ModelResponse(
+                parts=[
+                    TextPart(
+                        content="""\
+To determine the day of the week in Utrecht, I need to know the current date. I will use the python tool to get the current date and time, and then extract the day of the week.
+
+"""
+                    ),
+                    BuiltinToolCallPart(
+                        tool_name='code_execution',
+                        args={
+                            'code': """\
+import datetime
+
+now = datetime.datetime.now()
+day_of_week = now.strftime("%A")
+print(f'{day_of_week=}')
+""",
+                            'language': Language.PYTHON,
+                        },
+                        tool_call_id=IsStr(),
+                        provider_name='google',
+                    ),
+                    BuiltinToolReturnPart(
+                        tool_name='code_execution',
+                        content=CodeExecutionResult(outcome=Outcome.OUTCOME_OK, output="day_of_week='Thursday'\n"),
+                        tool_call_id='not_provided',
+                        timestamp=IsDatetime(),
+                        provider_name='google',
+                    ),
+                    TextPart(content='Today is Thursday in Utrecht.\n'),
+                ],
+                usage=RequestUsage(
+                    input_tokens=13,
+                    output_tokens=95,
+                    details={
+                        'tool_use_prompt_tokens': 101,
+                        'text_candidates_tokens': 95,
+                        'text_prompt_tokens': 13,
+                        'text_tool_use_prompt_tokens': 101,
+                    },
+                ),
+                model_name='gemini-2.0-flash',
+                timestamp=IsDatetime(),
+                provider_details={'finish_reason': 'STOP'},
+            ),
+        ]
+    )
+
+    result = await agent.run('What day is tomorrow?', message_history=result.all_messages())
+    assert result.all_messages() == snapshot(
+        [
+            ModelRequest(
+                parts=[
+                    SystemPromptPart(content='You are a helpful chatbot.', timestamp=IsDatetime()),
+                    UserPromptPart(content='What day is today in Utrecht?', timestamp=IsDatetime()),
+                ]
+            ),
+            ModelResponse(
+                parts=[
+                    TextPart(
+                        content="""\
+To determine the day of the week in Utrecht, I need to know the current date. I will use the python tool to get the current date and time, and then extract the day of the week.
+
+"""
+                    ),
+                    BuiltinToolCallPart(
+                        tool_name='code_execution',
+                        args={
+                            'code': """\
+import datetime
+
+now = datetime.datetime.now()
+day_of_week = now.strftime("%A")
+print(f'{day_of_week=}')
+""",
+                            'language': Language.PYTHON,
+                        },
+                        tool_call_id=IsStr(),
+                        provider_name='google',
+                    ),
+                    BuiltinToolReturnPart(
+                        tool_name='code_execution',
+                        content=CodeExecutionResult(outcome=Outcome.OUTCOME_OK, output="day_of_week='Thursday'\n"),
+                        tool_call_id='not_provided',
+                        timestamp=IsDatetime(),
+                        provider_name='google',
+                    ),
+                    TextPart(content='Today is Thursday in Utrecht.\n'),
+                ],
+                usage=RequestUsage(
+                    input_tokens=13,
+                    output_tokens=95,
+                    details={
+                        'tool_use_prompt_tokens': 101,
+                        'text_candidates_tokens': 95,
+                        'text_prompt_tokens': 13,
+                        'text_tool_use_prompt_tokens': 101,
+                    },
+                ),
+                model_name='gemini-2.0-flash',
+                timestamp=IsDatetime(),
+                provider_details={'finish_reason': 'STOP'},
+            ),
+            ModelRequest(parts=[UserPromptPart(content='What day is tomorrow?', timestamp=IsDatetime())]),
+            ModelResponse(
+                parts=[
+                    TextPart(
+                        content="""\
+To determine what day is tomorrow, I'll use the python tool to calculate tomorrow's date and then find the corresponding day of the week.
+
+"""
+                    ),
+                    BuiltinToolCallPart(
+                        tool_name='code_execution',
+                        args={
+                            'code': """\
+import datetime
+
+today = datetime.date.today()
+tomorrow = today + datetime.timedelta(days=1)
+day_of_week = tomorrow.strftime("%A")
+print(f'{day_of_week=}')
+""",
+                            'language': Language.PYTHON,
+                        },
+                        tool_call_id=IsStr(),
+                        provider_name='google',
+                    ),
+                    BuiltinToolReturnPart(
+                        tool_name='code_execution',
+                        content=CodeExecutionResult(outcome=Outcome.OUTCOME_OK, output="day_of_week='Friday'\n"),
+                        tool_call_id='not_provided',
+                        timestamp=IsDatetime(),
+                        provider_name='google',
+                    ),
+                    TextPart(content='Tomorrow is Friday.\n'),
+                ],
+                usage=RequestUsage(
+                    input_tokens=113,
+                    output_tokens=95,
+                    details={
+                        'tool_use_prompt_tokens': 203,
+                        'text_candidates_tokens': 95,
+                        'text_prompt_tokens': 113,
+                        'text_tool_use_prompt_tokens': 203,
+                    },
+                ),
+                model_name='gemini-2.0-flash',
+                timestamp=IsDatetime(),
+                provider_details={'finish_reason': 'STOP'},
+            ),
+        ]
+    )
+
+
+async def test_google_model_server_tool_receive_history_from_another_provider(
+    allow_model_requests: None, anthropic_api_key: str, gemini_api_key: str
+):
+    from pydantic_ai.models.anthropic import AnthropicModel
+    from pydantic_ai.providers.anthropic import AnthropicProvider
+
+    anthropic_model = AnthropicModel('claude-sonnet-4-0', provider=AnthropicProvider(api_key=anthropic_api_key))
+    google_model = GoogleModel('gemini-2.0-flash', provider=GoogleProvider(api_key=gemini_api_key))
+    agent = Agent(builtin_tools=[CodeExecutionTool()])
+
+    result = await agent.run('How much is 3 * 12390?', model=anthropic_model)
+    assert part_types_from_messages(result.all_messages()) == snapshot(
+        [[UserPromptPart], [TextPart, BuiltinToolCallPart, BuiltinToolReturnPart, TextPart]]
+    )
+
+    result = await agent.run('Multiplied by 12390', model=google_model, message_history=result.all_messages())
+    assert part_types_from_messages(result.all_messages()) == snapshot(
+        [
+            [UserPromptPart],
+            [TextPart, BuiltinToolCallPart, BuiltinToolReturnPart, TextPart],
+            [UserPromptPart],
+            [TextPart, BuiltinToolCallPart, BuiltinToolReturnPart, TextPart],
+        ]
+    )
+
+
+async def test_google_model_receive_web_search_history_from_another_provider(
+    allow_model_requests: None, anthropic_api_key: str, gemini_api_key: str
+):
+    from pydantic_ai.models.anthropic import AnthropicModel
+    from pydantic_ai.providers.anthropic import AnthropicProvider
+
+    anthropic_model = AnthropicModel('claude-sonnet-4-0', provider=AnthropicProvider(api_key=anthropic_api_key))
+    anthropic_agent = Agent(model=anthropic_model, builtin_tools=[WebSearchTool()])
+
+    result = await anthropic_agent.run('What are the latest news in the Netherlands?')
+    assert part_types_from_messages(result.all_messages()) == snapshot(
+        [
+            [UserPromptPart],
+            [
+                BuiltinToolCallPart,
+                BuiltinToolReturnPart,
+                TextPart,
+                TextPart,
+                TextPart,
+                TextPart,
+                TextPart,
+                TextPart,
+                TextPart,
+                TextPart,
+                TextPart,
+                TextPart,
+                TextPart,
+                TextPart,
+                TextPart,
+                TextPart,
+                TextPart,
+                TextPart,
+                TextPart,
+                TextPart,
+                TextPart,
+                TextPart,
+                TextPart,
+            ],
+        ]
+    )
+
+    google_model = GoogleModel('gemini-2.0-flash', provider=GoogleProvider(api_key=gemini_api_key))
+    google_agent = Agent(model=google_model)
+    result = await google_agent.run('What day is tomorrow?', message_history=result.all_messages())
+    assert part_types_from_messages(result.all_messages()) == snapshot(
+        [
+            [UserPromptPart],
+            [
+                BuiltinToolCallPart,
+                BuiltinToolReturnPart,
+                TextPart,
+                TextPart,
+                TextPart,
+                TextPart,
+                TextPart,
+                TextPart,
+                TextPart,
+                TextPart,
+                TextPart,
+                TextPart,
+                TextPart,
+                TextPart,
+                TextPart,
+                TextPart,
+                TextPart,
+                TextPart,
+                TextPart,
+                TextPart,
+                TextPart,
+                TextPart,
+                TextPart,
+            ],
+            [UserPromptPart],
+            [TextPart],
+        ]
+    )
+
+
 async def test_google_model_empty_user_prompt(allow_model_requests: None, google_provider: GoogleProvider):
     m = GoogleModel('gemini-1.5-flash', provider=google_provider)
     agent = Agent(m, instructions='You are a helpful assistant.')
@@ -634,12 +898,8 @@ async def test_google_model_thinking_part(allow_model_requests: None, google_pro
             ),
             ModelResponse(
                 parts=[IsInstance(ThinkingPart), IsInstance(TextPart)],
-                usage=RunUsage(
-                    requests=1,
-                    input_tokens=15,
-                    output_tokens=1041,
-                    total_tokens=2703,
-                    details={'thoughts_tokens': 1647, 'text_prompt_tokens': 15},
+                usage=RequestUsage(
+                    input_tokens=15, output_tokens=1041, details={'thoughts_tokens': 1647, 'text_prompt_tokens': 15}
                 ),
                 model_name='models/gemini-2.5-pro',
                 timestamp=IsDatetime(),
@@ -774,7 +1034,7 @@ async def test_google_url_input(
     expected_output: str,
     allow_model_requests: None,
     vertex_provider: GoogleProvider,
-) -> None:
+) -> None:  # pragma: lax no cover
     m = GoogleModel('gemini-2.0-flash', provider=vertex_provider)
     agent = Agent(m)
     result = await agent.run(['What is the main content of this URL?', url])
@@ -792,7 +1052,7 @@ async def test_google_url_input(
             ),
             ModelResponse(
                 parts=[TextPart(content=Is(expected_output))],
-                usage=IsInstance(RunUsage),
+                usage=IsInstance(RequestUsage),
                 model_name='gemini-2.0-flash',
                 timestamp=IsDatetime(),
                 provider_details={'finish_reason': 'STOP'},
@@ -806,7 +1066,7 @@ async def test_google_url_input(
     not os.getenv('CI', False), reason='Requires properly configured local google vertex config to pass'
 )
 @pytest.mark.vcr()
-async def test_google_url_input_force_download(allow_model_requests: None) -> None:
+async def test_google_url_input_force_download(allow_model_requests: None) -> None:  # pragma: lax no cover
     provider = GoogleProvider(project='pydantic-ai', location='us-central1')
     m = GoogleModel('gemini-2.0-flash', provider=provider)
     agent = Agent(m)
@@ -829,7 +1089,7 @@ async def test_google_url_input_force_download(allow_model_requests: None) -> No
             ),
             ModelResponse(
                 parts=[TextPart(content=Is(output))],
-                usage=IsInstance(RunUsage),
+                usage=IsInstance(RequestUsage),
                 model_name='gemini-2.0-flash',
                 timestamp=IsDatetime(),
                 provider_details={'finish_reason': 'STOP'},
@@ -875,12 +1135,8 @@ async def test_google_tool_config_any_with_tool_without_args(
             ),
             ModelResponse(
                 parts=[ToolCallPart(tool_name='bar', args={}, tool_call_id=IsStr())],
-                usage=RunUsage(
-                    requests=1,
-                    input_tokens=21,
-                    output_tokens=1,
-                    total_tokens=22,
-                    details={'text_candidates_tokens': 1, 'text_prompt_tokens': 21},
+                usage=RequestUsage(
+                    input_tokens=21, output_tokens=1, details={'text_candidates_tokens': 1, 'text_prompt_tokens': 21}
                 ),
                 model_name='gemini-2.0-flash',
                 timestamp=IsDatetime(),
@@ -904,12 +1160,8 @@ async def test_google_tool_config_any_with_tool_without_args(
                         tool_call_id=IsStr(),
                     )
                 ],
-                usage=RunUsage(
-                    requests=1,
-                    input_tokens=27,
-                    output_tokens=5,
-                    total_tokens=32,
-                    details={'text_candidates_tokens': 5, 'text_prompt_tokens': 27},
+                usage=RequestUsage(
+                    input_tokens=27, output_tokens=5, details={'text_candidates_tokens': 5, 'text_prompt_tokens': 27}
                 ),
                 model_name='gemini-2.0-flash',
                 timestamp=IsDatetime(),
@@ -968,12 +1220,8 @@ async def test_google_tool_output(allow_model_requests: None, google_provider: G
             ),
             ModelResponse(
                 parts=[ToolCallPart(tool_name='get_user_country', args={}, tool_call_id=IsStr())],
-                usage=RunUsage(
-                    requests=1,
-                    input_tokens=33,
-                    output_tokens=5,
-                    total_tokens=38,
-                    details={'text_candidates_tokens': 5, 'text_prompt_tokens': 33},
+                usage=RequestUsage(
+                    input_tokens=33, output_tokens=5, details={'text_candidates_tokens': 5, 'text_prompt_tokens': 33}
                 ),
                 model_name='gemini-2.0-flash',
                 timestamp=IsDatetime(),
@@ -997,12 +1245,8 @@ async def test_google_tool_output(allow_model_requests: None, google_provider: G
                         tool_call_id=IsStr(),
                     )
                 ],
-                usage=RunUsage(
-                    requests=1,
-                    input_tokens=47,
-                    output_tokens=8,
-                    total_tokens=55,
-                    details={'text_candidates_tokens': 8, 'text_prompt_tokens': 47},
+                usage=RequestUsage(
+                    input_tokens=47, output_tokens=8, details={'text_candidates_tokens': 8, 'text_prompt_tokens': 47}
                 ),
                 model_name='gemini-2.0-flash',
                 timestamp=IsDatetime(),
@@ -1051,12 +1295,8 @@ async def test_google_text_output_function(allow_model_requests: None, google_pr
             ),
             ModelResponse(
                 parts=[ToolCallPart(tool_name='get_user_country', args={}, tool_call_id=IsStr())],
-                usage=RunUsage(
-                    requests=1,
-                    input_tokens=49,
-                    output_tokens=12,
-                    total_tokens=325,
-                    details={'thoughts_tokens': 264, 'text_prompt_tokens': 49},
+                usage=RequestUsage(
+                    input_tokens=49, output_tokens=12, details={'thoughts_tokens': 264, 'text_prompt_tokens': 49}
                 ),
                 model_name='models/gemini-2.5-pro',
                 timestamp=IsDatetime(),
@@ -1074,12 +1314,8 @@ async def test_google_text_output_function(allow_model_requests: None, google_pr
             ),
             ModelResponse(
                 parts=[TextPart(content='The largest city in Mexico is Mexico City.')],
-                usage=RunUsage(
-                    requests=1,
-                    input_tokens=80,
-                    output_tokens=9,
-                    total_tokens=239,
-                    details={'thoughts_tokens': 150, 'text_prompt_tokens': 80},
+                usage=RequestUsage(
+                    input_tokens=80, output_tokens=9, details={'thoughts_tokens': 150, 'text_prompt_tokens': 80}
                 ),
                 model_name='models/gemini-2.5-pro',
                 timestamp=IsDatetime(),
@@ -1141,12 +1377,8 @@ async def test_google_native_output(allow_model_requests: None, google_provider:
 """
                     )
                 ],
-                usage=RunUsage(
-                    requests=1,
-                    input_tokens=25,
-                    output_tokens=20,
-                    total_tokens=45,
-                    details={'text_candidates_tokens': 20, 'text_prompt_tokens': 25},
+                usage=RequestUsage(
+                    input_tokens=25, output_tokens=20, details={'text_candidates_tokens': 20, 'text_prompt_tokens': 25}
                 ),
                 model_name='gemini-2.0-flash',
                 timestamp=IsDatetime(),
@@ -1198,12 +1430,8 @@ async def test_google_native_output_multiple(allow_model_requests: None, google_
 """
                     )
                 ],
-                usage=RunUsage(
-                    requests=1,
-                    input_tokens=50,
-                    output_tokens=46,
-                    total_tokens=96,
-                    details={'text_candidates_tokens': 46, 'text_prompt_tokens': 50},
+                usage=RequestUsage(
+                    input_tokens=50, output_tokens=46, details={'text_candidates_tokens': 46, 'text_prompt_tokens': 50}
                 ),
                 model_name='gemini-2.0-flash',
                 timestamp=IsDatetime(),
@@ -1244,12 +1472,8 @@ Don't include any text or Markdown fencing before or after.\
             ),
             ModelResponse(
                 parts=[TextPart(content='{"city": "Mexico City", "country": "Mexico"}')],
-                usage=RunUsage(
-                    requests=1,
-                    input_tokens=80,
-                    output_tokens=13,
-                    total_tokens=93,
-                    details={'text_candidates_tokens': 13, 'text_prompt_tokens': 80},
+                usage=RequestUsage(
+                    input_tokens=80, output_tokens=13, details={'text_candidates_tokens': 13, 'text_prompt_tokens': 80}
                 ),
                 model_name='gemini-2.0-flash',
                 timestamp=IsDatetime(),
@@ -1296,12 +1520,8 @@ Don't include any text or Markdown fencing before or after.\
             ),
             ModelResponse(
                 parts=[ToolCallPart(tool_name='get_user_country', args={}, tool_call_id=IsStr())],
-                usage=RunUsage(
-                    requests=1,
-                    input_tokens=123,
-                    output_tokens=12,
-                    total_tokens=267,
-                    details={'thoughts_tokens': 132, 'text_prompt_tokens': 123},
+                usage=RequestUsage(
+                    input_tokens=123, output_tokens=12, details={'thoughts_tokens': 132, 'text_prompt_tokens': 123}
                 ),
                 model_name='models/gemini-2.5-pro',
                 timestamp=IsDatetime(),
@@ -1326,12 +1546,8 @@ Don't include any text or Markdown fencing before or after.\
             ),
             ModelResponse(
                 parts=[TextPart(content='{"city": "Mexico City", "country": "Mexico"}')],
-                usage=RunUsage(
-                    requests=1,
-                    input_tokens=154,
-                    output_tokens=13,
-                    total_tokens=320,
-                    details={'thoughts_tokens': 153, 'text_prompt_tokens': 154},
+                usage=RequestUsage(
+                    input_tokens=154, output_tokens=13, details={'thoughts_tokens': 153, 'text_prompt_tokens': 154}
                 ),
                 model_name='models/gemini-2.5-pro',
                 timestamp=IsDatetime(),
@@ -1380,11 +1596,9 @@ Don't include any text or Markdown fencing before or after.\
                         content='{"result": {"kind": "CityLocation", "data": {"city": "Mexico City", "country": "Mexico"}}}'
                     )
                 ],
-                usage=RunUsage(
-                    requests=1,
+                usage=RequestUsage(
                     input_tokens=240,
                     output_tokens=27,
-                    total_tokens=267,
                     details={'text_candidates_tokens': 27, 'text_prompt_tokens': 240},
                 ),
                 model_name='gemini-2.0-flash',

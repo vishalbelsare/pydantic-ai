@@ -156,8 +156,7 @@ jobs:
 
       # run tests with just `pydantic-ai-slim` dependencies
       - run: |
-          uv pip install pytest-profiling
-          uv run --package pydantic-ai-slim pytest --profile
+          uv run --with pytest-profiling --package pydantic-ai-slim pytest --profile
         env:
           COVERAGE_FILE: .coverage/.coverage.${{ runner.os }}-py${{ matrix.python-version }}-slim
 

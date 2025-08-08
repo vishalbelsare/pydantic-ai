@@ -104,14 +104,14 @@ async def test_request_simple_success(allow_model_requests: None):
 
     result = await agent.run('hello')
     assert result.output == 'world'
-    assert result.usage() == snapshot(RunUsage())
+    assert result.usage() == snapshot(RunUsage(requests=1))
 
     # reset the index so we get the same response again
     mock_client.index = 0  # type: ignore
 
     result = await agent.run('hello', message_history=result.new_messages())
     assert result.output == 'world'
-    assert result.usage() == snapshot(RunUsage())
+    assert result.usage() == snapshot(RunUsage(requests=1))
     assert result.all_messages() == snapshot(
         [
             ModelRequest(parts=[UserPromptPart(content='hello', timestamp=IsNow(tz=timezone.utc))]),
@@ -149,6 +149,7 @@ async def test_request_simple_usage(allow_model_requests: None):
     assert result.output == 'world'
     assert result.usage() == snapshot(
         RunUsage(
+            requests=1,
             input_tokens=1,
             output_tokens=1,
             details={
@@ -321,6 +322,7 @@ async def test_request_tool_call(allow_model_requests: None):
     )
     assert result.usage() == snapshot(
         RunUsage(
+            requests=3,
             input_tokens=5,
             output_tokens=3,
             details={'input_tokens': 4, 'output_tokens': 2},

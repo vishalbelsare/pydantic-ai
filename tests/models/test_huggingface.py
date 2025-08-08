@@ -189,7 +189,7 @@ async def test_request_simple_usage(allow_model_requests: None, huggingface_api_
         result.output
         == "Hello! It's great to meet you. How can I assist you today? Whether you have any questions, need some advice, or just want to chat, feel free to let me know!"
     )
-    assert result.usage() == snapshot(RunUsage(input_tokens=30, output_tokens=40))
+    assert result.usage() == snapshot(RunUsage(requests=1, input_tokens=30, output_tokens=40))
 
 
 async def test_request_structured_response(

@@ -58,7 +58,7 @@ async def test_bedrock_model(allow_model_requests: None, bedrock_provider: Bedro
     assert result.output == snapshot(
         "Hello! How can I assist you today? Whether you have questions, need information, or just want to chat, I'm here to help."
     )
-    assert result.usage() == snapshot(RunUsage(input_tokens=7, output_tokens=30))
+    assert result.usage() == snapshot(RunUsage(requests=1, input_tokens=7, output_tokens=30))
     assert result.all_messages() == snapshot(
         [
             ModelRequest(
@@ -111,7 +111,7 @@ async def test_bedrock_model_structured_output(allow_model_requests: None, bedro
 
     result = await agent.run('What was the temperature in London 1st January 2022?', output_type=Response)
     assert result.output == snapshot({'temperature': '30°C', 'date': datetime.date(2022, 1, 1), 'city': 'London'})
-    assert result.usage() == snapshot(RunUsage(input_tokens=1236, output_tokens=298))
+    assert result.usage() == snapshot(RunUsage(requests=2, input_tokens=1236, output_tokens=298))
     assert result.all_messages() == snapshot(
         [
             ModelRequest(

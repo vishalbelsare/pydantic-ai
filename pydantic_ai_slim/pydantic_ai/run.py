@@ -66,9 +66,7 @@ class AgentRun(Generic[AgentDepsT, OutputDataT]):
             CallToolsNode(
                 model_response=ModelResponse(
                     parts=[TextPart(content='The capital of France is Paris.')],
-                    usage=RunUsage(
-                        requests=1, request_tokens=56, response_tokens=7, total_tokens=63
-                    ),
+                    usage=RequestUsage(input_tokens=56, output_tokens=7),
                     model_name='gpt-4o',
                     timestamp=datetime.datetime(...),
                 )
@@ -203,12 +201,7 @@ class AgentRun(Generic[AgentDepsT, OutputDataT]):
                     CallToolsNode(
                         model_response=ModelResponse(
                             parts=[TextPart(content='The capital of France is Paris.')],
-                            usage=RunUsage(
-                                requests=1,
-                                request_tokens=56,
-                                response_tokens=7,
-                                total_tokens=63,
-                            ),
+                            usage=RequestUsage(input_tokens=56, output_tokens=7),
                             model_name='gpt-4o',
                             timestamp=datetime.datetime(...),
                         )

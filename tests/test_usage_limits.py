@@ -143,13 +143,13 @@ async def test_multi_agent_usage_no_incr():
         delegate_result = await delegate_agent.run(sentence)
         delegate_usage = delegate_result.usage()
         run_1_usages.append(delegate_usage)
-        assert delegate_usage == snapshot(RunUsage(input_tokens=51, output_tokens=4))
+        assert delegate_usage == snapshot(RunUsage(requests=1, input_tokens=51, output_tokens=4))
         return delegate_result.output
 
     result1 = await controller_agent1.run('foobar')
     assert result1.output == snapshot('{"delegate_to_other_agent1":0}')
     run_1_usages.append(result1.usage())
-    assert result1.usage() == snapshot(RunUsage(input_tokens=103, output_tokens=13))
+    assert result1.usage() == snapshot(RunUsage(requests=2, input_tokens=103, output_tokens=13))
 
     controller_agent2 = Agent(TestModel())
 
@@ -157,12 +157,12 @@ async def test_multi_agent_usage_no_incr():
     async def delegate_to_other_agent2(ctx: RunContext[None], sentence: str) -> int:
         delegate_result = await delegate_agent.run(sentence, usage=ctx.usage)
         delegate_usage = delegate_result.usage()
-        assert delegate_usage == snapshot(RunUsage(input_tokens=102, output_tokens=9))
+        assert delegate_usage == snapshot(RunUsage(requests=2, input_tokens=102, output_tokens=9))
         return delegate_result.output
 
     result2 = await controller_agent2.run('foobar')
     assert result2.output == snapshot('{"delegate_to_other_agent2":0}')
-    assert result2.usage() == snapshot(RunUsage(input_tokens=154, output_tokens=17))
+    assert result2.usage() == snapshot(RunUsage(requests=3, input_tokens=154, output_tokens=17))
 
     # confirm the usage from result2 is the sum of the usage from result1
     assert result2.usage() == functools.reduce(operator.add, run_1_usages)
@@ -189,4 +189,4 @@ async def test_multi_agent_usage_sync():
 
     result = await controller_agent.run('foobar')
     assert result.output == snapshot('{"delegate_to_other_agent":0}')
-    assert result.usage() == snapshot(RunUsage(requests=5, input_tokens=105, output_tokens=16))
+    assert result.usage() == snapshot(RunUsage(requests=7, input_tokens=105, output_tokens=16))

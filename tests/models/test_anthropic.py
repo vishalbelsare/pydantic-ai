@@ -175,6 +175,7 @@ async def test_sync_request_text_response(allow_model_requests: None):
     assert result.output == 'world'
     assert result.usage() == snapshot(
         RunUsage(
+            requests=1,
             input_tokens=5,
             output_tokens=10,
             details={'input_tokens': 5, 'output_tokens': 10},
@@ -187,6 +188,7 @@ async def test_sync_request_text_response(allow_model_requests: None):
     assert result.output == 'world'
     assert result.usage() == snapshot(
         RunUsage(
+            requests=1,
             input_tokens=5,
             output_tokens=10,
             details={'input_tokens': 5, 'output_tokens': 10},
@@ -232,6 +234,7 @@ async def test_async_request_prompt_caching(allow_model_requests: None):
     assert result.output == 'world'
     assert result.usage() == snapshot(
         RunUsage(
+            requests=1,
             input_tokens=13,
             output_tokens=5,
             details={
@@ -257,6 +260,7 @@ async def test_async_request_text_response(allow_model_requests: None):
     assert result.output == 'world'
     assert result.usage() == snapshot(
         RunUsage(
+            requests=1,
             input_tokens=3,
             output_tokens=5,
             details={'input_tokens': 3, 'output_tokens': 5},

@@ -627,7 +627,7 @@ async def test_text_success(get_gemini_client: GetGeminiClient):
             ),
         ]
     )
-    assert result.usage() == snapshot(RunUsage(input_tokens=1, output_tokens=2))
+    assert result.usage() == snapshot(RunUsage(requests=1, input_tokens=1, output_tokens=2))
 
     result = await agent.run('Hello', message_history=result.new_messages())
     assert result.output == 'Hello world'
@@ -781,7 +781,7 @@ async def test_request_tool_call(get_gemini_client: GetGeminiClient):
             ),
         ]
     )
-    assert result.usage() == snapshot(RunUsage(input_tokens=3, output_tokens=6))
+    assert result.usage() == snapshot(RunUsage(requests=3, input_tokens=3, output_tokens=6))
 
 
 async def test_unexpected_response(client_with_handler: ClientWithHandler, env: TestEnv, allow_model_requests: None):
@@ -1651,7 +1651,7 @@ async def test_response_with_thought_part(get_gemini_client: GetGeminiClient):
     result = await agent.run('Test with thought')
 
     assert result.output == 'Hello from thought test'
-    assert result.usage() == snapshot(RunUsage(input_tokens=1, output_tokens=2))
+    assert result.usage() == snapshot(RunUsage(requests=1, input_tokens=1, output_tokens=2))
 
 
 @pytest.mark.vcr()

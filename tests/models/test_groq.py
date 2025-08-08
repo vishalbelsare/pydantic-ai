@@ -246,6 +246,11 @@ async def test_request_tool_call(allow_model_requests: None):
                     )
                 ],
             ),
+            usage=CompletionUsage(
+                completion_tokens=1,
+                prompt_tokens=2,
+                total_tokens=3,
+            ),
         ),
         completion_message(
             ChatCompletionMessage(
@@ -258,6 +263,11 @@ async def test_request_tool_call(allow_model_requests: None):
                         type='function',
                     )
                 ],
+            ),
+            usage=CompletionUsage(
+                completion_tokens=2,
+                prompt_tokens=3,
+                total_tokens=6,
             ),
         ),
         completion_message(ChatCompletionMessage(content='final response', role='assistant')),
@@ -291,6 +301,7 @@ async def test_request_tool_call(allow_model_requests: None):
                         tool_call_id='1',
                     )
                 ],
+                usage=RequestUsage(input_tokens=2, output_tokens=1),
                 model_name='llama-3.3-70b-versatile-123',
                 timestamp=datetime(2024, 1, 1, 0, 0, tzinfo=timezone.utc),
                 provider_request_id='123',
@@ -313,6 +324,7 @@ async def test_request_tool_call(allow_model_requests: None):
                         tool_call_id='2',
                     )
                 ],
+                usage=RequestUsage(input_tokens=3, output_tokens=2),
                 model_name='llama-3.3-70b-versatile-123',
                 timestamp=datetime(2024, 1, 1, 0, 0, tzinfo=timezone.utc),
                 provider_request_id='123',

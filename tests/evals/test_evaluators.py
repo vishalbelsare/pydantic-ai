@@ -12,7 +12,7 @@ from pydantic_ai.messages import ModelMessage, ModelResponse
 from pydantic_ai.models import Model, ModelRequestParameters
 from pydantic_ai.settings import ModelSettings
 
-from ..conftest import try_import
+from ..conftest import IsStr, try_import
 
 with try_import() as imports_successful:
     import logfire
@@ -296,7 +296,10 @@ async def test_evaluator_error_handling(test_context: EvaluatorContext[TaskInput
     # When called directly, it should raise an error
     result = await run_evaluator(evaluator, test_context)
     assert result == EvaluatorFailure(
-        name='FailingEvaluator', error_message='ValueError: Simulated error', source=FailingEvaluator().as_spec()
+        name='FailingEvaluator',
+        error_message='ValueError: Simulated error',
+        error_stacktrace=IsStr(),
+        source=FailingEvaluator().as_spec(),
     )
 
 

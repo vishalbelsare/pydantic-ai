@@ -11,7 +11,7 @@ from dirty_equals import HasRepr, IsNumber, IsPartialDict
 from inline_snapshot import snapshot
 from pydantic import BaseModel, TypeAdapter
 
-from ..conftest import try_import
+from ..conftest import IsStr, try_import
 from .utils import render_table
 
 with try_import() as imports_successful:
@@ -460,6 +460,7 @@ async def test_evaluate_with_failing_task(
                 metadata=TaskMetadata(difficulty='easy', category='general'),
                 expected_output=TaskOutput(answer='4', confidence=1.0),
                 error_message='ValueError: Task error',
+                error_stacktrace=IsStr(),
                 trace_id='00000000000000000000000000000001',
                 span_id='0000000000000003',
             )
@@ -501,6 +502,7 @@ async def test_evaluate_with_failing_evaluator(example_dataset: Dataset[TaskInpu
                     EvaluatorFailure(
                         name='FailingEvaluator',
                         error_message='ValueError: Evaluator error',
+                        error_stacktrace=IsStr(),
                         source=FailingEvaluator().as_spec(),
                     )
                 ],
@@ -524,6 +526,7 @@ async def test_evaluate_with_failing_evaluator(example_dataset: Dataset[TaskInpu
                     EvaluatorFailure(
                         name='FailingEvaluator',
                         error_message='ValueError: Evaluator error',
+                        error_stacktrace=IsStr(),
                         source=FailingEvaluator().as_spec(),
                     )
                 ],
@@ -992,6 +995,7 @@ async def test_invalid_evaluator_output_type(example_dataset: Dataset[TaskInput,
                         'returned a value '
                         'of an invalid '
                         'type: Ellipsis.',
+                        error_stacktrace=IsStr(),
                         source=Python(expression='...').as_spec(),
                     )
                 ],
@@ -1019,6 +1023,7 @@ async def test_invalid_evaluator_output_type(example_dataset: Dataset[TaskInput,
                         'returned a value '
                         'of an invalid '
                         'type: Ellipsis.',
+                        error_stacktrace=IsStr(),
                         source=Python(expression='...').as_spec(),
                     )
                 ],
@@ -1044,6 +1049,7 @@ async def test_dataset_evaluate_with_failing_task(example_dataset: Dataset[TaskI
                 metadata=TaskMetadata(difficulty='easy', category='general'),
                 expected_output=TaskOutput(answer='4', confidence=1.0),
                 error_message='ValueError: Task failed',
+                error_stacktrace=IsStr(),
                 trace_id='00000000000000000000000000000001',
                 span_id='0000000000000003',
             ),
@@ -1053,6 +1059,7 @@ async def test_dataset_evaluate_with_failing_task(example_dataset: Dataset[TaskI
                 metadata=TaskMetadata(difficulty='medium', category='geography'),
                 expected_output=TaskOutput(answer='Paris', confidence=1.0),
                 error_message='ValueError: Task failed',
+                error_stacktrace=IsStr(),
                 trace_id='00000000000000000000000000000001',
                 span_id='0000000000000007',
             ),
@@ -1094,6 +1101,7 @@ async def test_dataset_evaluate_with_failing_evaluator(example_dataset: Dataset[
                     EvaluatorFailure(
                         name='FailingEvaluator',
                         error_message='ValueError: Evaluator failed',
+                        error_stacktrace=IsStr(),
                         source=FailingEvaluator().as_spec(),
                     )
                 ],
@@ -1117,6 +1125,7 @@ async def test_dataset_evaluate_with_failing_evaluator(example_dataset: Dataset[
                     EvaluatorFailure(
                         name='FailingEvaluator',
                         error_message='ValueError: Evaluator failed',
+                        error_stacktrace=IsStr(),
                         source=FailingEvaluator().as_spec(),
                     )
                 ],
@@ -1171,6 +1180,7 @@ async def test_dataset_evaluate_with_invalid_evaluator_result(
                         'of an invalid '
                         'type: '
                         'test_dataset_evaluate_with_invalid_evaluator_result.<locals>.MyObject().',
+                        error_stacktrace=IsStr(),
                         source=InvalidEvaluator().as_spec(),
                     )
                 ],
@@ -1199,6 +1209,7 @@ async def test_dataset_evaluate_with_invalid_evaluator_result(
                         'of an invalid '
                         'type: '
                         'test_dataset_evaluate_with_invalid_evaluator_result.<locals>.MyObject().',
+                        error_stacktrace=IsStr(),
                         source=InvalidEvaluator().as_spec(),
                     )
                 ],

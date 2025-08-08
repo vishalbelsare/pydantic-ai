@@ -13,6 +13,7 @@ import functools
 import inspect
 import sys
 import time
+import traceback
 import warnings
 from collections.abc import Awaitable, Mapping, Sequence
 from contextlib import AsyncExitStack, nullcontext
@@ -994,6 +995,7 @@ async def _run_task_and_evaluators(
             metadata=case.metadata,
             expected_output=case.expected_output,
             error_message=f'{type(exc).__name__}: {exc}',
+            error_stacktrace=traceback.format_exc(),
             trace_id=trace_id,
             span_id=span_id,
         )

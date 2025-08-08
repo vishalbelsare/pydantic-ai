@@ -107,6 +107,7 @@ class EvaluatorFailure:
 
     name: str
     error_message: str
+    error_stacktrace: str
     source: EvaluatorSpec
 
 

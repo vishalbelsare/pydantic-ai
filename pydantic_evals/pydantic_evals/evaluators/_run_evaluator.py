@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import traceback
 from collections.abc import Mapping
 from typing import Any
 
@@ -71,6 +72,7 @@ async def run_evaluator(
         return EvaluatorFailure(
             name=evaluator.get_default_evaluation_name(),
             error_message=f'{type(e).__name__}: {e}',
+            error_stacktrace=traceback.format_exc(),
             source=evaluator.as_spec(),
         )
 

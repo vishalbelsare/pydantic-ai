@@ -178,7 +178,7 @@ class RunUsage(UsageBase):
             self.requests += incr_usage.requests
         return _incr_usage_tokens(self, incr_usage)
 
-    def __add__(self, other: RunUsage) -> RunUsage:
+    def __add__(self, other: RunUsage | RequestUsage) -> RunUsage:
         """Add two RunUsages together.
 
         This is provided so it's trivial to sum usage information from multiple runs.

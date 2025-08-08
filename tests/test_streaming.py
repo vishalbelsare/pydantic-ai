@@ -10,7 +10,6 @@ from datetime import timezone
 from typing import Any, Union
 
 import pytest
-from dirty_equals import IsInstance
 from inline_snapshot import snapshot
 from pydantic import BaseModel
 
@@ -42,7 +41,7 @@ from pydantic_ai.tools import ToolDefinition
 from pydantic_ai.usage import RequestUsage
 from pydantic_graph import End
 
-from .conftest import IsNow, IsStr
+from .conftest import IsInt, IsNow, IsStr
 
 pytestmark = pytest.mark.anyio
 
@@ -898,7 +897,7 @@ async def test_iter_stream_responses():
     assert messages == [
         ModelResponse(
             parts=[TextPart(content=text, part_kind='text')],
-            usage=IsInstance(RequestUsage),  # type: ignore
+            usage=RequestUsage(input_tokens=IsInt(), output_tokens=IsInt()),
             model_name='test',
             timestamp=IsNow(tz=timezone.utc),
             kind='response',

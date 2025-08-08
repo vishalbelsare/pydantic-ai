@@ -342,7 +342,7 @@ class ModelRequestNode(AgentNode[DepsT, NodeRunEndT]):
 
         model_settings, model_request_parameters, message_history, _ = await self._prepare_request(ctx)
         model_response = await ctx.deps.model.request(message_history, model_settings, model_request_parameters)
-        ctx.state.usage.incr(_usage.RunUsage())
+        ctx.state.usage.requests += 1
 
         return self._finish_handling(ctx, model_response)
 

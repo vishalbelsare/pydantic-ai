@@ -22,7 +22,7 @@ from ._output import (
     ToolOutputSchema,
 )
 from ._run_context import AgentDepsT, RunContext
-from .messages import AgentStreamEvent, FinalResultEvent
+from .messages import AgentStreamEvent
 from .output import (
     OutputDataT,
     ToolOutput,
@@ -52,7 +52,6 @@ class AgentStream(Generic[AgentDepsT, OutputDataT]):
     _tool_manager: ToolManager[AgentDepsT]
 
     _agent_stream_iterator: AsyncIterator[AgentStreamEvent] | None = field(default=None, init=False)
-    _final_result_event: FinalResultEvent | None = field(default=None, init=False)
     _initial_run_ctx_usage: RunUsage = field(init=False)
 
     def __post_init__(self):

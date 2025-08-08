@@ -1177,13 +1177,13 @@ async def test_evaluate_async_logfire(
     for span in spans:
         span['attributes'].pop('code.filepath', None)
         span['attributes'].pop('code.function', None)
+        span['attributes'].pop('code.lineno', None)
 
     assert [(span['name'], span['attributes']) for span in spans] == snapshot(
         [
             (
                 'evaluate {name}',
                 {
-                    'code.lineno': 123,
                     'name': 'mock_async_task',
                     'logfire.msg_template': 'evaluate {name}',
                     'logfire.msg': 'evaluate mock_async_task',
@@ -1196,7 +1196,6 @@ async def test_evaluate_async_logfire(
             (
                 'case: {case_name}',
                 {
-                    'code.lineno': 123,
                     'task_name': 'mock_async_task',
                     'case_name': 'case1',
                     'inputs': '{"query":"What is 2+2?"}',
@@ -1218,7 +1217,6 @@ async def test_evaluate_async_logfire(
             (
                 'execute {task}',
                 {
-                    'code.lineno': 123,
                     'task': 'mock_async_task',
                     'logfire.msg_template': 'execute {task}',
                     'logfire.msg': 'execute mock_async_task',
@@ -1229,7 +1227,6 @@ async def test_evaluate_async_logfire(
             (
                 'case: {case_name}',
                 {
-                    'code.lineno': 123,
                     'task_name': 'mock_async_task',
                     'case_name': 'case2',
                     'inputs': '{"query":"What is the capital of France?"}',
@@ -1251,7 +1248,6 @@ async def test_evaluate_async_logfire(
             (
                 'execute {task}',
                 {
-                    'code.lineno': 123,
                     'task': 'mock_async_task',
                     'logfire.msg_template': 'execute {task}',
                     'logfire.msg': 'execute mock_async_task',

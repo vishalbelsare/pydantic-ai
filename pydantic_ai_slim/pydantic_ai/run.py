@@ -66,7 +66,7 @@ class AgentRun(Generic[AgentDepsT, OutputDataT]):
             CallToolsNode(
                 model_response=ModelResponse(
                     parts=[TextPart(content='The capital of France is Paris.')],
-                    usage=Usage(
+                    usage=RunUsage(
                         requests=1, request_tokens=56, response_tokens=7, total_tokens=63
                     ),
                     model_name='gpt-4o',
@@ -203,7 +203,7 @@ class AgentRun(Generic[AgentDepsT, OutputDataT]):
                     CallToolsNode(
                         model_response=ModelResponse(
                             parts=[TextPart(content='The capital of France is Paris.')],
-                            usage=Usage(
+                            usage=RunUsage(
                                 requests=1,
                                 request_tokens=56,
                                 response_tokens=7,
@@ -235,7 +235,7 @@ class AgentRun(Generic[AgentDepsT, OutputDataT]):
         assert isinstance(next_node, End), f'Unexpected node type: {type(next_node)}'
         return next_node
 
-    def usage(self) -> _usage.Usage:
+    def usage(self) -> _usage.RunUsage:
         """Get usage statistics for the run so far, including token usage, model requests, and so on."""
         return self._graph_run.state.usage
 
@@ -352,6 +352,6 @@ class AgentRunResult(Generic[OutputDataT]):
             self.new_messages(output_tool_return_content=output_tool_return_content)
         )
 
-    def usage(self) -> _usage.Usage:
+    def usage(self) -> _usage.RunUsage:
         """Return the usage of the whole run."""
         return self._state.usage

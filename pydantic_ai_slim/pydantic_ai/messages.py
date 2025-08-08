@@ -849,6 +849,9 @@ class ModelResponse:
     provider_name: str | None = None
     """The name of the LLM provider that generated the response."""
 
+    kind: Literal['response'] = 'response'
+    """Message type identifier, this is available on all parts as a discriminator."""
+
     provider_details: dict[str, Any] | None = field(default=None)
     """Additional provider-specific details in a serializable format.
 
@@ -858,9 +861,6 @@ class ModelResponse:
 
     provider_request_id: str | None = None
     """request ID as specified by the model provider. This can be used to track the specific request to the model."""
-
-    kind: Literal['response'] = 'response'
-    """Message type identifier, this is available on all parts as a discriminator."""
 
     def price(self) -> genai_types.PriceCalculation:
         """Calculate the price of the usage, this doesn't use `auto_update` so won't make any network requests."""

@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from types import TracebackType
 
-from pydantic_ai.usage import RunUsage
+from pydantic_ai.usage import RequestUsage
 from pydantic_graph._utils import get_event_loop as _get_event_loop
 
 from . import agent, messages, models, settings
@@ -366,7 +366,7 @@ class StreamedResponseSync:
         """Build a ModelResponse from the data received from the stream so far."""
         return self._ensure_stream_ready().get()
 
-    def usage(self) -> RunUsage:
+    def usage(self) -> RequestUsage:
         """Get the usage of the response so far."""
         return self._ensure_stream_ready().usage()
 

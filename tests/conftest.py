@@ -17,7 +17,6 @@ from types import ModuleType
 from typing import TYPE_CHECKING, Any, Callable
 
 import httpx
-import logfire
 import pytest
 from _pytest.assertion.rewrite import AssertionRewritingHook
 from pytest_mock import MockerFixture
@@ -232,13 +231,22 @@ def event_loop() -> Iterator[None]:
     new_loop.close()
 
 
-logfire.DEFAULT_LOGFIRE_INSTANCE.config.ignore_no_config = True
-
-
 @pytest.fixture(autouse=True)
 def no_instrumentation_by_default():
     Agent.instrument_all(False)
-    logfire.shutdown(flush=False)
+
+
+try:
+    import logfire
+
+    logfire.DEFAULT_LOGFIRE_INSTANCE.config.ignore_no_config = True
+
+    @pytest.fixture(autouse=True)
+    def fresh_logfire():
+        logfire.shutdown(flush=False)
+
+except ImportError:
+    pass
 
 
 def raise_if_exception(e: Any) -> None:

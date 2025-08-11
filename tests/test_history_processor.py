@@ -101,7 +101,7 @@ async def test_history_processor_run_replaces_message_history(function_model: Fu
             ModelRequest(parts=[SystemPromptPart(content='Processed answer', timestamp=IsDatetime())]),
             ModelResponse(
                 parts=[TextPart(content='Provider response')],
-                usage=Usage(requests=1, request_tokens=54, response_tokens=2, total_tokens=56),
+                usage=RequestUsage(input_tokens=54, output_tokens=2),
                 model_name='function:capture_model_function:capture_model_stream_function',
                 timestamp=IsDatetime(),
             ),
@@ -135,7 +135,7 @@ async def test_history_processor_streaming_replaces_message_history(function_mod
             ModelRequest(parts=[SystemPromptPart(content='Processed answer', timestamp=IsDatetime())]),
             ModelResponse(
                 parts=[TextPart(content='hello')],
-                usage=Usage(request_tokens=50, response_tokens=1, total_tokens=51),
+                usage=RequestUsage(input_tokens=50, output_tokens=1),
                 model_name='function:capture_model_function:capture_model_stream_function',
                 timestamp=IsDatetime(),
             ),

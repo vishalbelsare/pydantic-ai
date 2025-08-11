@@ -118,7 +118,7 @@ jobs:
           --extra anthropic
           --extra mistral
           --extra cohere
-          pytest tests/test_live.py -v
+          pytest --durations=0 tests/test_live.py -v
           --durations=100
         env:
           PYDANTIC_AI_LIVE_TEST_DANGEROUS: "CHARGE-ME!"
@@ -163,7 +163,7 @@ jobs:
       - run: mkdir .coverage
 
       - run: uv sync --group dev
-      - run: uv run ${{ steps.install-command.outputs.install-command }} coverage run -m pytest -n auto --dist=loadgroup
+      - run: uv run ${{ steps.install-command.outputs.install-command }} coverage run -m pytest --durations=0 -n auto --dist=loadgroup
         env:
           COVERAGE_FILE: .coverage/.coverage.${{ matrix.python-version }}-${{ matrix.install }}
 
@@ -204,7 +204,7 @@ jobs:
 
       - run: unset UV_FROZEN
 
-      - run: uv run --all-extras --resolution lowest-direct coverage run -m pytest -n auto --dist=loadgroup
+      - run: uv run --all-extras --resolution lowest-direct coverage run -m pytest --durations=0 -n auto --dist=loadgroup
         env:
           COVERAGE_FILE: .coverage/.coverage.${{matrix.python-version}}-lowest-versions
 
@@ -284,7 +284,7 @@ jobs:
 
       - run: make lint-js
 
-      - run: uv run --package mcp-run-python pytest mcp-run-python -v --durations=100
+      - run: uv run --package mcp-run-python pytest --durations=0 mcp-run-python -v --durations=100
 
       - run: deno task dev warmup
         working-directory: mcp-run-python

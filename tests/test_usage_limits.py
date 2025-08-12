@@ -190,3 +190,9 @@ async def test_multi_agent_usage_sync():
     result = await controller_agent.run('foobar')
     assert result.output == snapshot('{"delegate_to_other_agent":0}')
     assert result.usage() == snapshot(RunUsage(requests=7, input_tokens=105, output_tokens=16))
+
+
+def test_usage_basics():
+    usage = RequestUsage()
+    assert usage.output_audio_tokens is None
+    assert usage.requests == 1

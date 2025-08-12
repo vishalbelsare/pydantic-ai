@@ -5,6 +5,7 @@ import os
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import timezone
+from decimal import Decimal
 from functools import cached_property
 from typing import Any, Callable, TypeVar, Union, cast
 
@@ -245,6 +246,9 @@ async def test_async_request_prompt_caching(allow_model_requests: None):
             },
         )
     )
+    last_message = result.all_messages()[-1]
+    assert isinstance(last_message, ModelResponse)
+    assert last_message.price().total_price == snapshot(Decimal('0.0000304'))
 
 
 async def test_async_request_text_response(allow_model_requests: None):

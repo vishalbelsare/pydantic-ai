@@ -192,7 +192,30 @@ async def test_multi_agent_usage_sync():
     assert result.usage() == snapshot(RunUsage(requests=7, input_tokens=105, output_tokens=16))
 
 
-def test_usage_basics():
+def test_request_usage_basics():
     usage = RequestUsage()
     assert usage.output_audio_tokens is None
     assert usage.requests == 1
+
+
+def test_add_usages():
+    usage = RunUsage(
+        requests=2,
+        input_tokens=10,
+        output_tokens=20,
+        cache_read_tokens=30,
+        cache_write_tokens=40,
+        input_audio_tokens=50,
+        cache_audio_read_tokens=60,
+    )
+    assert usage + usage == snapshot(
+        RunUsage(
+            requests=4,
+            input_tokens=20,
+            output_tokens=40,
+            cache_write_tokens=80,
+            cache_read_tokens=60,
+            input_audio_tokens=100,
+            cache_audio_read_tokens=120,
+        )
+    )

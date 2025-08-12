@@ -207,6 +207,10 @@ def test_add_usages():
         cache_write_tokens=40,
         input_audio_tokens=50,
         cache_audio_read_tokens=60,
+        details={
+            'custom1': 10,
+            'custom2': 20,
+        },
     )
     assert usage + usage == snapshot(
         RunUsage(
@@ -217,5 +221,8 @@ def test_add_usages():
             cache_read_tokens=60,
             input_audio_tokens=100,
             cache_audio_read_tokens=120,
+            details={'custom1': 20, 'custom2': 40},
         )
     )
+    assert usage + RunUsage() == usage
+    assert RunUsage() + RunUsage() == RunUsage()

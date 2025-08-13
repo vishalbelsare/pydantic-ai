@@ -447,7 +447,7 @@ async def test_request_native_with_arguments_str_response(allow_model_requests: 
     assert result.output == CityLocation(city='paris', country='france')
     assert result.usage().input_tokens == 1
     assert result.usage().output_tokens == 1
-    assert result.usage().details is None
+    assert result.usage().details == {}
     assert result.all_messages() == snapshot(
         [
             ModelRequest(parts=[UserPromptPart(content='User prompt value', timestamp=IsNow(tz=timezone.utc))]),
@@ -501,7 +501,7 @@ async def test_request_output_type_with_arguments_str_response(allow_model_reque
     assert result.output == 42
     assert result.usage().input_tokens == 1
     assert result.usage().output_tokens == 1
-    assert result.usage().details is None
+    assert result.usage().details == {}
     assert result.all_messages() == snapshot(
         [
             ModelRequest(

@@ -2,7 +2,7 @@ from __future__ import annotations as _annotations
 
 import dataclasses
 from copy import copy
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 
 from typing_extensions import deprecated, overload
 
@@ -12,44 +12,8 @@ from .exceptions import UsageLimitExceeded
 __all__ = 'RequestUsage', 'RunUsage', 'UsageLimits'
 
 
-class UsageBase:
-    input_tokens: int
-    output_tokens: int
-    details: dict[str, int]
-
-    def opentelemetry_attributes(self) -> dict[str, int]:
-        """Get the token usage values as OpenTelemetry attributes."""
-        result: dict[str, int] = {}
-        if self.input_tokens:
-            result['gen_ai.usage.input_tokens'] = self.input_tokens
-        if self.output_tokens:
-            result['gen_ai.usage.output_tokens'] = self.output_tokens
-        details = self.details
-        if details:
-            prefix = 'gen_ai.usage.details.'
-            for key, value in details.items():
-                # Skipping check for value since spec implies all detail values are relevant
-                if value:
-                    result[prefix + key] = value
-        return result
-
-    __repr__ = _utils.dataclasses_no_defaults_repr
-
-    def has_values(self) -> bool:
-        """Whether any values are set and non-zero."""
-        return any(dataclasses.asdict(self).values())  # type: ignore
-
-
 @dataclass(repr=False)
-class RequestUsage(UsageBase):
-    """LLM usage associated with a single request.
-
-    This is an implementation of `genai_prices.types.AbstractUsage` so it can be used to calculate the price of the
-    request.
-
-    Prices for LLM requests are calculated using [genai-prices](https://github.com/pydantic/genai-prices).
-    """
-
+class UsageBase:
     input_tokens: int = 0
     """Number of input/prompt tokens."""
 
@@ -72,23 +36,58 @@ class RequestUsage(UsageBase):
     """Any extra details returned by the model."""
 
     @property
-    def requests(self):
-        return 1
-
-    @property
     @deprecated('`request_tokens` is deprecated, use `input_tokens` instead')
-    def request_tokens(self) -> int | None:
+    def request_tokens(self) -> int:
         return self.input_tokens
 
     @property
     @deprecated('`response_tokens` is deprecated, use `output_tokens` instead')
-    def response_tokens(self) -> int | None:
+    def response_tokens(self) -> int:
         return self.output_tokens
 
     @property
-    @deprecated('`total_tokens` is deprecated, sum the specific fields you need instead')
-    def total_tokens(self) -> int | None:
-        return sum(v for k, v in dataclasses.asdict(self).values() if k.endswith('_tokens') and v is not None)
+    def total_tokens(self) -> int:
+        """Sum of `input_tokens + output_tokens`."""
+        return self.input_tokens + self.output_tokens
+
+    def opentelemetry_attributes(self) -> dict[str, int]:
+        """Get the token usage values as OpenTelemetry attributes."""
+        result: dict[str, int] = {}
+        if self.input_tokens:
+            result['gen_ai.usage.input_tokens'] = self.input_tokens
+        if self.output_tokens:
+            result['gen_ai.usage.output_tokens'] = self.output_tokens
+        details = self.details
+        if details:
+            prefix = 'gen_ai.usage.details.'
+            for key, value in details.items():
+                # Skipping check for value since spec implies all detail values are relevant
+                if value:
+                    result[prefix + key] = value
+        return result
+
+    def __repr__(self):
+        kv_pairs = (f'{f.name}={value!r}' for f in fields(self) if (value := getattr(self, f.name)))
+        return f'{self.__class__.__qualname__}({", ".join(kv_pairs)})'
+
+    def has_values(self) -> bool:
+        """Whether any values are set and non-zero."""
+        return any(dataclasses.asdict(self).values())
+
+
+@dataclass(repr=False)
+class RequestUsage(UsageBase):
+    """LLM usage associated with a single request.
+
+    This is an implementation of `genai_prices.types.AbstractUsage` so it can be used to calculate the price of the
+    request.
+
+    Prices for LLM requests are calculated using [genai-prices](https://github.com/pydantic/genai-prices).
+    """
+
+    @property
+    def requests(self):
+        return 1
 
     def incr(self, incr_usage: RequestUsage) -> None:
         """Increment the usage in place.
@@ -138,21 +137,6 @@ class RunUsage(UsageBase):
 
     details: dict[str, int] = dataclasses.field(default_factory=dict)
     """Any extra details returned by the model."""
-
-    @property
-    @deprecated('`request_tokens` is deprecated, use `input_tokens` instead')
-    def request_tokens(self) -> int:
-        return self.input_tokens
-
-    @property
-    @deprecated('`response_tokens` is deprecated, use `output_tokens` instead')
-    def response_tokens(self) -> int:
-        return self.output_tokens
-
-    @property
-    def total_tokens(self) -> int:
-        """Sum of `input_tokens + output_tokens`."""
-        return self.input_tokens + self.output_tokens
 
     def incr(self, incr_usage: RunUsage | RequestUsage) -> None:
         """Increment the usage in place.

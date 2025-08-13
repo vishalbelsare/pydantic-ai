@@ -169,7 +169,7 @@ jobs:
       - run: mkdir .coverage
 
       - run: uv sync --only-dev
-      - run: uv run ${{ matrix.install.command }} coverage run -m pytest -n auto --dist=loadgroup
+      - run: uv run ${{ matrix.install.command }} coverage run -m pytest -n auto --dist=loadgroup ${{ matrix.install.pytest-args }}
         env:
           COVERAGE_FILE: .coverage/.coverage.${{ matrix.python-version }}-${{ matrix.install.name }}
 

@@ -45,16 +45,16 @@ class GeminiUsageMetaData(TypedDict, total=False):
 
 def metadata_as_request_usage(metadata: GeminiUsageMetaData | None) -> usage.RequestUsage:
     if metadata is None:
-        return usage.RequestUsage()  # pragma: no cover
+        return usage.RequestUsage()
     details: dict[str, int] = {}
     if cached_content_token_count := metadata.get('cached_content_token_count', 0):
-        details['cached_content_tokens'] = cached_content_token_count  # pragma: no cover
+        details['cached_content_tokens'] = cached_content_token_count
 
     if thoughts_token_count := metadata.get('thoughts_token_count', 0):
         details['thoughts_tokens'] = thoughts_token_count
 
     if tool_use_prompt_token_count := metadata.get('tool_use_prompt_token_count', 0):
-        details['tool_use_prompt_tokens'] = tool_use_prompt_token_count  # pragma: no cover
+        details['tool_use_prompt_tokens'] = tool_use_prompt_token_count
 
     input_audio_tokens = 0
     output_audio_tokens = 0

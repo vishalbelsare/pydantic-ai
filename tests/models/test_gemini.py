@@ -2180,3 +2180,11 @@ def test_map_usage():
             },
         )
     )
+
+
+def test_map_empty_usage():
+    response = gemini_response(_content_model_response(ModelResponse(parts=[TextPart('Hello world')])))
+    assert 'usage_metadata' in response
+    del response['usage_metadata']
+
+    assert _metadata_as_usage(response) == RequestUsage()

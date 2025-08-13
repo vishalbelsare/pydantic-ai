@@ -3,7 +3,6 @@ from __future__ import annotations as _annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, cast
 
-import logfire
 import pytest
 from inline_snapshot import snapshot
 from logfire.testing import CaptureLogfire

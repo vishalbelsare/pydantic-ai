@@ -877,7 +877,7 @@ def _metadata_as_usage(response: _GeminiResponse) -> usage.RequestUsage:
             metadata_details = cast(list[_GeminiModalityTokenCount], metadata_details)
             suffix = key.removesuffix('_details')
             for detail in metadata_details:
-                details[f'{detail["modality"].lower()}_{suffix}'] = detail['token_count']
+                details[f'{detail["modality"].lower()}_{suffix}'] = detail.get('token_count', 0)
 
     return usage.RequestUsage(
         input_tokens=metadata.get('prompt_token_count', 0),

@@ -277,7 +277,6 @@ async def test_request_tool_call(allow_model_requests: None):
                         tool_call_id='1',
                     )
                 ],
-                usage=RequestUsage(details={}),
                 model_name='command-r7b-12-2024',
                 timestamp=IsNow(tz=timezone.utc),
             ),

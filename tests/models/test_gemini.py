@@ -622,7 +622,7 @@ async def test_text_success(get_gemini_client: GetGeminiClient):
             ModelRequest(parts=[UserPromptPart(content='Hello', timestamp=IsNow(tz=timezone.utc))]),
             ModelResponse(
                 parts=[TextPart(content='Hello world')],
-                usage=RequestUsage(input_tokens=1, output_tokens=2, details={}),
+                usage=RequestUsage(input_tokens=1, output_tokens=2),
                 model_name='gemini-1.5-flash-123',
                 timestamp=IsNow(tz=timezone.utc),
                 provider_details={'finish_reason': 'STOP'},
@@ -638,7 +638,7 @@ async def test_text_success(get_gemini_client: GetGeminiClient):
             ModelRequest(parts=[UserPromptPart(content='Hello', timestamp=IsNow(tz=timezone.utc))]),
             ModelResponse(
                 parts=[TextPart(content='Hello world')],
-                usage=RequestUsage(input_tokens=1, output_tokens=2, details={}),
+                usage=RequestUsage(input_tokens=1, output_tokens=2),
                 model_name='gemini-1.5-flash-123',
                 timestamp=IsNow(tz=timezone.utc),
                 provider_details={'finish_reason': 'STOP'},
@@ -646,7 +646,7 @@ async def test_text_success(get_gemini_client: GetGeminiClient):
             ModelRequest(parts=[UserPromptPart(content='Hello', timestamp=IsNow(tz=timezone.utc))]),
             ModelResponse(
                 parts=[TextPart(content='Hello world')],
-                usage=RequestUsage(input_tokens=1, output_tokens=2, details={}),
+                usage=RequestUsage(input_tokens=1, output_tokens=2),
                 model_name='gemini-1.5-flash-123',
                 timestamp=IsNow(tz=timezone.utc),
                 provider_details={'finish_reason': 'STOP'},
@@ -670,7 +670,7 @@ async def test_request_structured_response(get_gemini_client: GetGeminiClient):
             ModelRequest(parts=[UserPromptPart(content='Hello', timestamp=IsNow(tz=timezone.utc))]),
             ModelResponse(
                 parts=[ToolCallPart(tool_name='final_result', args={'response': [1, 2, 123]}, tool_call_id=IsStr())],
-                usage=RequestUsage(input_tokens=1, output_tokens=2, details={}),
+                usage=RequestUsage(input_tokens=1, output_tokens=2),
                 model_name='gemini-1.5-flash-123',
                 timestamp=IsNow(tz=timezone.utc),
                 provider_details={'finish_reason': 'STOP'},
@@ -733,7 +733,7 @@ async def test_request_tool_call(get_gemini_client: GetGeminiClient):
                 parts=[
                     ToolCallPart(tool_name='get_location', args={'loc_name': 'San Fransisco'}, tool_call_id=IsStr())
                 ],
-                usage=RequestUsage(input_tokens=1, output_tokens=2, details={}),
+                usage=RequestUsage(input_tokens=1, output_tokens=2),
                 model_name='gemini-1.5-flash-123',
                 timestamp=IsNow(tz=timezone.utc),
                 provider_details={'finish_reason': 'STOP'},
@@ -753,7 +753,7 @@ async def test_request_tool_call(get_gemini_client: GetGeminiClient):
                     ToolCallPart(tool_name='get_location', args={'loc_name': 'London'}, tool_call_id=IsStr()),
                     ToolCallPart(tool_name='get_location', args={'loc_name': 'New York'}, tool_call_id=IsStr()),
                 ],
-                usage=RequestUsage(input_tokens=1, output_tokens=2, details={}),
+                usage=RequestUsage(input_tokens=1, output_tokens=2),
                 model_name='gemini-1.5-flash-123',
                 timestamp=IsNow(tz=timezone.utc),
                 provider_details={'finish_reason': 'STOP'},
@@ -776,7 +776,7 @@ async def test_request_tool_call(get_gemini_client: GetGeminiClient):
             ),
             ModelResponse(
                 parts=[TextPart(content='final response')],
-                usage=RequestUsage(input_tokens=1, output_tokens=2, details={}),
+                usage=RequestUsage(input_tokens=1, output_tokens=2),
                 model_name='gemini-1.5-flash-123',
                 timestamp=IsNow(tz=timezone.utc),
                 provider_details={'finish_reason': 'STOP'},
@@ -941,7 +941,7 @@ async def test_stream_structured_tool_calls(get_gemini_client: GetGeminiClient):
                     ToolCallPart(tool_name='foo', args={'x': 'a'}, tool_call_id=IsStr()),
                     ToolCallPart(tool_name='bar', args={'y': 'b'}, tool_call_id=IsStr()),
                 ],
-                usage=RequestUsage(input_tokens=1, output_tokens=2, details={}),
+                usage=RequestUsage(input_tokens=1, output_tokens=2),
                 model_name='gemini-1.5-flash',
                 timestamp=IsNow(tz=timezone.utc),
             ),
@@ -957,7 +957,7 @@ async def test_stream_structured_tool_calls(get_gemini_client: GetGeminiClient):
             ),
             ModelResponse(
                 parts=[ToolCallPart(tool_name='final_result', args={'response': [1, 2]}, tool_call_id=IsStr())],
-                usage=RequestUsage(input_tokens=1, output_tokens=2, details={}),
+                usage=RequestUsage(input_tokens=1, output_tokens=2),
                 model_name='gemini-1.5-flash',
                 timestamp=IsNow(tz=timezone.utc),
             ),
@@ -1025,7 +1025,7 @@ async def test_stream_text_heterogeneous(get_gemini_client: GetGeminiClient):
                         tool_call_id=IsStr(),
                     ),
                 ],
-                usage=RequestUsage(input_tokens=1, output_tokens=2, details={}),
+                usage=RequestUsage(input_tokens=1, output_tokens=2),
                 model_name='gemini-1.5-flash',
                 timestamp=IsDatetime(),
             ),

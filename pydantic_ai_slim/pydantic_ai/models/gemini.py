@@ -872,16 +872,31 @@ def _metadata_as_usage(response: _GeminiResponse) -> usage.RequestUsage:
     if tool_use_prompt_token_count := metadata.get('tool_use_prompt_token_count'):
         details['tool_use_prompt_tokens'] = tool_use_prompt_token_count  # pragma: no cover
 
+    input_audio_tokens = None
+    output_audio_tokens = None
+    cache_audio_read_tokens = None
     for key, metadata_details in metadata.items():
         if key.endswith('_details') and metadata_details:
             metadata_details = cast(list[_GeminiModalityTokenCount], metadata_details)
             suffix = key.removesuffix('_details')
             for detail in metadata_details:
-                details[f'{detail["modality"].lower()}_{suffix}'] = detail.get('token_count', 0)
+                modality = detail['modality']
+                details[f'{modality.lower()}_{suffix}'] = value = detail.get('token_count', 0)
+                if value and modality == 'AUDIO':
+                    if key == 'prompt_tokens_details':
+                        input_audio_tokens = value
+                    elif key == 'candidates_tokens_details':
+                        output_audio_tokens = value
+                    elif key == 'cache_tokens_details':
+                        cache_audio_read_tokens = value
 
     return usage.RequestUsage(
         input_tokens=metadata.get('prompt_token_count', 0),
         output_tokens=metadata.get('candidates_token_count', 0),
+        cache_read_tokens=cached_content_token_count,
+        input_audio_tokens=input_audio_tokens,
+        output_audio_tokens=output_audio_tokens,
+        cache_audio_read_tokens=cache_audio_read_tokens,
         details=details,
     )
 

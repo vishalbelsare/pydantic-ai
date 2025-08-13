@@ -811,7 +811,7 @@ def mock_infer_model(model: Model | KnownModelName) -> Model:
                 OpenAIChatModel = type(None)
 
             if isinstance(m, OpenAIChatModel):
-                # Raise an HTTP error for OpenAIModel
+                # Raise an HTTP error for OpenAIChatModel
                 mock_fallback_models.append(FunctionModel(raise_http_error, model_name=m.model_name))
             else:
                 mock_fallback_models.append(mock_infer_model(m))

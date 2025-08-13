@@ -64,7 +64,7 @@ async def test_streamed_text_response():
                 ModelRequest(parts=[UserPromptPart(content='Hello', timestamp=IsNow(tz=timezone.utc))]),
                 ModelResponse(
                     parts=[ToolCallPart(tool_name='ret_a', args={'x': 'a'}, tool_call_id=IsStr())],
-                    usage=RequestUsage(input_tokens=51, output_tokens=0),
+                    usage=RequestUsage(input_tokens=51),
                     model_name='test',
                     timestamp=IsNow(tz=timezone.utc),
                 ),
@@ -93,7 +93,7 @@ async def test_streamed_text_response():
                 ModelRequest(parts=[UserPromptPart(content='Hello', timestamp=IsNow(tz=timezone.utc))]),
                 ModelResponse(
                     parts=[ToolCallPart(tool_name='ret_a', args={'x': 'a'}, tool_call_id=IsStr())],
-                    usage=RequestUsage(input_tokens=51, output_tokens=0),
+                    usage=RequestUsage(input_tokens=51),
                     model_name='test',
                     timestamp=IsNow(tz=timezone.utc),
                 ),
@@ -782,7 +782,7 @@ async def test_early_strategy_does_not_apply_to_tool_calls_without_final_tool():
             ),
             ModelResponse(
                 parts=[ToolCallPart(tool_name='regular_tool', args={'x': 0}, tool_call_id=IsStr())],
-                usage=RequestUsage(input_tokens=57, output_tokens=0),
+                usage=RequestUsage(input_tokens=57),
                 model_name='test',
                 timestamp=IsNow(tz=timezone.utc),
             ),

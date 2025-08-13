@@ -98,7 +98,7 @@ async def test_streamed_text_limits() -> None:
                                 tool_call_id=IsStr(),
                             )
                         ],
-                        usage=RequestUsage(input_tokens=51, output_tokens=0),
+                        usage=RequestUsage(input_tokens=51),
                         model_name='test',
                         timestamp=IsNow(tz=timezone.utc),
                     ),

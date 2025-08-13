@@ -165,23 +165,15 @@ def _incr_usage_tokens(slf: RunUsage | RequestUsage, incr_usage: RunUsage | Requ
         slf: The usage to increment.
         incr_usage: The usage to increment by.
     """
-    if incr_usage.input_tokens:
-        slf.input_tokens = (slf.input_tokens or 0) + incr_usage.input_tokens
-    if incr_usage.output_tokens:
-        slf.output_tokens = (slf.output_tokens or 0) + incr_usage.output_tokens
-    if incr_usage.cache_write_tokens:
-        slf.cache_write_tokens = (slf.cache_write_tokens or 0) + incr_usage.cache_write_tokens
-    if incr_usage.cache_read_tokens:
-        slf.cache_read_tokens = (slf.cache_read_tokens or 0) + incr_usage.cache_read_tokens
-    if incr_usage.input_audio_tokens:
-        slf.input_audio_tokens = (slf.input_audio_tokens or 0) + incr_usage.input_audio_tokens
-    if incr_usage.cache_audio_read_tokens:
-        slf.cache_audio_read_tokens = (slf.cache_audio_read_tokens or 0) + incr_usage.cache_audio_read_tokens
+    slf.input_tokens += incr_usage.input_tokens
+    slf.cache_write_tokens += incr_usage.cache_write_tokens
+    slf.cache_read_tokens += incr_usage.cache_read_tokens
+    slf.input_audio_tokens += incr_usage.input_audio_tokens
+    slf.cache_audio_read_tokens += incr_usage.cache_audio_read_tokens
+    slf.output_tokens += incr_usage.output_tokens
 
-    if incr_usage.details:
-        slf.details = slf.details or {}
-        for key, value in incr_usage.details.items():
-            slf.details[key] = slf.details.get(key, 0) + value
+    for key, value in incr_usage.details.items():
+        slf.details[key] = slf.details.get(key, 0) + value
 
 
 @dataclass

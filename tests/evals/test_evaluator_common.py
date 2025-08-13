@@ -22,7 +22,7 @@ from pydantic_evals.evaluators.common import (
     OutputConfig,
     Python,
 )
-from pydantic_evals.otel._context_in_memory_span_exporter import context_subtree
+from pydantic_evals.otel._context_subtree import context_subtree
 from pydantic_evals.otel._errors import SpanTreeRecordingError
 from pydantic_evals.otel.span_tree import SpanQuery
 

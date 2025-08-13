@@ -197,7 +197,7 @@ async def test_openai_responses_model_retry(allow_model_requests: None, openai_a
                         tool_call_id=IsStr(),
                     ),
                 ],
-                usage=RequestUsage(input_tokens=0, output_tokens=0, details={'reasoning_tokens': 0}),
+                usage=RequestUsage(details={'reasoning_tokens': 0}),
                 model_name='gpt-4o-2024-08-06',
                 timestamp=IsDatetime(),
                 provider_request_id='resp_67e547c48c9481918c5c4394464ce0c60ae6111e84dd5c08',

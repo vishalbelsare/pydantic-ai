@@ -237,6 +237,8 @@ async def test_async_request_prompt_caching(allow_model_requests: None):
         RunUsage(
             requests=1,
             input_tokens=13,
+            cache_write_tokens=4,
+            cache_read_tokens=6,
             output_tokens=5,
             details={
                 'input_tokens': 3,
@@ -248,7 +250,7 @@ async def test_async_request_prompt_caching(allow_model_requests: None):
     )
     last_message = result.all_messages()[-1]
     assert isinstance(last_message, ModelResponse)
-    assert last_message.price().total_price == snapshot(Decimal('0.0000304'))
+    assert last_message.price().total_price == snapshot(Decimal('0.00003488'))
 
 
 async def test_async_request_text_response(allow_model_requests: None):
@@ -1198,6 +1200,8 @@ def anth_msg(usage: BetaUsage) -> BetaMessage:
             snapshot(
                 RequestUsage(
                     input_tokens=6,
+                    cache_write_tokens=2,
+                    cache_read_tokens=3,
                     output_tokens=1,
                     details={
                         'cache_creation_input_tokens': 2,

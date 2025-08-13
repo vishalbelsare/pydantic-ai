@@ -553,14 +553,14 @@ def _map_usage(message: BetaMessage | BetaRawMessageStreamEvent) -> usage.Reques
     # Usage coming from the RawMessageDeltaEvent doesn't have input token data, hence using `get`
     # Tokens are only counted once between input_tokens, cache_creation_input_tokens, and cache_read_input_tokens
     # This approach maintains request_tokens as the count of all input tokens, with cached counts as details
-    request_tokens = (
-        details.get('input_tokens', 0)
-        + details.get('cache_creation_input_tokens', 0)
-        + details.get('cache_read_input_tokens', 0)
-    )
+    cache_write_tokens = details.get('cache_creation_input_tokens', 0)
+    cache_read_tokens = details.get('cache_read_input_tokens', 0)
+    request_tokens = details.get('input_tokens', 0) + cache_write_tokens + cache_read_tokens
 
     return usage.RequestUsage(
         input_tokens=request_tokens or None,
+        cache_read_tokens=cache_read_tokens or None,
+        cache_write_tokens=cache_write_tokens or None,
         output_tokens=response_usage.output_tokens,
         details=details or None,
     )

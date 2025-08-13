@@ -1612,7 +1612,7 @@ wheels = [
 
 [[package]]
 name = "inline-snapshot"
-version = "0.27.0"
+version = "0.23.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "asttokens" },
@@ -1621,9 +1621,9 @@ dependencies = [
     { name = "rich" },
     { name = "tomli", marker = "python_full_version < '3.11'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/d8/0f/15fcb453ae67713cd04ac87916f4a188c21410b401eb00f4c7b9eed61533/inline_snapshot-0.27.0.tar.gz", hash = "sha256:0cf09c7da45059fcf1f234390cdb2b07bac6635e432b665f288de0ea8aad4e55", size = 345721, upload-time = "2025-08-05T06:23:05.452Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/8d/a3/9e78da370d20b896861cd5db3fa6fde89348b700ec144d8c1457c18ea113/inline_snapshot-0.23.0.tar.gz", hash = "sha256:872d027b1eae4e3e3b4028e0d46128bafbf62889a2424a2667dbe4b69cb1ffdf", size = 259375, upload-time = "2025-04-25T18:14:36.48Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/19/93/dfae98e358a06a91dd2416fb62df6345be3b509a2fd22b743fd748a70bcf/inline_snapshot-0.27.0-py3-none-any.whl", hash = "sha256:eea11590b20919acea7f479e903a3d224e91938e9257f182cf564e22bd2b8bde", size = 66783, upload-time = "2025-08-05T06:23:03.59Z" },
+    { url = "https://files.pythonhosted.org/packages/71/ab/4ad6bb9808f242e659ca8437ee475efaa201f18ff20a0dd5553280c85ae5/inline_snapshot-0.23.0-py3-none-any.whl", hash = "sha256:b1a5feab675aee8d03a51f1b6291f412100ce750d846c2d58eab16c90ee2c4dd", size = 50119, upload-time = "2025-04-25T18:14:34.46Z" },
 ]
 
 [[package]]
@@ -3339,6 +3339,7 @@ dev = [
     { name = "diff-cover", version = "9.2.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.9.17'" },
     { name = "dirty-equals" },
     { name = "duckduckgo-search" },
+    { name = "genai-prices" },
     { name = "inline-snapshot" },
     { name = "pip" },
     { name = "pytest" },
@@ -3388,8 +3389,9 @@ dev = [
     { name = "diff-cover", specifier = ">=9.2.0" },
     { name = "dirty-equals", specifier = ">=0.9.0" },
     { name = "duckduckgo-search", specifier = ">=7.0.0" },
+    { name = "genai-prices", specifier = ">=0.0.22" },
     { name = "inline-snapshot", specifier = ">=0.19.3" },
-    { name = "pip", specifier = ">0" },
+    { name = "pip", specifier = ">=25.2" },
     { name = "pytest", specifier = ">=8.3.3" },
     { name = "pytest-examples", specifier = ">=0.0.18" },
     { name = "pytest-mock", specifier = ">=3.14.0" },

@@ -10,7 +10,6 @@ from typing import TYPE_CHECKING, Annotated, Any, Literal, Union, cast, overload
 
 import pydantic
 import pydantic_core
-from genai_prices import calc_price, types as genai_types
 from opentelemetry._events import Event  # pyright: ignore[reportPrivateImportUsage]
 from typing_extensions import TypeAlias, deprecated
 
@@ -862,8 +861,12 @@ class ModelResponse:
     provider_request_id: str | None = None
     """request ID as specified by the model provider. This can be used to track the specific request to the model."""
 
-    def price(self) -> genai_types.PriceCalculation:
+    def price(self):
         """Calculate the price of the usage."""
+        from genai_prices import calc_price
+
+        1 / 0
+
         assert self.model_name, 'Model name is required to calculate price'
         return calc_price(
             self.usage,

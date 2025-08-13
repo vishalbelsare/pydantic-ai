@@ -147,10 +147,10 @@ jobs:
             pytest-args: "tests/evals"
           - name: standard
             command: ""
-            pytest-args: "--ignore=tests/evals"
+            pytest-args: ""
           - name: all-extras
             command: "--all-extras"
-            pytest-args: "--ignore=tests/evals"
+            pytest-args: ""
     env:
       UV_PYTHON: ${{ matrix.python-version }}
       CI: true

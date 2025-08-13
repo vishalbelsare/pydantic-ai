@@ -80,9 +80,7 @@ class RequestUsage(UsageBase):
     """LLM usage associated with a single request.
 
     This is an implementation of `genai_prices.types.AbstractUsage` so it can be used to calculate the price of the
-    request.
-
-    Prices for LLM requests are calculated using [genai-prices](https://github.com/pydantic/genai-prices).
+    request using [genai-prices](https://github.com/pydantic/genai-prices).
     """
 
     @property

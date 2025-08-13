@@ -1172,9 +1172,11 @@ async def test_evaluate_async_logfire(
 
     await example_dataset.evaluate(mock_async_task)
 
-    spans = capfire.exporter.exported_spans_as_dict()
+    spans = capfire.exporter.exported_spans_as_dict(parse_json_attributes=True)
     spans.sort(key=lambda s: s['start_time'])
+
     for span in spans:
+        # These may or may not be present and may have weird values due to things running in async
         span['attributes'].pop('code.filepath', None)
         span['attributes'].pop('code.function', None)
         span['attributes'].pop('code.lineno', None)
@@ -1188,9 +1190,81 @@ async def test_evaluate_async_logfire(
                     'logfire.msg_template': 'evaluate {name}',
                     'logfire.msg': 'evaluate mock_async_task',
                     'logfire.span_type': 'span',
-                    'cases': '[{"name":"case1","inputs":{"query":"What is 2+2?"},"metadata":{"difficulty":"easy","category":"general"},"expected_output":{"answer":"4","confidence":1.0},"output":{"answer":"4","confidence":1.0},"metrics":{},"attributes":{},"scores":{"confidence":{"name":"confidence","value":1.0,"reason":null,"source":{"name":"SimpleEvaluator","arguments":null}}},"labels":{},"assertions":{"correct":{"name":"correct","value":true,"reason":null,"source":{"name":"SimpleEvaluator","arguments":null}}},"task_duration":1.0,"total_duration":6.0,"trace_id":"00000000000000000000000000000001","span_id":"0000000000000003"},{"name":"case2","inputs":{"query":"What is the capital of France?"},"metadata":{"difficulty":"medium","category":"geography"},"expected_output":{"answer":"Paris","confidence":1.0},"output":{"answer":"Paris","confidence":1.0},"metrics":{},"attributes":{},"scores":{"confidence":{"name":"confidence","value":1.0,"reason":null,"source":{"name":"SimpleEvaluator","arguments":null}}},"labels":{},"assertions":{"correct":{"name":"correct","value":true,"reason":null,"source":{"name":"SimpleEvaluator","arguments":null}}},"task_duration":1.0,"total_duration":4.0,"trace_id":"00000000000000000000000000000001","span_id":"0000000000000007"}]',
-                    'averages': '{"name":"Averages","scores":{"confidence":1.0},"labels":{},"metrics":{},"assertions":1.0,"task_duration":1.0,"total_duration":5.0}',
-                    'logfire.json_schema': '{"type":"object","properties":{"name":{},"cases":{"type":"array"},"averages":{"type":"object"}}}',
+                    'cases': [
+                        {
+                            'name': 'case1',
+                            'inputs': {'query': 'What is 2+2?'},
+                            'metadata': {'difficulty': 'easy', 'category': 'general'},
+                            'expected_output': {'answer': '4', 'confidence': 1.0},
+                            'output': {'answer': '4', 'confidence': 1.0},
+                            'metrics': {},
+                            'attributes': {},
+                            'scores': {
+                                'confidence': {
+                                    'name': 'confidence',
+                                    'value': 1.0,
+                                    'reason': None,
+                                    'source': {'name': 'SimpleEvaluator', 'arguments': None},
+                                }
+                            },
+                            'labels': {},
+                            'assertions': {
+                                'correct': {
+                                    'name': 'correct',
+                                    'value': True,
+                                    'reason': None,
+                                    'source': {'name': 'SimpleEvaluator', 'arguments': None},
+                                }
+                            },
+                            'task_duration': 1.0,
+                            'total_duration': 6.0,
+                            'trace_id': '00000000000000000000000000000001',
+                            'span_id': '0000000000000003',
+                        },
+                        {
+                            'name': 'case2',
+                            'inputs': {'query': 'What is the capital of France?'},
+                            'metadata': {'difficulty': 'medium', 'category': 'geography'},
+                            'expected_output': {'answer': 'Paris', 'confidence': 1.0},
+                            'output': {'answer': 'Paris', 'confidence': 1.0},
+                            'metrics': {},
+                            'attributes': {},
+                            'scores': {
+                                'confidence': {
+                                    'name': 'confidence',
+                                    'value': 1.0,
+                                    'reason': None,
+                                    'source': {'name': 'SimpleEvaluator', 'arguments': None},
+                                }
+                            },
+                            'labels': {},
+                            'assertions': {
+                                'correct': {
+                                    'name': 'correct',
+                                    'value': True,
+                                    'reason': None,
+                                    'source': {'name': 'SimpleEvaluator', 'arguments': None},
+                                }
+                            },
+                            'task_duration': 1.0,
+                            'total_duration': 4.0,
+                            'trace_id': '00000000000000000000000000000001',
+                            'span_id': '0000000000000007',
+                        },
+                    ],
+                    'averages': {
+                        'name': 'Averages',
+                        'scores': {'confidence': 1.0},
+                        'labels': {},
+                        'metrics': {},
+                        'assertions': 1.0,
+                        'task_duration': 1.0,
+                        'total_duration': 5.0,
+                    },
+                    'logfire.json_schema': {
+                        'type': 'object',
+                        'properties': {'name': {}, 'cases': {'type': 'array'}, 'averages': {'type': 'object'}},
+                    },
                 },
             ),
             (
@@ -1198,20 +1272,58 @@ async def test_evaluate_async_logfire(
                 {
                     'task_name': 'mock_async_task',
                     'case_name': 'case1',
-                    'inputs': '{"query":"What is 2+2?"}',
-                    'metadata': '{"difficulty":"easy","category":"general"}',
-                    'expected_output': '{"answer":"4","confidence":1.0}',
+                    'inputs': {'query': 'What is 2+2?'},
+                    'metadata': {'difficulty': 'easy', 'category': 'general'},
+                    'expected_output': {'answer': '4', 'confidence': 1.0},
                     'logfire.msg_template': 'case: {case_name}',
                     'logfire.msg': 'case: case1',
                     'logfire.span_type': 'span',
-                    'output': '{"answer":"4","confidence":1.0}',
+                    'output': {'answer': '4', 'confidence': 1.0},
                     'task_duration': 1.0,
-                    'metrics': '{}',
-                    'attributes': '{}',
-                    'assertions': '{"correct":{"name":"correct","value":true,"reason":null,"source":{"name":"SimpleEvaluator","arguments":null}}}',
-                    'scores': '{"confidence":{"name":"confidence","value":1.0,"reason":null,"source":{"name":"SimpleEvaluator","arguments":null}}}',
-                    'labels': '{}',
-                    'logfire.json_schema': '{"type":"object","properties":{"task_name":{},"case_name":{},"inputs":{"type":"object","title":"TaskInput","x-python-datatype":"PydanticModel"},"metadata":{"type":"object","title":"TaskMetadata","x-python-datatype":"PydanticModel"},"expected_output":{"type":"object","title":"TaskOutput","x-python-datatype":"PydanticModel"},"output":{"type":"object","title":"TaskOutput","x-python-datatype":"PydanticModel"},"task_duration":{},"metrics":{"type":"object"},"attributes":{"type":"object"},"assertions":{"type":"object"},"scores":{"type":"object"},"labels":{"type":"object"}}}',
+                    'metrics': {},
+                    'attributes': {},
+                    'assertions': {
+                        'correct': {
+                            'name': 'correct',
+                            'value': True,
+                            'reason': None,
+                            'source': {'name': 'SimpleEvaluator', 'arguments': None},
+                        }
+                    },
+                    'scores': {
+                        'confidence': {
+                            'name': 'confidence',
+                            'value': 1.0,
+                            'reason': None,
+                            'source': {'name': 'SimpleEvaluator', 'arguments': None},
+                        }
+                    },
+                    'labels': {},
+                    'logfire.json_schema': {
+                        'type': 'object',
+                        'properties': {
+                            'task_name': {},
+                            'case_name': {},
+                            'inputs': {'type': 'object', 'title': 'TaskInput', 'x-python-datatype': 'PydanticModel'},
+                            'metadata': {
+                                'type': 'object',
+                                'title': 'TaskMetadata',
+                                'x-python-datatype': 'PydanticModel',
+                            },
+                            'expected_output': {
+                                'type': 'object',
+                                'title': 'TaskOutput',
+                                'x-python-datatype': 'PydanticModel',
+                            },
+                            'output': {'type': 'object', 'title': 'TaskOutput', 'x-python-datatype': 'PydanticModel'},
+                            'task_duration': {},
+                            'metrics': {'type': 'object'},
+                            'attributes': {'type': 'object'},
+                            'assertions': {'type': 'object'},
+                            'scores': {'type': 'object'},
+                            'labels': {'type': 'object'},
+                        },
+                    },
                 },
             ),
             (
@@ -1220,7 +1332,7 @@ async def test_evaluate_async_logfire(
                     'task': 'mock_async_task',
                     'logfire.msg_template': 'execute {task}',
                     'logfire.msg': 'execute mock_async_task',
-                    'logfire.json_schema': '{"type":"object","properties":{"task":{}}}',
+                    'logfire.json_schema': {'type': 'object', 'properties': {'task': {}}},
                     'logfire.span_type': 'span',
                 },
             ),
@@ -1229,20 +1341,58 @@ async def test_evaluate_async_logfire(
                 {
                     'task_name': 'mock_async_task',
                     'case_name': 'case2',
-                    'inputs': '{"query":"What is the capital of France?"}',
-                    'metadata': '{"difficulty":"medium","category":"geography"}',
-                    'expected_output': '{"answer":"Paris","confidence":1.0}',
+                    'inputs': {'query': 'What is the capital of France?'},
+                    'metadata': {'difficulty': 'medium', 'category': 'geography'},
+                    'expected_output': {'answer': 'Paris', 'confidence': 1.0},
                     'logfire.msg_template': 'case: {case_name}',
                     'logfire.msg': 'case: case2',
                     'logfire.span_type': 'span',
-                    'output': '{"answer":"Paris","confidence":1.0}',
+                    'output': {'answer': 'Paris', 'confidence': 1.0},
                     'task_duration': 1.0,
-                    'metrics': '{}',
-                    'attributes': '{}',
-                    'assertions': '{"correct":{"name":"correct","value":true,"reason":null,"source":{"name":"SimpleEvaluator","arguments":null}}}',
-                    'scores': '{"confidence":{"name":"confidence","value":1.0,"reason":null,"source":{"name":"SimpleEvaluator","arguments":null}}}',
-                    'labels': '{}',
-                    'logfire.json_schema': '{"type":"object","properties":{"task_name":{},"case_name":{},"inputs":{"type":"object","title":"TaskInput","x-python-datatype":"PydanticModel"},"metadata":{"type":"object","title":"TaskMetadata","x-python-datatype":"PydanticModel"},"expected_output":{"type":"object","title":"TaskOutput","x-python-datatype":"PydanticModel"},"output":{"type":"object","title":"TaskOutput","x-python-datatype":"PydanticModel"},"task_duration":{},"metrics":{"type":"object"},"attributes":{"type":"object"},"assertions":{"type":"object"},"scores":{"type":"object"},"labels":{"type":"object"}}}',
+                    'metrics': {},
+                    'attributes': {},
+                    'assertions': {
+                        'correct': {
+                            'name': 'correct',
+                            'value': True,
+                            'reason': None,
+                            'source': {'name': 'SimpleEvaluator', 'arguments': None},
+                        }
+                    },
+                    'scores': {
+                        'confidence': {
+                            'name': 'confidence',
+                            'value': 1.0,
+                            'reason': None,
+                            'source': {'name': 'SimpleEvaluator', 'arguments': None},
+                        }
+                    },
+                    'labels': {},
+                    'logfire.json_schema': {
+                        'type': 'object',
+                        'properties': {
+                            'task_name': {},
+                            'case_name': {},
+                            'inputs': {'type': 'object', 'title': 'TaskInput', 'x-python-datatype': 'PydanticModel'},
+                            'metadata': {
+                                'type': 'object',
+                                'title': 'TaskMetadata',
+                                'x-python-datatype': 'PydanticModel',
+                            },
+                            'expected_output': {
+                                'type': 'object',
+                                'title': 'TaskOutput',
+                                'x-python-datatype': 'PydanticModel',
+                            },
+                            'output': {'type': 'object', 'title': 'TaskOutput', 'x-python-datatype': 'PydanticModel'},
+                            'task_duration': {},
+                            'metrics': {'type': 'object'},
+                            'attributes': {'type': 'object'},
+                            'assertions': {'type': 'object'},
+                            'scores': {'type': 'object'},
+                            'labels': {'type': 'object'},
+                        },
+                    },
                 },
             ),
             (
@@ -1251,7 +1401,7 @@ async def test_evaluate_async_logfire(
                     'task': 'mock_async_task',
                     'logfire.msg_template': 'execute {task}',
                     'logfire.msg': 'execute mock_async_task',
-                    'logfire.json_schema': '{"type":"object","properties":{"task":{}}}',
+                    'logfire.json_schema': {'type': 'object', 'properties': {'task': {}}},
                     'logfire.span_type': 'span',
                 },
             ),

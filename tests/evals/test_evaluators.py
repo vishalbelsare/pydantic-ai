@@ -5,7 +5,6 @@ from typing import TYPE_CHECKING, Any, cast
 
 import pytest
 from inline_snapshot import snapshot
-from logfire.testing import CaptureLogfire
 from pydantic import BaseModel, TypeAdapter
 from pydantic_core import to_jsonable_python
 

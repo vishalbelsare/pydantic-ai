@@ -1238,10 +1238,10 @@ class OpenAIResponsesStreamedResponse(StreamedResponse):
         return self._timestamp
 
 
-def _map_usage(response: chat.ChatCompletion | ChatCompletionChunk | responses.Response) -> usage.RequestUsage:
+def _map_usage(response: chat.ChatCompletion | ChatCompletionChunk | responses.Response) -> usage.Usage:
     response_usage = response.usage
     if response_usage is None:
-        return usage.RequestUsage()
+        return usage.Usage(requests=1)
     elif isinstance(response_usage, responses.ResponseUsage):
         details: dict[str, int] = {
             key: value
@@ -1251,7 +1251,8 @@ def _map_usage(response: chat.ChatCompletion | ChatCompletionChunk | responses.R
             if isinstance(value, int)
         }
         details['reasoning_tokens'] = response_usage.output_tokens_details.reasoning_tokens
-        return usage.RequestUsage(
+        return usage.Usage(
+            requests=1,
             input_tokens=response_usage.input_tokens,
             output_tokens=response_usage.output_tokens,
             cache_read_tokens=response_usage.input_tokens_details.cached_tokens,
@@ -1265,7 +1266,8 @@ def _map_usage(response: chat.ChatCompletion | ChatCompletionChunk | responses.R
             ).items()
             if isinstance(value, int)
         }
-        u = usage.RequestUsage(
+        u = usage.Usage(
+            requests=1,
             input_tokens=response_usage.prompt_tokens,
             output_tokens=response_usage.completion_tokens,
             details=details,

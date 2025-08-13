@@ -300,10 +300,12 @@ class CohereModel(Model):
                 assert_never(part)
 
 
-def _map_usage(response: V2ChatResponse) -> usage.RequestUsage:
+def _map_usage(response: V2ChatResponse) -> usage.Usage:
     u = response.usage
     if u is None:
-        return usage.RequestUsage()
+        return usage.Usage(
+            requests=1,
+        )
     else:
         details: dict[str, int] = {}
         if u.billed_units is not None:
@@ -318,7 +320,8 @@ def _map_usage(response: V2ChatResponse) -> usage.RequestUsage:
 
         request_tokens = int(u.tokens.input_tokens) if u.tokens and u.tokens.input_tokens else 0
         response_tokens = int(u.tokens.output_tokens) if u.tokens and u.tokens.output_tokens else 0
-        return usage.RequestUsage(
+        return usage.Usage(
+            requests=1,
             input_tokens=request_tokens,
             output_tokens=response_tokens,
             details=details,

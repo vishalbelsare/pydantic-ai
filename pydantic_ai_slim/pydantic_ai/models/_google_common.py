@@ -43,9 +43,9 @@ class GeminiUsageMetaData(TypedDict, total=False):
     ]
 
 
-def metadata_as_request_usage(metadata: GeminiUsageMetaData | None) -> usage.RequestUsage:
+def metadata_as_request_usage(metadata: GeminiUsageMetaData | None) -> usage.Usage:
     if metadata is None:
-        return usage.RequestUsage()
+        return usage.Usage(requests=1)
     details: dict[str, int] = {}
     if cached_content_token_count := metadata.get('cached_content_token_count', 0):
         details['cached_content_tokens'] = cached_content_token_count
@@ -74,7 +74,8 @@ def metadata_as_request_usage(metadata: GeminiUsageMetaData | None) -> usage.Req
                     elif key == 'cache_tokens_details':  # pragma: no branch
                         cache_audio_read_tokens = value
 
-    return usage.RequestUsage(
+    return usage.Usage(
+        requests=1,
         input_tokens=metadata.get('prompt_token_count', 0),
         output_tokens=metadata.get('candidates_token_count', 0),
         cache_read_tokens=cached_content_token_count,

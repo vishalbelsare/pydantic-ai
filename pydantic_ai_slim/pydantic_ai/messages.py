@@ -20,7 +20,7 @@ from ._utils import (
     now_utc as _now_utc,
 )
 from .exceptions import UnexpectedModelBehavior
-from .usage import RequestUsage
+from .usage import Usage
 
 if TYPE_CHECKING:
     from .models.instrumented import InstrumentationSettings
@@ -831,7 +831,7 @@ class ModelResponse:
     parts: list[ModelResponsePart]
     """The parts of the model message."""
 
-    usage: RequestUsage = field(default_factory=RequestUsage)
+    usage: Usage = field(default_factory=Usage)
     """Usage information for the request.
 
     This has a default to make tests easier, and to support loading old messages where usage will be missing.

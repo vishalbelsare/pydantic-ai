@@ -20,7 +20,7 @@ from pydantic_ai.messages import (
     VideoUrl,
 )
 from pydantic_ai.models.gemini import GeminiModel, GeminiModelSettings
-from pydantic_ai.usage import RequestUsage
+from pydantic_ai.usage import Usage
 
 from ..conftest import IsDatetime, IsInstance, IsStr, try_import
 
@@ -145,7 +145,7 @@ async def test_url_input(
             ),
             ModelResponse(
                 parts=[TextPart(content=Is(expected_output))],
-                usage=IsInstance(RequestUsage),
+                usage=IsInstance(Usage),
                 model_name='gemini-2.0-flash',
                 timestamp=IsDatetime(),
                 provider_details={'finish_reason': 'STOP'},
@@ -182,7 +182,7 @@ async def test_url_input_force_download(allow_model_requests: None) -> None:  # 
             ),
             ModelResponse(
                 parts=[TextPart(content=Is(output))],
-                usage=IsInstance(RequestUsage),
+                usage=IsInstance(Usage),
                 model_name='gemini-2.0-flash',
                 timestamp=IsDatetime(),
                 provider_details={'finish_reason': 'STOP'},

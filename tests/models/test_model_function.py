@@ -22,8 +22,7 @@ from pydantic_ai.messages import (
 )
 from pydantic_ai.models.function import AgentInfo, DeltaToolCall, DeltaToolCalls, FunctionModel
 from pydantic_ai.models.test import TestModel
-from pydantic_ai.result import RunUsage
-from pydantic_ai.usage import RequestUsage
+from pydantic_ai.usage import Usage
 
 from ..conftest import IsNow, IsStr
 
@@ -67,7 +66,7 @@ def test_simple():
             ModelRequest(parts=[UserPromptPart(content='Hello', timestamp=IsNow(tz=timezone.utc))]),
             ModelResponse(
                 parts=[TextPart(content="content='Hello' part_kind='user-prompt' message_count=1")],
-                usage=RequestUsage(input_tokens=51, output_tokens=3),
+                usage=Usage(requests=1, input_tokens=51, output_tokens=3),
                 model_name='function:return_last:',
                 timestamp=IsNow(tz=timezone.utc),
             ),
@@ -81,14 +80,14 @@ def test_simple():
             ModelRequest(parts=[UserPromptPart(content='Hello', timestamp=IsNow(tz=timezone.utc))]),
             ModelResponse(
                 parts=[TextPart(content="content='Hello' part_kind='user-prompt' message_count=1")],
-                usage=RequestUsage(input_tokens=51, output_tokens=3),
+                usage=Usage(requests=1, input_tokens=51, output_tokens=3),
                 model_name='function:return_last:',
                 timestamp=IsNow(tz=timezone.utc),
             ),
             ModelRequest(parts=[UserPromptPart(content='World', timestamp=IsNow(tz=timezone.utc))]),
             ModelResponse(
                 parts=[TextPart(content="content='World' part_kind='user-prompt' message_count=3")],
-                usage=RequestUsage(input_tokens=52, output_tokens=6),
+                usage=Usage(requests=1, input_tokens=52, output_tokens=6),
                 model_name='function:return_last:',
                 timestamp=IsNow(tz=timezone.utc),
             ),
@@ -158,7 +157,7 @@ def test_weather():
                         tool_name='get_location', args='{"location_description": "London"}', tool_call_id=IsStr()
                     )
                 ],
-                usage=RequestUsage(input_tokens=51, output_tokens=5),
+                usage=Usage(requests=1, input_tokens=51, output_tokens=5),
                 model_name='function:weather_model:',
                 timestamp=IsNow(tz=timezone.utc),
             ),
@@ -174,7 +173,7 @@ def test_weather():
             ),
             ModelResponse(
                 parts=[ToolCallPart(tool_name='get_weather', args='{"lat": 51, "lng": 0}', tool_call_id=IsStr())],
-                usage=RequestUsage(input_tokens=56, output_tokens=11),
+                usage=Usage(requests=1, input_tokens=56, output_tokens=11),
                 model_name='function:weather_model:',
                 timestamp=IsNow(tz=timezone.utc),
             ),
@@ -190,7 +189,7 @@ def test_weather():
             ),
             ModelResponse(
                 parts=[TextPart(content='Raining in London')],
-                usage=RequestUsage(input_tokens=57, output_tokens=14),
+                usage=Usage(requests=1, input_tokens=57, output_tokens=14),
                 model_name='function:weather_model:',
                 timestamp=IsNow(tz=timezone.utc),
             ),
@@ -358,7 +357,7 @@ def test_call_all():
                     ToolCallPart(tool_name='qux', args={'x': 0}, tool_call_id=IsStr()),
                     ToolCallPart(tool_name='quz', args={'x': 'a'}, tool_call_id=IsStr()),
                 ],
-                usage=RequestUsage(input_tokens=52, output_tokens=21),
+                usage=Usage(requests=1, input_tokens=52, output_tokens=21),
                 model_name='test',
                 timestamp=IsNow(tz=timezone.utc),
             ),
@@ -383,7 +382,7 @@ def test_call_all():
             ),
             ModelResponse(
                 parts=[TextPart(content='{"foo":"1","bar":"2","baz":"3","qux":"4","quz":"a"}')],
-                usage=RequestUsage(input_tokens=57, output_tokens=33),
+                usage=Usage(requests=1, input_tokens=57, output_tokens=33),
                 model_name='test',
                 timestamp=IsNow(tz=timezone.utc),
             ),
@@ -452,13 +451,13 @@ async def test_stream_text():
                 ModelRequest(parts=[UserPromptPart(content='', timestamp=IsNow(tz=timezone.utc))]),
                 ModelResponse(
                     parts=[TextPart(content='hello world')],
-                    usage=RequestUsage(input_tokens=50, output_tokens=2),
+                    usage=Usage(input_tokens=50, output_tokens=2),
                     model_name='function::stream_text_function',
                     timestamp=IsNow(tz=timezone.utc),
                 ),
             ]
         )
-        assert result.usage() == snapshot(RunUsage(requests=1, input_tokens=50, output_tokens=2))
+        assert result.usage() == snapshot(Usage(input_tokens=50, output_tokens=2))
 
 
 class Foo(BaseModel):
@@ -481,8 +480,7 @@ async def test_stream_structure():
     async with agent.run_stream('') as result:
         assert await result.get_output() == snapshot(Foo(x=1))
         assert result.usage() == snapshot(
-            RunUsage(
-                requests=1,
+            Usage(
                 input_tokens=50,
                 output_tokens=4,
             )

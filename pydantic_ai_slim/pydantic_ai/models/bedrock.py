@@ -298,7 +298,8 @@ class BedrockConverseModel(Model):
                             tool_call_id=tool_use['toolUseId'],
                         ),
                     )
-        u = usage.RequestUsage(
+        u = usage.Usage(
+            requests=1,
             input_tokens=response['usage']['inputTokens'],
             output_tokens=response['usage']['outputTokens'],
         )
@@ -668,8 +669,9 @@ class BedrockStreamedResponse(StreamedResponse):
         """Get the model name of the response."""
         return self._model_name
 
-    def _map_usage(self, metadata: ConverseStreamMetadataEventTypeDef) -> usage.RequestUsage:
-        return usage.RequestUsage(
+    def _map_usage(self, metadata: ConverseStreamMetadataEventTypeDef) -> usage.Usage:
+        return usage.Usage(
+            requests=1,
             input_tokens=metadata['usage']['inputTokens'],
             output_tokens=metadata['usage']['outputTokens'],
         )

@@ -17,7 +17,7 @@ from pydantic_ai.messages import (
     UserPromptPart,
 )
 from pydantic_ai.models.test import TestModel
-from pydantic_ai.usage import RequestUsage, RunUsage, UsageLimits
+from pydantic_ai.usage import Usage, UsageLimits
 
 from .conftest import IsNow, IsStr
 
@@ -98,7 +98,7 @@ async def test_streamed_text_limits() -> None:
                                 tool_call_id=IsStr(),
                             )
                         ],
-                        usage=RequestUsage(input_tokens=51),
+                        usage=Usage(requests=1, input_tokens=51),
                         model_name='test',
                         timestamp=IsNow(tz=timezone.utc),
                     ),
@@ -115,7 +115,7 @@ async def test_streamed_text_limits() -> None:
                 ]
             )
             assert result.usage() == snapshot(
-                RunUsage(
+                Usage(
                     requests=2,
                     input_tokens=103,
                     output_tokens=5,
@@ -135,7 +135,7 @@ def test_usage_so_far() -> None:
         test_agent.run_sync(
             'Hello, this prompt exceeds the request tokens limit.',
             usage_limits=UsageLimits(total_tokens_limit=105),
-            usage=RunUsage(input_tokens=50, output_tokens=50),
+            usage=Usage(input_tokens=50, output_tokens=50),
         )
 
 
@@ -143,20 +143,20 @@ async def test_multi_agent_usage_no_incr():
     delegate_agent = Agent(TestModel(), output_type=int)
 
     controller_agent1 = Agent(TestModel())
-    run_1_usages: list[RunUsage] = []
+    run_1_usages: list[Usage] = []
 
     @controller_agent1.tool
     async def delegate_to_other_agent1(ctx: RunContext[None], sentence: str) -> int:
         delegate_result = await delegate_agent.run(sentence)
         delegate_usage = delegate_result.usage()
         run_1_usages.append(delegate_usage)
-        assert delegate_usage == snapshot(RunUsage(requests=1, input_tokens=51, output_tokens=4))
+        assert delegate_usage == snapshot(Usage(requests=1, input_tokens=51, output_tokens=4))
         return delegate_result.output
 
     result1 = await controller_agent1.run('foobar')
     assert result1.output == snapshot('{"delegate_to_other_agent1":0}')
     run_1_usages.append(result1.usage())
-    assert result1.usage() == snapshot(RunUsage(requests=2, input_tokens=103, output_tokens=13))
+    assert result1.usage() == snapshot(Usage(requests=2, input_tokens=103, output_tokens=13))
 
     controller_agent2 = Agent(TestModel())
 
@@ -164,12 +164,12 @@ async def test_multi_agent_usage_no_incr():
     async def delegate_to_other_agent2(ctx: RunContext[None], sentence: str) -> int:
         delegate_result = await delegate_agent.run(sentence, usage=ctx.usage)
         delegate_usage = delegate_result.usage()
-        assert delegate_usage == snapshot(RunUsage(requests=2, input_tokens=102, output_tokens=9))
+        assert delegate_usage == snapshot(Usage(requests=2, input_tokens=102, output_tokens=9))
         return delegate_result.output
 
     result2 = await controller_agent2.run('foobar')
     assert result2.output == snapshot('{"delegate_to_other_agent2":0}')
-    assert result2.usage() == snapshot(RunUsage(requests=3, input_tokens=154, output_tokens=17))
+    assert result2.usage() == snapshot(Usage(requests=3, input_tokens=154, output_tokens=17))
 
     # confirm the usage from result2 is the sum of the usage from result1
     assert result2.usage() == functools.reduce(operator.add, run_1_usages)
@@ -190,23 +190,34 @@ async def test_multi_agent_usage_sync():
 
     @controller_agent.tool
     def delegate_to_other_agent(ctx: RunContext[None], sentence: str) -> int:
-        new_usage = RunUsage(requests=5, input_tokens=2, output_tokens=3)
+        new_usage = Usage(requests=5, input_tokens=2, output_tokens=3)
         ctx.usage.incr(new_usage)
         return 0
 
     result = await controller_agent.run('foobar')
     assert result.output == snapshot('{"delegate_to_other_agent":0}')
-    assert result.usage() == snapshot(RunUsage(requests=7, input_tokens=105, output_tokens=16))
+    assert result.usage() == snapshot(Usage(requests=7, input_tokens=105, output_tokens=16))
 
 
 def test_request_usage_basics():
-    usage = RequestUsage()
-    assert usage.output_audio_tokens == 0
-    assert usage.requests == 1
+    usage = Usage()
+    assert usage.__dict__ == snapshot(
+        {
+            'requests': 0,
+            'input_tokens': 0,
+            'cache_write_tokens': 0,
+            'cache_read_tokens': 0,
+            'input_audio_tokens': 0,
+            'cache_audio_read_tokens': 0,
+            'output_audio_tokens': 0,
+            'output_tokens': 0,
+            'details': {},
+        }
+    )
 
 
 def test_add_usages():
-    usage = RunUsage(
+    usage = Usage(
         requests=2,
         input_tokens=10,
         output_tokens=20,
@@ -220,7 +231,7 @@ def test_add_usages():
         },
     )
     assert usage + usage == snapshot(
-        RunUsage(
+        Usage(
             requests=4,
             input_tokens=20,
             output_tokens=40,
@@ -231,5 +242,5 @@ def test_add_usages():
             details={'custom1': 20, 'custom2': 40},
         )
     )
-    assert usage + RunUsage() == usage
-    assert RunUsage() + RunUsage() == RunUsage()
+    assert usage + Usage() == usage
+    assert Usage() + Usage() == Usage()

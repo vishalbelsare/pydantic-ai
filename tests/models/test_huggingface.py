@@ -36,10 +36,9 @@ from pydantic_ai.messages import (
     UserPromptPart,
     VideoUrl,
 )
-from pydantic_ai.result import RunUsage
 from pydantic_ai.settings import ModelSettings
 from pydantic_ai.tools import RunContext
-from pydantic_ai.usage import RequestUsage
+from pydantic_ai.usage import Usage
 
 from ..conftest import IsDatetime, IsInstance, IsNow, IsStr, raise_if_exception, try_import
 from .mock_async_stream import MockAsyncStream
@@ -168,7 +167,7 @@ async def test_simple_completion(allow_model_requests: None, huggingface_api_key
                     content='Hello! How can I assist you today? Feel free to ask me any questions or let me know if you need help with anything specific.'
                 )
             ],
-            usage=RequestUsage(input_tokens=30, output_tokens=29),
+            usage=Usage(requests=1, input_tokens=30, output_tokens=29),
             model_name='Qwen/Qwen2.5-72B-Instruct-fast',
             timestamp=datetime(2025, 7, 8, 13, 42, 33, tzinfo=timezone.utc),
             provider_request_id='chatcmpl-d445c0d473a84791af2acf356cc00df7',
@@ -189,7 +188,7 @@ async def test_request_simple_usage(allow_model_requests: None, huggingface_api_
         result.output
         == "Hello! It's great to meet you. How can I assist you today? Whether you have any questions, need some advice, or just want to chat, feel free to let me know!"
     )
-    assert result.usage() == snapshot(RunUsage(requests=1, input_tokens=30, output_tokens=40))
+    assert result.usage() == snapshot(Usage(requests=1, input_tokens=30, output_tokens=40))
 
 
 async def test_request_structured_response(
@@ -236,6 +235,7 @@ async def test_request_structured_response(
                     tool_call_id='123',
                 )
             ],
+            usage=Usage(requests=1),
             model_name='hf-model',
             timestamp=datetime(2024, 1, 1, tzinfo=timezone.utc),
             provider_request_id='123',
@@ -367,7 +367,7 @@ async def test_request_tool_call(allow_model_requests: None):
                         tool_call_id='1',
                     )
                 ],
-                usage=RequestUsage(input_tokens=1, output_tokens=1),
+                usage=Usage(requests=1, input_tokens=1, output_tokens=1),
                 model_name='hf-model',
                 timestamp=datetime(2024, 1, 1, 0, 0, tzinfo=timezone.utc),
                 provider_request_id='123',
@@ -390,7 +390,7 @@ async def test_request_tool_call(allow_model_requests: None):
                         tool_call_id='2',
                     )
                 ],
-                usage=RequestUsage(input_tokens=2, output_tokens=1),
+                usage=Usage(requests=1, input_tokens=2, output_tokens=1),
                 model_name='hf-model',
                 timestamp=datetime(2024, 1, 1, 0, 0, tzinfo=timezone.utc),
                 provider_request_id='123',
@@ -407,6 +407,7 @@ async def test_request_tool_call(allow_model_requests: None):
             ),
             ModelResponse(
                 parts=[TextPart(content='final response')],
+                usage=Usage(requests=1),
                 model_name='hf-model',
                 timestamp=datetime(2024, 1, 1, 0, 0, tzinfo=timezone.utc),
                 provider_request_id='123',
@@ -450,7 +451,7 @@ async def test_stream_text(allow_model_requests: None):
         assert not result.is_complete
         assert [c async for c in result.stream_text(debounce_by=None)] == snapshot(['hello ', 'hello world'])
         assert result.is_complete
-        assert result.usage() == snapshot(RunUsage(requests=1, input_tokens=6, output_tokens=3))
+        assert result.usage() == snapshot(Usage(requests=3, input_tokens=6, output_tokens=3))
 
 
 async def test_stream_text_finish_reason(allow_model_requests: None):
@@ -560,7 +561,7 @@ async def test_stream_structured(allow_model_requests: None):
             ]
         )
         assert result.is_complete
-        assert result.usage() == snapshot(RunUsage(requests=1, input_tokens=20, output_tokens=10))
+        assert result.usage() == snapshot(Usage(requests=10, input_tokens=20, output_tokens=10))
         # double check usage matches stream count
         assert result.usage().output_tokens == len(stream)
 
@@ -619,7 +620,7 @@ async def test_no_delta(allow_model_requests: None):
         assert not result.is_complete
         assert [c async for c in result.stream_text(debounce_by=None)] == snapshot(['hello ', 'hello world'])
         assert result.is_complete
-        assert result.usage() == snapshot(RunUsage(requests=1, input_tokens=6, output_tokens=3))
+        assert result.usage() == snapshot(Usage(requests=3, input_tokens=6, output_tokens=3))
 
 
 @pytest.mark.vcr()
@@ -653,7 +654,7 @@ async def test_image_url_input(allow_model_requests: None, huggingface_api_key: 
             ),
             ModelResponse(
                 parts=[TextPart(content='Hello! How can I assist you with this image of a potato?')],
-                usage=RequestUsage(input_tokens=269, output_tokens=15),
+                usage=Usage(requests=1, input_tokens=269, output_tokens=15),
                 model_name='Qwen/Qwen2.5-VL-72B-Instruct',
                 timestamp=datetime(2025, 7, 8, 14, 4, 39, tzinfo=timezone.utc),
                 provider_request_id='chatcmpl-49aa100effab4ca28514d5ccc00d7944',
@@ -719,7 +720,7 @@ async def test_hf_model_instructions(allow_model_requests: None, huggingface_api
             ),
             ModelResponse(
                 parts=[TextPart(content='Paris')],
-                usage=RequestUsage(input_tokens=26, output_tokens=2),
+                usage=Usage(requests=1, input_tokens=26, output_tokens=2),
                 model_name='Qwen/Qwen2.5-72B-Instruct-fast',
                 timestamp=IsDatetime(),
                 provider_request_id='chatcmpl-b3936940372c481b8d886e596dc75524',
@@ -811,6 +812,7 @@ async def test_retry_prompt_without_tool_name(allow_model_requests: None):
             ModelRequest(parts=[UserPromptPart(content='Hello', timestamp=IsNow(tz=timezone.utc))]),
             ModelResponse(
                 parts=[TextPart(content='invalid-response')],
+                usage=Usage(requests=1),
                 model_name='hf-model',
                 timestamp=datetime(2024, 1, 1, 0, 0, tzinfo=timezone.utc),
                 provider_request_id='123',
@@ -827,6 +829,7 @@ async def test_retry_prompt_without_tool_name(allow_model_requests: None):
             ),
             ModelResponse(
                 parts=[TextPart(content='final-response')],
+                usage=Usage(requests=1),
                 model_name='hf-model',
                 timestamp=datetime(2024, 1, 1, 0, 0, tzinfo=timezone.utc),
                 provider_request_id='123',
@@ -956,7 +959,7 @@ async def test_hf_model_thinking_part(allow_model_requests: None, huggingface_ap
                     IsInstance(ThinkingPart),
                     IsInstance(TextPart),
                 ],
-                usage=RequestUsage(input_tokens=15, output_tokens=1090),
+                usage=Usage(requests=1, input_tokens=15, output_tokens=1090),
                 model_name='Qwen/Qwen3-235B-A22B',
                 timestamp=IsDatetime(),
                 provider_request_id='chatcmpl-957db61fe60d4440bcfe1f11f2c5b4b9',
@@ -979,7 +982,7 @@ async def test_hf_model_thinking_part(allow_model_requests: None, huggingface_ap
                     IsInstance(ThinkingPart),
                     IsInstance(TextPart),
                 ],
-                usage=RequestUsage(input_tokens=15, output_tokens=1090),
+                usage=Usage(requests=1, input_tokens=15, output_tokens=1090),
                 model_name='Qwen/Qwen3-235B-A22B',
                 timestamp=IsDatetime(),
                 provider_request_id='chatcmpl-957db61fe60d4440bcfe1f11f2c5b4b9',
@@ -997,7 +1000,7 @@ async def test_hf_model_thinking_part(allow_model_requests: None, huggingface_ap
                     IsInstance(ThinkingPart),
                     TextPart(content=IsStr()),
                 ],
-                usage=RequestUsage(input_tokens=691, output_tokens=1860),
+                usage=Usage(requests=1, input_tokens=691, output_tokens=1860),
                 model_name='Qwen/Qwen3-235B-A22B',
                 timestamp=IsDatetime(),
                 provider_request_id='chatcmpl-35fdec1307634f94a39f7e26f52e12a7',

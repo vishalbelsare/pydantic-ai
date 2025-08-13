@@ -95,7 +95,7 @@ print(dice_result.all_messages())
                 tool_name='roll_dice', args={}, tool_call_id='pyd_ai_tool_call_id'
             )
         ],
-        usage=RequestUsage(input_tokens=90, output_tokens=2),
+        usage=Usage(requests=1, input_tokens=90, output_tokens=2),
         model_name='gemini-1.5-flash',
         timestamp=datetime.datetime(...),
     ),
@@ -115,7 +115,7 @@ print(dice_result.all_messages())
                 tool_name='get_player_name', args={}, tool_call_id='pyd_ai_tool_call_id'
             )
         ],
-        usage=RequestUsage(input_tokens=91, output_tokens=4),
+        usage=Usage(requests=1, input_tokens=91, output_tokens=4),
         model_name='gemini-1.5-flash',
         timestamp=datetime.datetime(...),
     ),
@@ -135,7 +135,7 @@ print(dice_result.all_messages())
                 content="Congratulations Anne, you guessed correctly! You're a winner!"
             )
         ],
-        usage=RequestUsage(input_tokens=92, output_tokens=12),
+        usage=Usage(requests=1, input_tokens=92, output_tokens=12),
         model_name='gemini-1.5-flash',
         timestamp=datetime.datetime(...),
     ),

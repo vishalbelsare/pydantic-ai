@@ -76,7 +76,7 @@ class GraphAgentState:
     """State kept across the execution of the agent graph."""
 
     message_history: list[_messages.ModelMessage]
-    usage: _usage.RunUsage
+    usage: _usage.Usage
     retries: int
     run_step: int
 
@@ -375,7 +375,7 @@ class ModelRequestNode(AgentNode[DepsT, NodeRunEndT]):
         response: _messages.ModelResponse,
     ) -> CallToolsNode[DepsT, NodeRunEndT]:
         # Update usage
-        ctx.state.usage.incr(response.usage)
+        ctx.state.usage.incr(response.usage + _usage.Usage(requests=-response.usage.requests))
         if ctx.deps.usage_limits:  # pragma: no branch
             ctx.deps.usage_limits.check_tokens(ctx.state.usage)
 

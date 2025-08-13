@@ -31,7 +31,7 @@ from ..messages import (
 from ..profiles import ModelProfileSpec
 from ..settings import ModelSettings
 from ..tools import ToolDefinition
-from ..usage import RequestUsage
+from ..usage import Usage
 from . import Model, ModelRequestParameters, StreamedResponse
 from .function import _estimate_string_tokens, _estimate_usage  # pyright: ignore[reportPrivateUsage]
 
@@ -467,6 +467,6 @@ class _JsonSchemaTestData:
         return s
 
 
-def _get_string_usage(text: str) -> RequestUsage:
+def _get_string_usage(text: str) -> Usage:
     response_tokens = _estimate_string_tokens(text)
-    return RequestUsage(output_tokens=response_tokens)
+    return Usage(output_tokens=response_tokens)

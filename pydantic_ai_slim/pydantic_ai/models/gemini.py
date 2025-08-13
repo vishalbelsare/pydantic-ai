@@ -673,7 +673,7 @@ def _function_call_part_from_call(tool: ToolCallPart) -> _GeminiFunctionCallPart
 def _process_response_from_parts(
     parts: Sequence[_GeminiPartUnion],
     model_name: GeminiModelName,
-    usage: usage.RequestUsage,
+    usage: usage.Usage,
     vendor_id: str | None,
     vendor_details: dict[str, Any] | None = None,
 ) -> ModelResponse:
@@ -824,7 +824,7 @@ class _GeminiCandidates(TypedDict):
     safety_ratings: NotRequired[Annotated[list[_GeminiSafetyRating], pydantic.Field(alias='safetyRatings')]]
 
 
-def _metadata_as_usage(response: _GeminiResponse) -> usage.RequestUsage:
+def _metadata_as_usage(response: _GeminiResponse) -> usage.Usage:
     metadata = response.get('usage_metadata')
     return metadata_as_request_usage(metadata)
 

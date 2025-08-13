@@ -34,7 +34,7 @@ from pydantic_ai.messages import (
 )
 from pydantic_ai.models import ModelRequestParameters
 from pydantic_ai.tools import ToolDefinition
-from pydantic_ai.usage import RequestUsage, RunUsage
+from pydantic_ai.usage import Usage
 
 from ..conftest import IsDatetime, IsInstance, IsStr, try_import
 
@@ -58,7 +58,7 @@ async def test_bedrock_model(allow_model_requests: None, bedrock_provider: Bedro
     assert result.output == snapshot(
         "Hello! How can I assist you today? Whether you have questions, need information, or just want to chat, I'm here to help."
     )
-    assert result.usage() == snapshot(RunUsage(requests=1, input_tokens=7, output_tokens=30))
+    assert result.usage() == snapshot(Usage(requests=1, input_tokens=7, output_tokens=30))
     assert result.all_messages() == snapshot(
         [
             ModelRequest(
@@ -79,7 +79,7 @@ async def test_bedrock_model(allow_model_requests: None, bedrock_provider: Bedro
                         content="Hello! How can I assist you today? Whether you have questions, need information, or just want to chat, I'm here to help."
                     )
                 ],
-                usage=RequestUsage(input_tokens=7, output_tokens=30),
+                usage=Usage(requests=1, input_tokens=7, output_tokens=30),
                 model_name='us.amazon.nova-micro-v1:0',
                 timestamp=IsDatetime(),
             ),
@@ -111,7 +111,7 @@ async def test_bedrock_model_structured_output(allow_model_requests: None, bedro
 
     result = await agent.run('What was the temperature in London 1st January 2022?', output_type=Response)
     assert result.output == snapshot({'temperature': '30°C', 'date': datetime.date(2022, 1, 1), 'city': 'London'})
-    assert result.usage() == snapshot(RunUsage(requests=2, input_tokens=1236, output_tokens=298))
+    assert result.usage() == snapshot(Usage(requests=2, input_tokens=1236, output_tokens=298))
     assert result.all_messages() == snapshot(
         [
             ModelRequest(
@@ -137,7 +137,7 @@ async def test_bedrock_model_structured_output(allow_model_requests: None, bedro
                         tool_call_id='tooluse_5WEci1UmQ8ifMFkUcy2gHQ',
                     ),
                 ],
-                usage=RequestUsage(input_tokens=551, output_tokens=132),
+                usage=Usage(requests=1, input_tokens=551, output_tokens=132),
                 model_name='us.amazon.nova-micro-v1:0',
                 timestamp=IsDatetime(),
             ),
@@ -162,7 +162,7 @@ async def test_bedrock_model_structured_output(allow_model_requests: None, bedro
                         tool_call_id='tooluse_9AjloJSaQDKmpPFff-2Clg',
                     ),
                 ],
-                usage=RequestUsage(input_tokens=685, output_tokens=166),
+                usage=Usage(requests=1, input_tokens=685, output_tokens=166),
                 model_name='us.amazon.nova-micro-v1:0',
                 timestamp=IsDatetime(),
             ),
@@ -262,7 +262,7 @@ async def test_bedrock_model_retry(allow_model_requests: None, bedrock_provider:
                         tool_call_id='tooluse_F8LnaCMtQ0-chKTnPhNH2g',
                     ),
                 ],
-                usage=RequestUsage(input_tokens=417, output_tokens=69),
+                usage=Usage(requests=1, input_tokens=417, output_tokens=69),
                 model_name='us.amazon.nova-micro-v1:0',
                 timestamp=IsDatetime(),
             ),
@@ -286,7 +286,7 @@ I'm sorry, but the tool I have does not support retrieving the capital of France
 """
                     )
                 ],
-                usage=RequestUsage(input_tokens=509, output_tokens=108),
+                usage=Usage(requests=1, input_tokens=509, output_tokens=108),
                 model_name='us.amazon.nova-micro-v1:0',
                 timestamp=IsDatetime(),
             ),
@@ -553,7 +553,7 @@ async def test_bedrock_model_instructions(allow_model_requests: None, bedrock_pr
                         content='The capital of France is Paris. Paris is not only the political and economic hub of the country but also a major center for culture, fashion, art, and tourism. It is renowned for its rich history, iconic landmarks such as the Eiffel Tower, Notre-Dame Cathedral, and the Louvre Museum, as well as its influence on global culture and cuisine.'
                     )
                 ],
-                usage=RequestUsage(input_tokens=13, output_tokens=71),
+                usage=Usage(requests=1, input_tokens=13, output_tokens=71),
                 model_name='us.amazon.nova-pro-v1:0',
                 timestamp=IsDatetime(),
             ),
@@ -603,7 +603,7 @@ async def test_bedrock_model_thinking_part(allow_model_requests: None, bedrock_p
             ModelRequest(parts=[UserPromptPart(content='How do I cross the street?', timestamp=IsDatetime())]),
             ModelResponse(
                 parts=[TextPart(content=IsStr()), ThinkingPart(content=IsStr())],
-                usage=RequestUsage(input_tokens=12, output_tokens=882),
+                usage=Usage(requests=1, input_tokens=12, output_tokens=882),
                 model_name='us.deepseek.r1-v1:0',
                 timestamp=IsDatetime(),
             ),
@@ -626,7 +626,7 @@ async def test_bedrock_model_thinking_part(allow_model_requests: None, bedrock_p
             ModelRequest(parts=[UserPromptPart(content='How do I cross the street?', timestamp=IsDatetime())]),
             ModelResponse(
                 parts=[IsInstance(TextPart), IsInstance(ThinkingPart)],
-                usage=RequestUsage(input_tokens=12, output_tokens=882),
+                usage=Usage(requests=1, input_tokens=12, output_tokens=882),
                 model_name='us.deepseek.r1-v1:0',
                 timestamp=IsDatetime(),
             ),
@@ -646,7 +646,7 @@ async def test_bedrock_model_thinking_part(allow_model_requests: None, bedrock_p
                     ),
                     IsInstance(TextPart),
                 ],
-                usage=RequestUsage(input_tokens=636, output_tokens=690),
+                usage=Usage(requests=1, input_tokens=636, output_tokens=690),
                 model_name='us.anthropic.claude-3-7-sonnet-20250219-v1:0',
                 timestamp=IsDatetime(),
             ),

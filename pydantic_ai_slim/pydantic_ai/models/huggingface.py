@@ -473,12 +473,13 @@ class HuggingFaceStreamedResponse(StreamedResponse):
         return self._timestamp
 
 
-def _map_usage(response: ChatCompletionOutput | ChatCompletionStreamOutput) -> usage.RequestUsage:
+def _map_usage(response: ChatCompletionOutput | ChatCompletionStreamOutput) -> usage.Usage:
     response_usage = response.usage
     if response_usage is None:
-        return usage.RequestUsage()
+        return usage.Usage(requests=1)
 
-    return usage.RequestUsage(
+    return usage.Usage(
+        requests=1,
         input_tokens=response_usage.prompt_tokens,
         output_tokens=response_usage.completion_tokens,
     )

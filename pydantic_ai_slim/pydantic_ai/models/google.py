@@ -534,7 +534,7 @@ def _content_model_response(m: ModelResponse) -> ContentDict:
 def _process_response_from_parts(
     parts: list[Part],
     model_name: GoogleModelName,
-    usage: usage.RequestUsage,
+    usage: usage.Usage,
     vendor_id: str | None,
     vendor_details: dict[str, Any] | None = None,
 ) -> ModelResponse:
@@ -591,9 +591,9 @@ def _tool_config(function_names: list[str]) -> ToolConfigDict:
     return ToolConfigDict(function_calling_config=function_calling_config)
 
 
-def _metadata_as_usage(response: GenerateContentResponse) -> usage.RequestUsage:
+def _metadata_as_usage(response: GenerateContentResponse) -> usage.Usage:
     metadata = response.usage_metadata
     if metadata is None:
-        return usage.RequestUsage()  # pragma: no cover
+        return usage.Usage(requests=1)  # pragma: no cover
     metadata = cast(GeminiUsageMetaData, metadata.model_dump(exclude_defaults=True))
     return metadata_as_request_usage(metadata)

@@ -58,7 +58,7 @@ print(result.all_messages())
                 content='Did you hear about the toothpaste scandal? They called it Colgate.'
             )
         ],
-        usage=RequestUsage(input_tokens=60, output_tokens=12),
+        usage=Usage(requests=1, input_tokens=60, output_tokens=12),
         model_name='gpt-4o',
         timestamp=datetime.datetime(...),
     ),
@@ -126,7 +126,7 @@ async def main():
                         content='Did you hear about the toothpaste scandal? They called it Colgate.'
                     )
                 ],
-                usage=RequestUsage(input_tokens=50, output_tokens=12),
+                usage=Usage(input_tokens=50, output_tokens=12),
                 model_name='gpt-4o',
                 timestamp=datetime.datetime(...),
             ),
@@ -180,7 +180,7 @@ print(result2.all_messages())
                 content='Did you hear about the toothpaste scandal? They called it Colgate.'
             )
         ],
-        usage=RequestUsage(input_tokens=60, output_tokens=12),
+        usage=Usage(requests=1, input_tokens=60, output_tokens=12),
         model_name='gpt-4o',
         timestamp=datetime.datetime(...),
     ),
@@ -198,7 +198,7 @@ print(result2.all_messages())
                 content='This is an excellent joke invented by Samuel Colvin, it needs no explanation.'
             )
         ],
-        usage=RequestUsage(input_tokens=61, output_tokens=26),
+        usage=Usage(requests=1, input_tokens=61, output_tokens=26),
         model_name='gpt-4o',
         timestamp=datetime.datetime(...),
     ),
@@ -299,7 +299,7 @@ print(result2.all_messages())
                 content='Did you hear about the toothpaste scandal? They called it Colgate.'
             )
         ],
-        usage=RequestUsage(input_tokens=60, output_tokens=12),
+        usage=Usage(requests=1, input_tokens=60, output_tokens=12),
         model_name='gpt-4o',
         timestamp=datetime.datetime(...),
     ),
@@ -317,7 +317,7 @@ print(result2.all_messages())
                 content='This is an excellent joke invented by Samuel Colvin, it needs no explanation.'
             )
         ],
-        usage=RequestUsage(input_tokens=61, output_tokens=26),
+        usage=Usage(requests=1, input_tokens=61, output_tokens=26),
         model_name='gemini-1.5-pro',
         timestamp=datetime.datetime(...),
     ),

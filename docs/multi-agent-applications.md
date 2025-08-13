@@ -53,7 +53,7 @@ result = joke_selection_agent.run_sync(
 print(result.output)
 #> Did you hear about the toothpaste scandal? They called it Colgate.
 print(result.usage())
-#> RunUsage(input_tokens=204, output_tokens=24, requests=3)
+#> Usage(requests=3, input_tokens=204, output_tokens=24)
 ```
 
 1. The "parent" or controlling agent.
@@ -144,7 +144,7 @@ async def main():
         print(result.output)
         #> Did you hear about the toothpaste scandal? They called it Colgate.
         print(result.usage())  # (6)!
-        #> RunUsage(input_tokens=309, output_tokens=32, requests=4)
+        #> Usage(requests=4, input_tokens=309, output_tokens=32)
 ```
 
 1. Define a dataclass to hold the client and API key dependencies.
@@ -188,7 +188,7 @@ from rich.prompt import Prompt
 
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.messages import ModelMessage
-from pydantic_ai.usage import RunUsage, UsageLimits
+from pydantic_ai.usage import Usage, UsageLimits
 
 
 class FlightDetails(BaseModel):
@@ -221,7 +221,7 @@ async def flight_search(
 usage_limits = UsageLimits(request_limit=15)  # (3)!
 
 
-async def find_flight(usage: RunUsage) -> Union[FlightDetails, None]:  # (4)!
+async def find_flight(usage: Usage) -> Union[FlightDetails, None]:  # (4)!
     message_history: Union[list[ModelMessage], None] = None
     for _ in range(3):
         prompt = Prompt.ask(
@@ -259,7 +259,7 @@ seat_preference_agent = Agent[None, Union[SeatPreference, Failed]](  # (5)!
 )
 
 
-async def find_seat(usage: RunUsage) -> SeatPreference:  # (6)!
+async def find_seat(usage: Usage) -> SeatPreference:  # (6)!
     message_history: Union[list[ModelMessage], None] = None
     while True:
         answer = Prompt.ask('What seat would you like?')
@@ -278,7 +278,7 @@ async def find_seat(usage: RunUsage) -> SeatPreference:  # (6)!
 
 
 async def main():  # (7)!
-    usage: RunUsage = RunUsage()
+    usage: Usage = Usage()
 
     opt_flight_details = await find_flight(usage)
     if opt_flight_details is not None:

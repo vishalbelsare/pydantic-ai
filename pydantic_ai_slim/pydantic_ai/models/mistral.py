@@ -40,7 +40,7 @@ from ..profiles import ModelProfileSpec
 from ..providers import Provider, infer_provider
 from ..settings import ModelSettings
 from ..tools import ToolDefinition
-from ..usage import RequestUsage
+from ..usage import Usage
 from . import (
     Model,
     ModelRequestParameters,
@@ -702,15 +702,16 @@ SIMPLE_JSON_TYPE_MAPPING = {
 }
 
 
-def _map_usage(response: MistralChatCompletionResponse | MistralCompletionChunk) -> RequestUsage:
+def _map_usage(response: MistralChatCompletionResponse | MistralCompletionChunk) -> Usage:
     """Maps a Mistral Completion Chunk or Chat Completion Response to a Usage."""
     if response.usage:
-        return RequestUsage(
+        return Usage(
+            requests=1,
             input_tokens=response.usage.prompt_tokens,
             output_tokens=response.usage.completion_tokens,
         )
     else:
-        return RequestUsage()  # pragma: no cover
+        return Usage(requests=1)  # pragma: no cover
 
 
 def _map_content(content: MistralOptionalNullable[MistralContent]) -> str | None:

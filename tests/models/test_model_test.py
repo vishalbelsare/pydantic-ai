@@ -30,7 +30,7 @@ from pydantic_ai.messages import (
     VideoUrl,
 )
 from pydantic_ai.models.test import TestModel, _chars, _JsonSchemaTestData  # pyright: ignore[reportPrivateUsage]
-from pydantic_ai.usage import RequestUsage, RunUsage
+from pydantic_ai.usage import Usage
 
 from ..conftest import IsNow, IsStr
 
@@ -106,7 +106,7 @@ def test_tool_retry():
             ModelRequest(parts=[UserPromptPart(content='Hello', timestamp=IsNow(tz=timezone.utc))]),
             ModelResponse(
                 parts=[ToolCallPart(tool_name='my_ret', args={'x': 0}, tool_call_id=IsStr())],
-                usage=RequestUsage(input_tokens=51, output_tokens=4),
+                usage=Usage(requests=1, input_tokens=51, output_tokens=4),
                 model_name='test',
                 timestamp=IsNow(tz=timezone.utc),
             ),
@@ -122,7 +122,7 @@ def test_tool_retry():
             ),
             ModelResponse(
                 parts=[ToolCallPart(tool_name='my_ret', args={'x': 0}, tool_call_id=IsStr())],
-                usage=RequestUsage(input_tokens=61, output_tokens=8),
+                usage=Usage(requests=1, input_tokens=61, output_tokens=8),
                 model_name='test',
                 timestamp=IsNow(tz=timezone.utc),
             ),
@@ -135,7 +135,7 @@ def test_tool_retry():
             ),
             ModelResponse(
                 parts=[TextPart(content='{"my_ret":"1"}')],
-                usage=RequestUsage(input_tokens=62, output_tokens=12),
+                usage=Usage(requests=1, input_tokens=62, output_tokens=12),
                 model_name='test',
                 timestamp=IsNow(tz=timezone.utc),
             ),
@@ -339,4 +339,4 @@ def test_different_content_input(content: AudioUrl | VideoUrl | ImageUrl | Binar
     agent = Agent()
     result = agent.run_sync(['x', content], model=TestModel(custom_output_text='custom'))
     assert result.output == snapshot('custom')
-    assert result.usage() == snapshot(RunUsage(requests=1, input_tokens=51, output_tokens=1))
+    assert result.usage() == snapshot(Usage(requests=1, input_tokens=51, output_tokens=1))

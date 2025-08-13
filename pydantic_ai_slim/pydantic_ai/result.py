@@ -27,7 +27,7 @@ from .output import (
     OutputDataT,
     ToolOutput,
 )
-from .usage import RunUsage, UsageLimits
+from .usage import Usage, UsageLimits
 
 __all__ = (
     'OutputDataT',
@@ -52,7 +52,7 @@ class AgentStream(Generic[AgentDepsT, OutputDataT]):
     _tool_manager: ToolManager[AgentDepsT]
 
     _agent_stream_iterator: AsyncIterator[AgentStreamEvent] | None = field(default=None, init=False)
-    _initial_run_ctx_usage: RunUsage = field(init=False)
+    _initial_run_ctx_usage: Usage = field(init=False)
 
     def __post_init__(self):
         self._initial_run_ctx_usage = copy(self._run_ctx.usage)
@@ -110,13 +110,13 @@ class AgentStream(Generic[AgentDepsT, OutputDataT]):
         """Get the current state of the response."""
         return self._raw_stream_response.get()
 
-    def usage(self) -> RunUsage:
+    def usage(self) -> Usage:
         """Return the usage of the whole run.
 
         !!! note
             This won't return the full usage until the stream is finished.
         """
-        return self._initial_run_ctx_usage + self._raw_stream_response.usage()
+        return self._initial_run_ctx_usage + self._raw_stream_response.usage() + Usage(requests=-1)
 
     def timestamp(self) -> datetime:
         """Get the timestamp of the response."""
@@ -382,7 +382,7 @@ class StreamedRunResult(Generic[AgentDepsT, OutputDataT]):
         await self._marked_completed(self._stream_response.get())
         return output
 
-    def usage(self) -> RunUsage:
+    def usage(self) -> Usage:
         """Return the usage of the whole run.
 
         !!! note
@@ -425,7 +425,7 @@ class FinalResult(Generic[OutputDataT]):
 def _get_usage_checking_stream_response(
     stream_response: models.StreamedResponse,
     limits: UsageLimits | None,
-    get_usage: Callable[[], RunUsage],
+    get_usage: Callable[[], Usage],
 ) -> AsyncIterator[AgentStreamEvent]:
     if limits is not None and limits.has_token_limits():
 

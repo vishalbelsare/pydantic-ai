@@ -529,7 +529,7 @@ class AnthropicModel(Model):
         }
 
 
-def _map_usage(message: BetaMessage | BetaRawMessageStreamEvent) -> usage.RequestUsage:
+def _map_usage(message: BetaMessage | BetaRawMessageStreamEvent) -> usage.Usage:
     if isinstance(message, BetaMessage):
         response_usage = message.usage
     elif isinstance(message, BetaRawMessageStartEvent):
@@ -542,7 +542,7 @@ def _map_usage(message: BetaMessage | BetaRawMessageStreamEvent) -> usage.Reques
         # - RawContentBlockStartEvent
         # - RawContentBlockDeltaEvent
         # - RawContentBlockStopEvent
-        return usage.RequestUsage()
+        return usage.Usage()
 
     # Store all integer-typed usage values in the details, except 'output_tokens' which is represented exactly by
     # `response_tokens`
@@ -557,7 +557,8 @@ def _map_usage(message: BetaMessage | BetaRawMessageStreamEvent) -> usage.Reques
     cache_read_tokens = details.get('cache_read_input_tokens', 0)
     request_tokens = details.get('input_tokens', 0) + cache_write_tokens + cache_read_tokens
 
-    return usage.RequestUsage(
+    return usage.Usage(
+        requests=1,
         input_tokens=request_tokens,
         cache_read_tokens=cache_read_tokens,
         cache_write_tokens=cache_write_tokens,

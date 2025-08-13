@@ -97,7 +97,7 @@ from pydantic_ai.messages import (
     UserPromptPart,
     ModelRequest,
 )
-from pydantic_ai.usage import RequestUsage
+from pydantic_ai.usage import Usage
 
 from fake_database import DatabaseConn
 from weather_app import run_weather_forecast, weather_agent
@@ -141,7 +141,7 @@ async def test_forecast():
                     tool_call_id=IsStr(),
                 )
             ],
-            usage=RequestUsage(
+            usage=Usage(requests=1,
                 input_tokens=71,
                 output_tokens=7,
             ),
@@ -164,7 +164,7 @@ async def test_forecast():
                     content='{"weather_forecast":"Sunny with a chance of rain"}',
                 )
             ],
-            usage=RequestUsage(
+            usage=Usage(requests=1,
                 input_tokens=77,
                 output_tokens=16,
             ),

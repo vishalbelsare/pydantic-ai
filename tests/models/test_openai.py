@@ -42,10 +42,9 @@ from pydantic_ai.output import NativeOutput, PromptedOutput, TextOutput, ToolOut
 from pydantic_ai.profiles import ModelProfile
 from pydantic_ai.profiles._json_schema import InlineDefsJsonSchemaTransformer
 from pydantic_ai.profiles.openai import OpenAIModelProfile, openai_model_profile
-from pydantic_ai.result import RunUsage
 from pydantic_ai.settings import ModelSettings
 from pydantic_ai.tools import ToolDefinition
-from pydantic_ai.usage import RequestUsage
+from pydantic_ai.usage import Usage
 
 from ..conftest import IsDatetime, IsInstance, IsNow, IsStr, TestEnv, raise_if_exception, try_import
 from .mock_async_stream import MockAsyncStream
@@ -174,19 +173,20 @@ async def test_request_simple_success(allow_model_requests: None):
 
     result = await agent.run('hello')
     assert result.output == 'world'
-    assert result.usage() == snapshot(RunUsage(requests=1))
+    assert result.usage() == snapshot(Usage(requests=1))
 
     # reset the index so we get the same response again
     mock_client.index = 0  # type: ignore
 
     result = await agent.run('hello', message_history=result.new_messages())
     assert result.output == 'world'
-    assert result.usage() == snapshot(RunUsage(requests=1))
+    assert result.usage() == snapshot(Usage(requests=1))
     assert result.all_messages() == snapshot(
         [
             ModelRequest(parts=[UserPromptPart(content='hello', timestamp=IsNow(tz=timezone.utc))]),
             ModelResponse(
                 parts=[TextPart(content='world')],
+                usage=Usage(requests=1),
                 model_name='gpt-4o-123',
                 timestamp=datetime(2024, 1, 1, 0, 0, tzinfo=timezone.utc),
                 provider_request_id='123',
@@ -194,6 +194,7 @@ async def test_request_simple_success(allow_model_requests: None):
             ModelRequest(parts=[UserPromptPart(content='hello', timestamp=IsNow(tz=timezone.utc))]),
             ModelResponse(
                 parts=[TextPart(content='world')],
+                usage=Usage(requests=1),
                 model_name='gpt-4o-123',
                 timestamp=datetime(2024, 1, 1, 0, 0, tzinfo=timezone.utc),
                 provider_request_id='123',
@@ -232,7 +233,7 @@ async def test_request_simple_usage(allow_model_requests: None):
     result = await agent.run('Hello')
     assert result.output == 'world'
     assert result.usage() == snapshot(
-        RunUsage(
+        Usage(
             requests=1,
             input_tokens=2,
             output_tokens=1,
@@ -271,6 +272,7 @@ async def test_request_structured_response(allow_model_requests: None):
                         tool_call_id='123',
                     )
                 ],
+                usage=Usage(requests=1),
                 model_name='gpt-4o-123',
                 timestamp=datetime(2024, 1, 1, tzinfo=timezone.utc),
                 provider_request_id='123',
@@ -360,7 +362,8 @@ async def test_request_tool_call(allow_model_requests: None):
                         tool_call_id='1',
                     )
                 ],
-                usage=RequestUsage(
+                usage=Usage(
+                    requests=1,
                     input_tokens=2,
                     cache_read_tokens=1,
                     output_tokens=1,
@@ -387,7 +390,8 @@ async def test_request_tool_call(allow_model_requests: None):
                         tool_call_id='2',
                     )
                 ],
-                usage=RequestUsage(
+                usage=Usage(
+                    requests=1,
                     input_tokens=3,
                     cache_read_tokens=2,
                     output_tokens=2,
@@ -408,13 +412,14 @@ async def test_request_tool_call(allow_model_requests: None):
             ),
             ModelResponse(
                 parts=[TextPart(content='final response')],
+                usage=Usage(requests=1),
                 model_name='gpt-4o-123',
                 timestamp=datetime(2024, 1, 1, tzinfo=timezone.utc),
                 provider_request_id='123',
             ),
         ]
     )
-    assert result.usage() == snapshot(RunUsage(requests=3, cache_read_tokens=3, input_tokens=5, output_tokens=3))
+    assert result.usage() == snapshot(Usage(requests=3, cache_read_tokens=3, input_tokens=5, output_tokens=3))
 
 
 FinishReason = Literal['stop', 'length', 'tool_calls', 'content_filter', 'function_call']
@@ -447,7 +452,7 @@ async def test_stream_text(allow_model_requests: None):
         assert not result.is_complete
         assert [c async for c in result.stream_text(debounce_by=None)] == snapshot(['hello ', 'hello world'])
         assert result.is_complete
-        assert result.usage() == snapshot(RunUsage(requests=1, input_tokens=6, output_tokens=3))
+        assert result.usage() == snapshot(Usage(requests=3, input_tokens=6, output_tokens=3))
 
 
 async def test_stream_text_finish_reason(allow_model_requests: None):
@@ -519,7 +524,7 @@ async def test_stream_structured(allow_model_requests: None):
             ]
         )
         assert result.is_complete
-        assert result.usage() == snapshot(RunUsage(requests=1, input_tokens=20, output_tokens=10))
+        assert result.usage() == snapshot(Usage(requests=10, input_tokens=20, output_tokens=10))
         # double check usage matches stream count
         assert result.usage().output_tokens == len(stream)
 
@@ -668,7 +673,7 @@ async def test_no_delta(allow_model_requests: None):
         assert not result.is_complete
         assert [c async for c in result.stream_text(debounce_by=None)] == snapshot(['hello ', 'hello world'])
         assert result.is_complete
-        assert result.usage() == snapshot(RunUsage(requests=1, input_tokens=6, output_tokens=3))
+        assert result.usage() == snapshot(Usage(requests=3, input_tokens=6, output_tokens=3))
 
 
 @pytest.mark.parametrize('system_prompt_role', ['system', 'developer', 'user', None])
@@ -784,7 +789,7 @@ async def test_openai_audio_url_input(allow_model_requests: None, openai_api_key
         'Yes, the phenomenon of the sun rising in the east and setting in the west is due to the rotation of the Earth. The Earth rotates on its axis from west to east, making the sun appear to rise on the eastern horizon and set in the west. This is a daily occurrence and has been a fundamental aspect of human observation and timekeeping throughout history.'
     )
     assert result.usage() == snapshot(
-        RunUsage(
+        Usage(
             input_tokens=81,
             output_tokens=72,
             input_audio_tokens=69,
@@ -832,7 +837,8 @@ async def test_image_url_tool_response(allow_model_requests: None, openai_api_ke
             ),
             ModelResponse(
                 parts=[ToolCallPart(tool_name='get_image', args='{}', tool_call_id='call_4hrT4QP9jfojtK69vGiFCFjG')],
-                usage=RequestUsage(
+                usage=Usage(
+                    requests=1,
                     input_tokens=46,
                     output_tokens=11,
                     details={
@@ -867,7 +873,8 @@ async def test_image_url_tool_response(allow_model_requests: None, openai_api_ke
             ),
             ModelResponse(
                 parts=[TextPart(content='The image shows a potato.')],
-                usage=RequestUsage(
+                usage=Usage(
+                    requests=1,
                     input_tokens=503,
                     output_tokens=8,
                     details={
@@ -908,7 +915,8 @@ async def test_image_as_binary_content_tool_response(
             ),
             ModelResponse(
                 parts=[ToolCallPart(tool_name='get_image', args='{}', tool_call_id='call_Btn0GIzGr4ugNlLmkQghQUMY')],
-                usage=RequestUsage(
+                usage=Usage(
+                    requests=1,
                     input_tokens=46,
                     output_tokens=11,
                     details={
@@ -941,7 +949,8 @@ async def test_image_as_binary_content_tool_response(
             ),
             ModelResponse(
                 parts=[TextPart(content='The image shows a kiwi fruit.')],
-                usage=RequestUsage(
+                usage=Usage(
+                    requests=1,
                     input_tokens=1185,
                     output_tokens=9,
                     details={
@@ -978,7 +987,7 @@ async def test_audio_as_binary_content_input(
     result = await agent.run(['Whose name is mentioned in the audio?', audio_content])
     assert result.output == snapshot('The name mentioned in the audio is Marcelo.')
     assert result.usage() == snapshot(
-        RunUsage(
+        Usage(
             input_tokens=64,
             output_tokens=9,
             input_audio_tokens=44,
@@ -1839,7 +1848,8 @@ async def test_openai_instructions(allow_model_requests: None, openai_api_key: s
             ),
             ModelResponse(
                 parts=[TextPart(content='The capital of France is Paris.')],
-                usage=RequestUsage(
+                usage=Usage(
+                    requests=1,
                     input_tokens=24,
                     output_tokens=8,
                     details={
@@ -1883,7 +1893,8 @@ async def test_openai_instructions_with_tool_calls_keep_instructions(allow_model
             ),
             ModelResponse(
                 parts=[ToolCallPart(tool_name='get_temperature', args='{"city":"Tokyo"}', tool_call_id=IsStr())],
-                usage=RequestUsage(
+                usage=Usage(
+                    requests=1,
                     input_tokens=50,
                     output_tokens=15,
                     details={
@@ -1907,7 +1918,8 @@ async def test_openai_instructions_with_tool_calls_keep_instructions(allow_model
             ),
             ModelResponse(
                 parts=[TextPart(content='The temperature in Tokyo is currently 20.0 degrees Celsius.')],
-                usage=RequestUsage(
+                usage=Usage(
+                    requests=1,
                     input_tokens=75,
                     output_tokens=15,
                     details={
@@ -1942,7 +1954,7 @@ async def test_openai_responses_model_thinking_part(allow_model_requests: None, 
                     ThinkingPart(content=IsStr(), id='rs_68034841ab2881918a8c210e3d988b9208c845d2be9bcdd8'),
                     IsInstance(TextPart),
                 ],
-                usage=RequestUsage(input_tokens=13, output_tokens=2050, details={'reasoning_tokens': 1664}),
+                usage=Usage(requests=1, input_tokens=13, output_tokens=2050, details={'reasoning_tokens': 1664}),
                 model_name='o3-mini-2025-01-31',
                 timestamp=IsDatetime(),
                 provider_request_id='resp_68034835d12481919c80a7fd8dbe6f7e08c845d2be9bcdd8',
@@ -1965,7 +1977,7 @@ async def test_openai_responses_model_thinking_part(allow_model_requests: None, 
                     ThinkingPart(content=IsStr(), id='rs_68034841ab2881918a8c210e3d988b9208c845d2be9bcdd8'),
                     IsInstance(TextPart),
                 ],
-                usage=RequestUsage(input_tokens=13, output_tokens=2050, details={'reasoning_tokens': 1664}),
+                usage=Usage(requests=1, input_tokens=13, output_tokens=2050, details={'reasoning_tokens': 1664}),
                 model_name='o3-mini-2025-01-31',
                 timestamp=IsDatetime(),
                 provider_request_id='resp_68034835d12481919c80a7fd8dbe6f7e08c845d2be9bcdd8',
@@ -1985,7 +1997,7 @@ async def test_openai_responses_model_thinking_part(allow_model_requests: None, 
                     ThinkingPart(content=IsStr(), id='rs_68034858dc588191bc3a6801c23e728f08c845d2be9bcdd8'),
                     IsInstance(TextPart),
                 ],
-                usage=RequestUsage(input_tokens=424, output_tokens=2033, details={'reasoning_tokens': 1408}),
+                usage=Usage(requests=1, input_tokens=424, output_tokens=2033, details={'reasoning_tokens': 1408}),
                 model_name='o3-mini-2025-01-31',
                 timestamp=IsDatetime(),
                 provider_request_id='resp_6803484f19a88191b9ea975d7cfbbe8408c845d2be9bcdd8',
@@ -2012,7 +2024,7 @@ async def test_openai_model_thinking_part(allow_model_requests: None, openai_api
                     IsInstance(ThinkingPart),
                     IsInstance(TextPart),
                 ],
-                usage=RequestUsage(input_tokens=13, output_tokens=1900, details={'reasoning_tokens': 1536}),
+                usage=Usage(requests=1, input_tokens=13, output_tokens=1900, details={'reasoning_tokens': 1536}),
                 model_name='o3-mini-2025-01-31',
                 timestamp=IsDatetime(),
                 provider_request_id='resp_680797310bbc8191971fff5a405113940ed3ec3064b5efac',
@@ -2036,7 +2048,7 @@ async def test_openai_model_thinking_part(allow_model_requests: None, openai_api
                     IsInstance(ThinkingPart),
                     IsInstance(TextPart),
                 ],
-                usage=RequestUsage(input_tokens=13, output_tokens=1900, details={'reasoning_tokens': 1536}),
+                usage=Usage(requests=1, input_tokens=13, output_tokens=1900, details={'reasoning_tokens': 1536}),
                 model_name='o3-mini-2025-01-31',
                 timestamp=IsDatetime(),
                 provider_request_id='resp_680797310bbc8191971fff5a405113940ed3ec3064b5efac',
@@ -2051,7 +2063,8 @@ async def test_openai_model_thinking_part(allow_model_requests: None, openai_api
             ),
             ModelResponse(
                 parts=[TextPart(content=IsStr())],
-                usage=RequestUsage(
+                usage=Usage(
+                    requests=1,
                     input_tokens=822,
                     output_tokens=2437,
                     details={
@@ -2350,7 +2363,8 @@ async def test_openai_tool_output(allow_model_requests: None, openai_api_key: st
             ),
             ModelResponse(
                 parts=[ToolCallPart(tool_name='get_user_country', args='{}', tool_call_id=IsStr())],
-                usage=RequestUsage(
+                usage=Usage(
+                    requests=1,
                     input_tokens=68,
                     output_tokens=12,
                     details={
@@ -2382,7 +2396,8 @@ async def test_openai_tool_output(allow_model_requests: None, openai_api_key: st
                         tool_call_id=IsStr(),
                     )
                 ],
-                usage=RequestUsage(
+                usage=Usage(
+                    requests=1,
                     input_tokens=89,
                     output_tokens=36,
                     details={
@@ -2439,7 +2454,8 @@ async def test_openai_text_output_function(allow_model_requests: None, openai_ap
                 parts=[
                     ToolCallPart(tool_name='get_user_country', args='{}', tool_call_id='call_J1YabdC7G7kzEZNbbZopwenH')
                 ],
-                usage=RequestUsage(
+                usage=Usage(
+                    requests=1,
                     input_tokens=42,
                     output_tokens=11,
                     details={
@@ -2465,7 +2481,8 @@ async def test_openai_text_output_function(allow_model_requests: None, openai_ap
             ),
             ModelResponse(
                 parts=[TextPart(content='The largest city in Mexico is Mexico City.')],
-                usage=RequestUsage(
+                usage=Usage(
+                    requests=1,
                     input_tokens=63,
                     output_tokens=10,
                     details={
@@ -2515,7 +2532,8 @@ async def test_openai_native_output(allow_model_requests: None, openai_api_key: 
                 parts=[
                     ToolCallPart(tool_name='get_user_country', args='{}', tool_call_id='call_PkRGedQNRFUzJp2R7dO7avWR')
                 ],
-                usage=RequestUsage(
+                usage=Usage(
+                    requests=1,
                     input_tokens=71,
                     output_tokens=12,
                     details={
@@ -2541,7 +2559,8 @@ async def test_openai_native_output(allow_model_requests: None, openai_api_key: 
             ),
             ModelResponse(
                 parts=[TextPart(content='{"city":"Mexico City","country":"Mexico"}')],
-                usage=RequestUsage(
+                usage=Usage(
+                    requests=1,
                     input_tokens=92,
                     output_tokens=15,
                     details={
@@ -2593,7 +2612,8 @@ async def test_openai_native_output_multiple(allow_model_requests: None, openai_
                 parts=[
                     ToolCallPart(tool_name='get_user_country', args='{}', tool_call_id='call_SIttSeiOistt33Htj4oiHOOX')
                 ],
-                usage=RequestUsage(
+                usage=Usage(
+                    requests=1,
                     input_tokens=160,
                     output_tokens=11,
                     details={
@@ -2623,7 +2643,8 @@ async def test_openai_native_output_multiple(allow_model_requests: None, openai_
                         content='{"result":{"kind":"CityLocation","data":{"city":"Mexico City","country":"Mexico"}}}'
                     )
                 ],
-                usage=RequestUsage(
+                usage=Usage(
+                    requests=1,
                     input_tokens=181,
                     output_tokens=25,
                     details={
@@ -2678,7 +2699,8 @@ Don't include any text or Markdown fencing before or after.\
                 parts=[
                     ToolCallPart(tool_name='get_user_country', args='{}', tool_call_id='call_s7oT9jaLAsEqTgvxZTmFh0wB')
                 ],
-                usage=RequestUsage(
+                usage=Usage(
+                    requests=1,
                     input_tokens=109,
                     output_tokens=11,
                     details={
@@ -2711,7 +2733,8 @@ Don't include any text or Markdown fencing before or after.\
             ),
             ModelResponse(
                 parts=[TextPart(content='{"city":"Mexico City","country":"Mexico"}')],
-                usage=RequestUsage(
+                usage=Usage(
+                    requests=1,
                     input_tokens=130,
                     output_tokens=11,
                     details={
@@ -2770,7 +2793,8 @@ Don't include any text or Markdown fencing before or after.\
                 parts=[
                     ToolCallPart(tool_name='get_user_country', args='{}', tool_call_id='call_wJD14IyJ4KKVtjCrGyNCHO09')
                 ],
-                usage=RequestUsage(
+                usage=Usage(
+                    requests=1,
                     input_tokens=273,
                     output_tokens=11,
                     details={
@@ -2807,7 +2831,8 @@ Don't include any text or Markdown fencing before or after.\
                         content='{"result":{"kind":"CityLocation","data":{"city":"Mexico City","country":"Mexico"}}}'
                     )
                 ],
-                usage=RequestUsage(
+                usage=Usage(
+                    requests=1,
                     input_tokens=294,
                     output_tokens=21,
                     details={

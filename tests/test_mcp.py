@@ -28,7 +28,7 @@ from pydantic_ai.messages import (
 from pydantic_ai.models import Model
 from pydantic_ai.models.test import TestModel
 from pydantic_ai.tools import RunContext
-from pydantic_ai.usage import RequestUsage, RunUsage
+from pydantic_ai.usage import Usage
 
 from .conftest import IsDatetime, IsNow, IsStr, try_import
 
@@ -67,7 +67,7 @@ def agent(model: Model, mcp_server: MCPServerStdio) -> Agent:
 
 @pytest.fixture
 def run_context(model: Model) -> RunContext[int]:
-    return RunContext(deps=0, model=model, usage=RunUsage())
+    return RunContext(deps=0, model=model, usage=Usage())
 
 
 async def test_stdio_server(run_context: RunContext[int]):
@@ -201,7 +201,8 @@ async def test_agent_with_stdio_server(allow_model_requests: None, agent: Agent)
                             tool_call_id='call_QssdxTGkPblTYHmyVES1tKBj',
                         )
                     ],
-                    usage=RequestUsage(
+                    usage=Usage(
+                        requests=1,
                         input_tokens=195,
                         output_tokens=19,
                         details={
@@ -227,7 +228,8 @@ async def test_agent_with_stdio_server(allow_model_requests: None, agent: Agent)
                 ),
                 ModelResponse(
                     parts=[TextPart(content='0 degrees Celsius is equal to 32 degrees Fahrenheit.')],
-                    usage=RequestUsage(
+                    usage=Usage(
+                        requests=1,
                         input_tokens=227,
                         output_tokens=13,
                         details={
@@ -331,7 +333,8 @@ async def test_tool_returning_str(allow_model_requests: None, agent: Agent):
                             tool_call_id='call_m9goNwaHBbU926w47V7RtWPt',
                         )
                     ],
-                    usage=RequestUsage(
+                    usage=Usage(
+                        requests=1,
                         input_tokens=194,
                         output_tokens=18,
                         details={
@@ -361,7 +364,8 @@ async def test_tool_returning_str(allow_model_requests: None, agent: Agent):
                             content='The weather in Mexico City is currently sunny with a temperature of 26 degrees Celsius.'
                         )
                     ],
-                    usage=RequestUsage(
+                    usage=Usage(
+                        requests=1,
                         input_tokens=234,
                         output_tokens=19,
                         details={
@@ -402,7 +406,8 @@ async def test_tool_returning_text_resource(allow_model_requests: None, agent: A
                             tool_call_id='call_LaiWltzI39sdquflqeuF0EyE',
                         )
                     ],
-                    usage=RequestUsage(
+                    usage=Usage(
+                        requests=1,
                         input_tokens=200,
                         output_tokens=12,
                         details={
@@ -428,7 +433,8 @@ async def test_tool_returning_text_resource(allow_model_requests: None, agent: A
                 ),
                 ModelResponse(
                     parts=[TextPart(content='The product name is "Pydantic AI".')],
-                    usage=RequestUsage(
+                    usage=Usage(
+                        requests=1,
                         input_tokens=224,
                         output_tokens=12,
                         details={
@@ -469,7 +475,8 @@ async def test_tool_returning_text_resource_link(allow_model_requests: None, age
                             tool_call_id='call_qi5GtBeIEyT7Y3yJvVFIi062',
                         )
                     ],
-                    usage=RequestUsage(
+                    usage=Usage(
+                        requests=1,
                         input_tokens=305,
                         output_tokens=12,
                         details={
@@ -495,7 +502,8 @@ async def test_tool_returning_text_resource_link(allow_model_requests: None, age
                 ),
                 ModelResponse(
                     parts=[TextPart(content='The product name is "Pydantic AI".')],
-                    usage=RequestUsage(
+                    usage=Usage(
+                        requests=1,
                         input_tokens=332,
                         output_tokens=11,
                         details={
@@ -538,7 +546,8 @@ async def test_tool_returning_image_resource(allow_model_requests: None, agent: 
                             tool_call_id='call_nFsDHYDZigO0rOHqmChZ3pmt',
                         )
                     ],
-                    usage=RequestUsage(
+                    usage=Usage(
+                        requests=1,
                         input_tokens=191,
                         output_tokens=12,
                         details={
@@ -569,7 +578,8 @@ async def test_tool_returning_image_resource(allow_model_requests: None, agent: 
                             content='This is an image of a sliced kiwi with a vibrant green interior and black seeds.'
                         )
                     ],
-                    usage=RequestUsage(
+                    usage=Usage(
+                        requests=1,
                         input_tokens=1332,
                         output_tokens=19,
                         details={
@@ -614,7 +624,8 @@ async def test_tool_returning_image_resource_link(
                             tool_call_id='call_eVFgn54V9Nuh8Y4zvuzkYjUp',
                         )
                     ],
-                    usage=RequestUsage(
+                    usage=Usage(
+                        requests=1,
                         input_tokens=305,
                         output_tokens=12,
                         details={
@@ -645,7 +656,8 @@ async def test_tool_returning_image_resource_link(
                             content='This is an image of a sliced kiwi fruit. It shows the green, seed-speckled interior with fuzzy brown skin around the edges.'
                         )
                     ],
-                    usage=RequestUsage(
+                    usage=Usage(
+                        requests=1,
                         input_tokens=1452,
                         output_tokens=29,
                         details={
@@ -678,8 +690,11 @@ async def test_tool_returning_audio_resource(
                 ),
                 ModelResponse(
                     parts=[ToolCallPart(tool_name='get_audio_resource', args={}, tool_call_id=IsStr())],
-                    usage=RequestUsage(
-                        input_tokens=383, output_tokens=12, details={'thoughts_tokens': 125, 'text_prompt_tokens': 383}
+                    usage=Usage(
+                        requests=1,
+                        input_tokens=383,
+                        output_tokens=12,
+                        details={'thoughts_tokens': 125, 'text_prompt_tokens': 383},
                     ),
                     model_name='models/gemini-2.5-pro-preview-05-06',
                     timestamp=IsDatetime(),
@@ -698,7 +713,8 @@ async def test_tool_returning_audio_resource(
                 ),
                 ModelResponse(
                     parts=[TextPart(content='The audio resource contains a voice saying "Hello, my name is Marcelo."')],
-                    usage=RequestUsage(
+                    usage=Usage(
+                        requests=1,
                         input_tokens=575,
                         output_tokens=15,
                         input_audio_tokens=144,
@@ -737,8 +753,11 @@ async def test_tool_returning_audio_resource_link(
                         ),
                         ToolCallPart(tool_name='get_audio_resource_link', args={}, tool_call_id=IsStr()),
                     ],
-                    usage=RequestUsage(
-                        input_tokens=561, output_tokens=41, details={'thoughts_tokens': 195, 'text_prompt_tokens': 561}
+                    usage=Usage(
+                        requests=1,
+                        input_tokens=561,
+                        output_tokens=41,
+                        details={'thoughts_tokens': 195, 'text_prompt_tokens': 561},
                     ),
                     model_name='models/gemini-2.5-pro',
                     timestamp=IsDatetime(),
@@ -757,7 +776,8 @@ async def test_tool_returning_audio_resource_link(
                 ),
                 ModelResponse(
                     parts=[TextPart(content='00:05')],
-                    usage=RequestUsage(
+                    usage=Usage(
+                        requests=1,
                         input_tokens=784,
                         output_tokens=5,
                         input_audio_tokens=144,
@@ -794,7 +814,8 @@ async def test_tool_returning_image(allow_model_requests: None, agent: Agent, im
                             tool_call_id='call_Q7xG8CCG0dyevVfUS0ubsDdN',
                         )
                     ],
-                    usage=RequestUsage(
+                    usage=Usage(
+                        requests=1,
                         input_tokens=190,
                         output_tokens=11,
                         details={
@@ -827,7 +848,8 @@ async def test_tool_returning_image(allow_model_requests: None, agent: Agent, im
                 ),
                 ModelResponse(
                     parts=[TextPart(content='Here is an image of a sliced kiwi on a white background.')],
-                    usage=RequestUsage(
+                    usage=Usage(
+                        requests=1,
                         input_tokens=1329,
                         output_tokens=15,
                         details={
@@ -862,7 +884,8 @@ async def test_tool_returning_dict(allow_model_requests: None, agent: Agent):
                 ),
                 ModelResponse(
                     parts=[ToolCallPart(tool_name='get_dict', args='{}', tool_call_id='call_oqKviITBj8PwpQjGyUu4Zu5x')],
-                    usage=RequestUsage(
+                    usage=Usage(
+                        requests=1,
                         input_tokens=195,
                         output_tokens=11,
                         details={
@@ -888,7 +911,8 @@ async def test_tool_returning_dict(allow_model_requests: None, agent: Agent):
                 ),
                 ModelResponse(
                     parts=[TextPart(content='{"foo":"bar","baz":123}')],
-                    usage=RequestUsage(
+                    usage=Usage(
+                        requests=1,
                         input_tokens=222,
                         output_tokens=11,
                         details={
@@ -931,7 +955,8 @@ async def test_tool_returning_error(allow_model_requests: None, agent: Agent):
                             tool_call_id='call_rETXZWddAGZSHyVHAxptPGgc',
                         )
                     ],
-                    usage=RequestUsage(
+                    usage=Usage(
+                        requests=1,
                         input_tokens=203,
                         output_tokens=15,
                         details={
@@ -963,7 +988,8 @@ async def test_tool_returning_error(allow_model_requests: None, agent: Agent):
                             tool_call_id='call_4xGyvdghYKHN8x19KWkRtA5N',
                         )
                     ],
-                    usage=RequestUsage(
+                    usage=Usage(
+                        requests=1,
                         input_tokens=250,
                         output_tokens=15,
                         details={
@@ -993,7 +1019,8 @@ async def test_tool_returning_error(allow_model_requests: None, agent: Agent):
                             content='I called the tool with the correct parameter, and it returned: "This is not an error."'
                         )
                     ],
-                    usage=RequestUsage(
+                    usage=Usage(
+                        requests=1,
                         input_tokens=277,
                         output_tokens=22,
                         details={
@@ -1028,7 +1055,8 @@ async def test_tool_returning_none(allow_model_requests: None, agent: Agent):
                 ),
                 ModelResponse(
                     parts=[ToolCallPart(tool_name='get_none', args='{}', tool_call_id='call_mJTuQ2Cl5SaHPTJbIILEUhJC')],
-                    usage=RequestUsage(
+                    usage=Usage(
+                        requests=1,
                         input_tokens=193,
                         output_tokens=11,
                         details={
@@ -1054,7 +1082,8 @@ async def test_tool_returning_none(allow_model_requests: None, agent: Agent):
                 ),
                 ModelResponse(
                     parts=[TextPart(content='Hello! How can I assist you today?')],
-                    usage=RequestUsage(
+                    usage=Usage(
+                        requests=1,
                         input_tokens=212,
                         output_tokens=11,
                         details={
@@ -1097,7 +1126,8 @@ async def test_tool_returning_multiple_items(allow_model_requests: None, agent: 
                             tool_call_id='call_kL0TvjEVQBDGZrn1Zv7iNYOW',
                         )
                     ],
-                    usage=RequestUsage(
+                    usage=Usage(
+                        requests=1,
                         input_tokens=195,
                         output_tokens=12,
                         details={
@@ -1139,7 +1169,8 @@ async def test_tool_returning_multiple_items(allow_model_requests: None, agent: 
                             content='The data includes two strings, a dictionary with a key-value pair, and an image of a sliced kiwi.'
                         )
                     ],
-                    usage=RequestUsage(
+                    usage=Usage(
+                        requests=1,
                         input_tokens=1355,
                         output_tokens=24,
                         details={

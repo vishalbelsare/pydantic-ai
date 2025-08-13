@@ -9,21 +9,26 @@ from typing_extensions import deprecated, overload
 from . import _utils
 from .exceptions import UsageLimitExceeded
 
-__all__ = 'RequestUsage', 'RunUsage', 'UsageLimits'
+__all__ = 'Usage', 'UsageLimits'
 
 
 @dataclass(repr=False)
-class UsageBase:
+class Usage:
+    """LLM usage associated with an agent run.
+
+    Responsibility for calculating request usage is on the model; Pydantic AI simply sums the usage information across requests.
+    """
+
+    requests: int = 0
+    """Number of requests made to the LLM API."""
+
     input_tokens: int = 0
-    """Number of input/prompt tokens."""
+    """Number of text input/prompt tokens."""
 
     cache_write_tokens: int = 0
     """Number of tokens written to the cache."""
     cache_read_tokens: int = 0
     """Number of tokens read from the cache."""
-
-    output_tokens: int = 0
-    """Number of output/completion tokens."""
 
     input_audio_tokens: int = 0
     """Number of audio input tokens."""
@@ -31,6 +36,9 @@ class UsageBase:
     """Number of audio tokens read from the cache."""
     output_audio_tokens: int = 0
     """Number of audio output tokens."""
+
+    output_tokens: int = 0
+    """Number of text output/completion tokens."""
 
     details: dict[str, int] = dataclasses.field(default_factory=dict)
     """Any extra details returned by the model."""
@@ -74,79 +82,16 @@ class UsageBase:
         """Whether any values are set and non-zero."""
         return any(dataclasses.asdict(self).values())
 
-
-@dataclass(repr=False)
-class RequestUsage(UsageBase):
-    """LLM usage associated with a single request.
-
-    This is an implementation of `genai_prices.types.AbstractUsage` so it can be used to calculate the price of the
-    request using [genai-prices](https://github.com/pydantic/genai-prices).
-    """
-
-    @property
-    def requests(self):
-        return 1
-
-    def incr(self, incr_usage: RequestUsage) -> None:
+    def incr(self, incr_usage: Usage) -> None:
         """Increment the usage in place.
 
         Args:
             incr_usage: The usage to increment by.
         """
+        self.requests += incr_usage.requests
         return _incr_usage_tokens(self, incr_usage)
 
-    def __add__(self, other: RequestUsage) -> RequestUsage:
-        """Add two RequestUsages together.
-
-        This is provided so it's trivial to sum usage information from multiple parts of a response.
-
-        **WARNING:** this CANNOT be used to sum multiple requests without breaking some pricing calculations.
-        """
-        new_usage = copy(self)
-        new_usage.incr(other)
-        return new_usage
-
-
-@dataclass(repr=False)
-class RunUsage(UsageBase):
-    """LLM usage associated with an agent run.
-
-    Responsibility for calculating request usage is on the model; Pydantic AI simply sums the usage information across requests.
-    """
-
-    requests: int = 0
-    """Number of requests made to the LLM API."""
-
-    input_tokens: int = 0
-    """Total number of text input/prompt tokens."""
-
-    cache_write_tokens: int = 0
-    """Total number of tokens written to the cache."""
-    cache_read_tokens: int = 0
-    """Total number of tokens read from the cache."""
-
-    input_audio_tokens: int = 0
-    """Total number of audio input tokens."""
-    cache_audio_read_tokens: int = 0
-    """Total number of audio tokens read from the cache."""
-
-    output_tokens: int = 0
-    """Total number of text output/completion tokens."""
-
-    details: dict[str, int] = dataclasses.field(default_factory=dict)
-    """Any extra details returned by the model."""
-
-    def incr(self, incr_usage: RunUsage | RequestUsage) -> None:
-        """Increment the usage in place.
-
-        Args:
-            incr_usage: The usage to increment by.
-        """
-        if isinstance(incr_usage, RunUsage):
-            self.requests += incr_usage.requests
-        return _incr_usage_tokens(self, incr_usage)
-
-    def __add__(self, other: RunUsage | RequestUsage) -> RunUsage:
+    def __add__(self, other: Usage) -> Usage:
         """Add two RunUsages together.
 
         This is provided so it's trivial to sum usage information from multiple runs.
@@ -156,7 +101,7 @@ class RunUsage(UsageBase):
         return new_usage
 
 
-def _incr_usage_tokens(slf: RunUsage | RequestUsage, incr_usage: RunUsage | RequestUsage) -> None:
+def _incr_usage_tokens(slf: Usage, incr_usage: Usage) -> None:
     """Increment the usage in place.
 
     Args:
@@ -172,12 +117,6 @@ def _incr_usage_tokens(slf: RunUsage | RequestUsage, incr_usage: RunUsage | Requ
 
     for key, value in incr_usage.details.items():
         slf.details[key] = slf.details.get(key, 0) + value
-
-
-@dataclass
-@deprecated('`Usage` is deprecated, use `RunUsage` instead')
-class Usage(RunUsage):
-    pass
 
 
 @dataclass(repr=False)
@@ -258,13 +197,13 @@ class UsageLimits:
             limit is not None for limit in (self.input_tokens_limit, self.output_tokens_limit, self.total_tokens_limit)
         )
 
-    def check_before_request(self, usage: RunUsage) -> None:
+    def check_before_request(self, usage: Usage) -> None:
         """Raises a `UsageLimitExceeded` exception if the next request would exceed the request_limit."""
         request_limit = self.request_limit
         if request_limit is not None and usage.requests >= request_limit:
             raise UsageLimitExceeded(f'The next request would exceed the request_limit of {request_limit}')
 
-    def check_tokens(self, usage: RunUsage) -> None:
+    def check_tokens(self, usage: Usage) -> None:
         """Raises a `UsageLimitExceeded` exception if the usage exceeds any of the token limits."""
         input_tokens = usage.input_tokens
         if self.input_tokens_limit is not None and input_tokens > self.input_tokens_limit:

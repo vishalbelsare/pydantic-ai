@@ -19,7 +19,7 @@ from pydantic_ai.messages import (
     ThinkingPartDelta,
     UserPromptPart,
 )
-from pydantic_ai.usage import RequestUsage
+from pydantic_ai.usage import Usage
 
 from ..conftest import IsDatetime, IsStr, try_import
 
@@ -44,7 +44,8 @@ async def test_deepseek_model_thinking_part(allow_model_requests: None, deepseek
             ModelRequest(parts=[UserPromptPart(content='How do I cross the street?', timestamp=IsDatetime())]),
             ModelResponse(
                 parts=[ThinkingPart(content=IsStr()), TextPart(content=IsStr())],
-                usage=RequestUsage(
+                usage=Usage(
+                    requests=1,
                     input_tokens=12,
                     output_tokens=789,
                     details={

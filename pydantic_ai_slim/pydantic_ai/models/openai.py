@@ -9,7 +9,7 @@ from datetime import datetime
 from typing import Any, Literal, Union, cast, overload
 
 from pydantic import ValidationError
-from typing_extensions import assert_never
+from typing_extensions import assert_never, deprecated
 
 from .. import ModelHTTPError, UnexpectedModelBehavior, _utils, usage
 from .._output import DEFAULT_OUTPUT_TOOL_NAME, OutputObjectDefinition
@@ -40,7 +40,7 @@ from ..messages import (
     VideoUrl,
 )
 from ..profiles import ModelProfile, ModelProfileSpec
-from ..profiles.openai import OpenAIModelProfile
+from ..profiles.openai import OpenAIChatModelProfile
 from ..providers import Provider, infer_provider
 from ..settings import ModelSettings
 from ..tools import ToolDefinition
@@ -98,7 +98,7 @@ allows this model to be used more easily with other model types (ie, Ollama, Dee
 OpenAISystemPromptRole = Literal['system', 'developer', 'user']
 
 
-class OpenAIModelSettings(ModelSettings, total=False):
+class OpenAIChatModelSettings(ModelSettings, total=False):
     """Settings used for an OpenAI model request."""
 
     # ALL FIELDS MUST BE `openai_` PREFIXED SO YOU CAN MERGE THEM WITH OTHER MODELS.
@@ -136,7 +136,7 @@ class OpenAIModelSettings(ModelSettings, total=False):
     """
 
 
-class OpenAIResponsesModelSettings(OpenAIModelSettings, total=False):
+class OpenAIResponsesModelSettings(OpenAIChatModelSettings, total=False):
     """Settings used for an OpenAI Responses model request.
 
     ALL FIELDS MUST BE `openai_` PREFIXED SO YOU CAN MERGE THEM WITH OTHER MODELS.
@@ -174,7 +174,7 @@ class OpenAIResponsesModelSettings(OpenAIModelSettings, total=False):
 
 
 @dataclass(init=False)
-class OpenAIModel(Model):
+class OpenAIChatModel(Model):
     """A model that uses the OpenAI API.
 
     Internally, this uses the [OpenAI Python client](https://github.com/openai/openai-python) to interact with the API.
@@ -307,7 +307,7 @@ class OpenAIModel(Model):
             tool_choice: Literal['none', 'required', 'auto'] | None = None
         elif (
             not model_request_parameters.allow_text_output
-            and OpenAIModelProfile.from_profile(self.profile).openai_supports_tool_choice_required
+            and OpenAIChatModelProfile.from_profile(self.profile).openai_supports_tool_choice_required
         ):
             tool_choice = 'required'
         else:
@@ -327,7 +327,7 @@ class OpenAIModel(Model):
 
         sampling_settings = (
             model_settings
-            if OpenAIModelProfile.from_profile(self.profile).openai_supports_sampling_settings
+            if OpenAIChatModelProfile.from_profile(self.profile).openai_supports_sampling_settings
             else OpenAIModelSettings()
         )
 
@@ -521,7 +521,9 @@ class OpenAIModel(Model):
         }
         if o.description:
             response_format_param['json_schema']['description'] = o.description
-        if OpenAIModelProfile.from_profile(self.profile).openai_supports_strict_tool_definition:  # pragma: no branch
+        if OpenAIChatModelProfile.from_profile(
+            self.profile
+        ).openai_supports_strict_tool_definition:  # pragma: no branch
             response_format_param['json_schema']['strict'] = o.strict
         return response_format_param
 
@@ -534,7 +536,7 @@ class OpenAIModel(Model):
                 'parameters': f.parameters_json_schema,
             },
         }
-        if f.strict and OpenAIModelProfile.from_profile(self.profile).openai_supports_strict_tool_definition:
+        if f.strict and OpenAIChatModelProfile.from_profile(self.profile).openai_supports_strict_tool_definition:
             tool_param['function']['strict'] = f.strict
         return tool_param
 
@@ -809,7 +811,7 @@ class OpenAIResponsesModel(Model):
 
         sampling_settings = (
             model_settings
-            if OpenAIModelProfile.from_profile(self.profile).openai_supports_sampling_settings
+            if OpenAIChatModelProfile.from_profile(self.profile).openai_supports_sampling_settings
             else OpenAIResponsesModelSettings()
         )
 
@@ -890,7 +892,7 @@ class OpenAIResponsesModel(Model):
             'type': 'function',
             'description': f.description,
             'strict': bool(
-                f.strict and OpenAIModelProfile.from_profile(self.profile).openai_supports_strict_tool_definition
+                f.strict and OpenAIChatModelProfile.from_profile(self.profile).openai_supports_strict_tool_definition
             ),
         }
 
@@ -982,7 +984,9 @@ class OpenAIResponsesModel(Model):
         }
         if o.description:
             response_format_param['description'] = o.description
-        if OpenAIModelProfile.from_profile(self.profile).openai_supports_strict_tool_definition:  # pragma: no branch
+        if OpenAIChatModelProfile.from_profile(
+            self.profile
+        ).openai_supports_strict_tool_definition:  # pragma: no branch
             response_format_param['strict'] = o.strict
         return response_format_param
 
@@ -1278,3 +1282,14 @@ def _map_usage(response: chat.ChatCompletion | ChatCompletionChunk | responses.R
             total_tokens=response_usage.total_tokens,
             details=details,
         )
+
+
+# Deprecated aliases - must be defined after the new classes
+@deprecated('Use OpenAIChatModel instead')
+class OpenAIModel(OpenAIChatModel):
+    """Deprecated alias for OpenAIChatModel. Use OpenAIChatModel instead."""
+
+
+@deprecated('Use OpenAIChatModelSettings instead')
+class OpenAIModelSettings(OpenAIChatModelSettings):
+    """Deprecated alias for OpenAIChatModelSettings. Use OpenAIChatModelSettings instead."""

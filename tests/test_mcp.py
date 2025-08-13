@@ -206,6 +206,7 @@ async def test_agent_with_stdio_server(allow_model_requests: None, agent: Agent)
                         cache_read_tokens=0,
                         output_tokens=19,
                         input_audio_tokens=0,
+                        output_audio_tokens=0,
                         details={
                             'accepted_prediction_tokens': 0,
                             'audio_tokens': 0,
@@ -234,6 +235,7 @@ async def test_agent_with_stdio_server(allow_model_requests: None, agent: Agent)
                         cache_read_tokens=0,
                         output_tokens=13,
                         input_audio_tokens=0,
+                        output_audio_tokens=0,
                         details={
                             'accepted_prediction_tokens': 0,
                             'audio_tokens': 0,
@@ -340,6 +342,7 @@ async def test_tool_returning_str(allow_model_requests: None, agent: Agent):
                         cache_read_tokens=0,
                         output_tokens=18,
                         input_audio_tokens=0,
+                        output_audio_tokens=0,
                         details={
                             'accepted_prediction_tokens': 0,
                             'audio_tokens': 0,
@@ -372,6 +375,7 @@ async def test_tool_returning_str(allow_model_requests: None, agent: Agent):
                         cache_read_tokens=0,
                         output_tokens=19,
                         input_audio_tokens=0,
+                        output_audio_tokens=0,
                         details={
                             'accepted_prediction_tokens': 0,
                             'audio_tokens': 0,
@@ -415,6 +419,7 @@ async def test_tool_returning_text_resource(allow_model_requests: None, agent: A
                         cache_read_tokens=0,
                         output_tokens=12,
                         input_audio_tokens=0,
+                        output_audio_tokens=0,
                         details={
                             'accepted_prediction_tokens': 0,
                             'audio_tokens': 0,
@@ -443,6 +448,7 @@ async def test_tool_returning_text_resource(allow_model_requests: None, agent: A
                         cache_read_tokens=0,
                         output_tokens=12,
                         input_audio_tokens=0,
+                        output_audio_tokens=0,
                         details={
                             'accepted_prediction_tokens': 0,
                             'audio_tokens': 0,
@@ -561,6 +567,7 @@ async def test_tool_returning_image_resource(allow_model_requests: None, agent: 
                         cache_read_tokens=0,
                         output_tokens=12,
                         input_audio_tokens=0,
+                        output_audio_tokens=0,
                         details={
                             'accepted_prediction_tokens': 0,
                             'audio_tokens': 0,
@@ -594,6 +601,7 @@ async def test_tool_returning_image_resource(allow_model_requests: None, agent: 
                         cache_read_tokens=0,
                         output_tokens=19,
                         input_audio_tokens=0,
+                        output_audio_tokens=0,
                         details={
                             'accepted_prediction_tokens': 0,
                             'audio_tokens': 0,
@@ -641,6 +649,7 @@ async def test_tool_returning_image_resource_link(
                         cache_read_tokens=0,
                         output_tokens=12,
                         input_audio_tokens=0,
+                        output_audio_tokens=0,
                         details={
                             'accepted_prediction_tokens': 0,
                             'audio_tokens': 0,
@@ -674,6 +683,7 @@ async def test_tool_returning_image_resource_link(
                         cache_read_tokens=0,
                         output_tokens=29,
                         input_audio_tokens=0,
+                        output_audio_tokens=0,
                         details={
                             'accepted_prediction_tokens': 0,
                             'audio_tokens': 0,
@@ -727,6 +737,7 @@ async def test_tool_returning_audio_resource(
                     usage=RequestUsage(
                         input_tokens=575,
                         output_tokens=15,
+                        input_audio_tokens=144,
                         details={'text_prompt_tokens': 431, 'audio_prompt_tokens': 144},
                     ),
                     model_name='models/gemini-2.5-pro-preview-05-06',
@@ -785,6 +796,7 @@ async def test_tool_returning_audio_resource_link(
                     usage=RequestUsage(
                         input_tokens=784,
                         output_tokens=5,
+                        input_audio_tokens=144,
                         details={'text_prompt_tokens': 640, 'audio_prompt_tokens': 144},
                     ),
                     model_name='models/gemini-2.5-pro',
@@ -823,6 +835,7 @@ async def test_tool_returning_image(allow_model_requests: None, agent: Agent, im
                         cache_read_tokens=0,
                         output_tokens=11,
                         input_audio_tokens=0,
+                        output_audio_tokens=0,
                         details={
                             'accepted_prediction_tokens': 0,
                             'audio_tokens': 0,
@@ -858,6 +871,7 @@ async def test_tool_returning_image(allow_model_requests: None, agent: Agent, im
                         cache_read_tokens=0,
                         output_tokens=15,
                         input_audio_tokens=0,
+                        output_audio_tokens=0,
                         details={
                             'accepted_prediction_tokens': 0,
                             'audio_tokens': 0,
@@ -970,6 +984,7 @@ async def test_tool_returning_error(allow_model_requests: None, agent: Agent):
                         cache_read_tokens=0,
                         output_tokens=15,
                         input_audio_tokens=0,
+                        output_audio_tokens=0,
                         details={
                             'accepted_prediction_tokens': 0,
                             'audio_tokens': 0,
@@ -1004,6 +1019,7 @@ async def test_tool_returning_error(allow_model_requests: None, agent: Agent):
                         cache_read_tokens=0,
                         output_tokens=15,
                         input_audio_tokens=0,
+                        output_audio_tokens=0,
                         details={
                             'accepted_prediction_tokens': 0,
                             'audio_tokens': 0,
@@ -1036,6 +1052,7 @@ async def test_tool_returning_error(allow_model_requests: None, agent: Agent):
                         cache_read_tokens=0,
                         output_tokens=22,
                         input_audio_tokens=0,
+                        output_audio_tokens=0,
                         details={
                             'accepted_prediction_tokens': 0,
                             'audio_tokens': 0,
@@ -1073,6 +1090,7 @@ async def test_tool_returning_none(allow_model_requests: None, agent: Agent):
                         cache_read_tokens=0,
                         output_tokens=11,
                         input_audio_tokens=0,
+                        output_audio_tokens=0,
                         details={
                             'accepted_prediction_tokens': 0,
                             'audio_tokens': 0,
@@ -1101,6 +1119,7 @@ async def test_tool_returning_none(allow_model_requests: None, agent: Agent):
                         cache_read_tokens=0,
                         output_tokens=11,
                         input_audio_tokens=0,
+                        output_audio_tokens=0,
                         details={
                             'accepted_prediction_tokens': 0,
                             'audio_tokens': 0,
@@ -1146,6 +1165,7 @@ async def test_tool_returning_multiple_items(allow_model_requests: None, agent: 
                         cache_read_tokens=0,
                         output_tokens=12,
                         input_audio_tokens=0,
+                        output_audio_tokens=0,
                         details={
                             'accepted_prediction_tokens': 0,
                             'audio_tokens': 0,
@@ -1190,6 +1210,7 @@ async def test_tool_returning_multiple_items(allow_model_requests: None, agent: 
                         cache_read_tokens=0,
                         output_tokens=24,
                         input_audio_tokens=0,
+                        output_audio_tokens=0,
                         details={
                             'accepted_prediction_tokens': 0,
                             'audio_tokens': 0,

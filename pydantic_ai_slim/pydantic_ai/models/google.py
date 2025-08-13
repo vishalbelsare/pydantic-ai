@@ -46,6 +46,7 @@ from . import (
     download_item,
     get_user_agent,
 )
+from ._google_common import GeminiUsageMetaData, metadata_as_request_usage
 
 try:
     from google.genai import Client
@@ -594,26 +595,5 @@ def _metadata_as_usage(response: GenerateContentResponse) -> usage.RequestUsage:
     metadata = response.usage_metadata
     if metadata is None:
         return usage.RequestUsage()  # pragma: no cover
-    metadata = metadata.model_dump(exclude_defaults=True)
-
-    details: dict[str, int] = {}
-    if cached_content_token_count := metadata.get('cached_content_token_count'):
-        details['cached_content_tokens'] = cached_content_token_count  # pragma: no cover
-
-    if thoughts_token_count := metadata.get('thoughts_token_count'):
-        details['thoughts_tokens'] = thoughts_token_count
-
-    if tool_use_prompt_token_count := metadata.get('tool_use_prompt_token_count'):
-        details['tool_use_prompt_tokens'] = tool_use_prompt_token_count
-
-    for key, metadata_details in metadata.items():
-        if key.endswith('_details') and metadata_details:
-            suffix = key.removesuffix('_details')
-            for detail in metadata_details:
-                details[f'{detail["modality"].lower()}_{suffix}'] = detail.get('token_count', 0)
-
-    return usage.RequestUsage(
-        input_tokens=metadata.get('prompt_token_count', 0),
-        output_tokens=metadata.get('candidates_token_count', 0),
-        details=details,
-    )
+    metadata = cast(GeminiUsageMetaData, metadata.model_dump(exclude_defaults=True))
+    return metadata_as_request_usage(metadata)

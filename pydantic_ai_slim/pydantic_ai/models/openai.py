@@ -1285,11 +1285,11 @@ def _map_usage(response: chat.ChatCompletion | ChatCompletionChunk | responses.R
 
 
 # Deprecated aliases - must be defined after the new classes
-@deprecated('Use OpenAIChatModel instead')
+@deprecated('Use `OpenAIChatModel` instead')
 class OpenAIModel(OpenAIChatModel):
-    """Deprecated alias for OpenAIChatModel. Use OpenAIChatModel instead."""
+    """Deprecated alias for OpenAIChatModel. Use `OpenAIChatModel` instead."""
 
 
-@deprecated('Use OpenAIChatModelSettings instead')
+@deprecated('Use `OpenAIChatModelSettings` instead')
 class OpenAIModelSettings(OpenAIChatModelSettings):
-    """Deprecated alias for OpenAIChatModelSettings. Use OpenAIChatModelSettings instead."""
+    """Deprecated alias for OpenAIChatModelSettings. Use `OpenAIChatModelSettings` instead."""

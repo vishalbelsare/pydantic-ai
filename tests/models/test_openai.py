@@ -41,7 +41,7 @@ from pydantic_ai.models import ModelRequestParameters
 from pydantic_ai.output import NativeOutput, PromptedOutput, TextOutput, ToolOutput
 from pydantic_ai.profiles import ModelProfile
 from pydantic_ai.profiles._json_schema import InlineDefsJsonSchemaTransformer
-from pydantic_ai.profiles.openai import OpenAIChatModelProfile, openai_model_profile
+from pydantic_ai.profiles.openai import OpenAIChatModelProfile, OpenAIModelProfile, openai_model_profile
 from pydantic_ai.result import Usage
 from pydantic_ai.settings import ModelSettings
 from pydantic_ai.tools import ToolDefinition
@@ -68,6 +68,8 @@ with try_import() as imports_successful:
     from pydantic_ai.models.openai import (
         OpenAIChatModel,
         OpenAIChatModelSettings,
+        OpenAIModel,
+        OpenAIModelSettings,
         OpenAIResponsesModel,
         OpenAIResponsesModelSettings,
         OpenAISystemPromptRole,
@@ -2965,3 +2967,29 @@ async def test_openai_model_settings_temperature_ignored_on_gpt_5(allow_model_re
 
     result = await agent.run('What is the capital of France?', model_settings=ModelSettings(temperature=0.0))
     assert result.output == snapshot('Paris.')
+
+
+def test_openai_model_deprecation_warning():
+    """Test that OpenAIModel shows deprecation warning."""
+    with pytest.warns(DeprecationWarning, match=r"Use `OpenAIChatModel` instead"):
+        OpenAIModel('gpt-4', provider=OpenAIProvider(api_key='test'))
+
+
+def test_openai_model_settings_deprecation_warning():
+    """Test that OpenAIModelSettings is deprecated (TypedDict deprecation works differently)."""
+    # TypedDict classes don't trigger warnings on instantiation, but we can verify the deprecation attribute exists
+    import warnings
+    from typing_extensions import get_origin
+    
+    # Check that it's still a valid TypedDict that can be instantiated
+    settings = OpenAIModelSettings()
+    assert isinstance(settings, dict)
+    
+    # Check that the class has the deprecated decorator applied
+    assert hasattr(OpenAIModelSettings, '__deprecated__')
+
+
+def test_openai_model_profile_deprecation_warning():
+    """Test that OpenAIModelProfile shows deprecation warning."""
+    with pytest.warns(DeprecationWarning, match=r"Use `OpenAIChatModelProfile` instead"):
+        OpenAIModelProfile()

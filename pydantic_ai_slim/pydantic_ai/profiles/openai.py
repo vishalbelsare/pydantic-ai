@@ -185,6 +185,6 @@ class OpenAIJsonSchemaTransformer(JsonSchemaTransformer):
 
 
 # Deprecated alias
-@deprecated('Use OpenAIChatModelProfile instead')
+@deprecated('Use `OpenAIChatModelProfile` instead')
 class OpenAIModelProfile(OpenAIChatModelProfile):
-    """Deprecated alias for OpenAIChatModelProfile. Use OpenAIChatModelProfile instead."""
+    """Deprecated alias for OpenAIChatModelProfile. Use `OpenAIChatModelProfile` instead."""

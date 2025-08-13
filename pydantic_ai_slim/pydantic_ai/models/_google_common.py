@@ -71,7 +71,7 @@ def metadata_as_request_usage(metadata: GeminiUsageMetaData | None) -> usage.Req
                         input_audio_tokens = value
                     elif key == 'candidates_tokens_details':
                         output_audio_tokens = value
-                    elif key == 'cache_tokens_details':
+                    elif key == 'cache_tokens_details':  # pragma: no branch
                         cache_audio_read_tokens = value
 
     return usage.RequestUsage(

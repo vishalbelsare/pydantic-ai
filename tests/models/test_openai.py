@@ -783,6 +783,21 @@ async def test_openai_audio_url_input(allow_model_requests: None, openai_api_key
     assert result.output == snapshot(
         'Yes, the phenomenon of the sun rising in the east and setting in the west is due to the rotation of the Earth. The Earth rotates on its axis from west to east, making the sun appear to rise on the eastern horizon and set in the west. This is a daily occurrence and has been a fundamental aspect of human observation and timekeeping throughout history.'
     )
+    assert result.usage() == snapshot(
+        RunUsage(
+            input_tokens=81,
+            output_tokens=72,
+            input_audio_tokens=69,
+            details={
+                'accepted_prediction_tokens': 0,
+                'audio_tokens': 0,
+                'reasoning_tokens': 0,
+                'rejected_prediction_tokens': 0,
+                'text_tokens': 72,
+            },
+            requests=1,
+        )
+    )
 
 
 async def test_document_url_input(allow_model_requests: None, openai_api_key: str):
@@ -962,6 +977,21 @@ async def test_audio_as_binary_content_input(
 
     result = await agent.run(['Whose name is mentioned in the audio?', audio_content])
     assert result.output == snapshot('The name mentioned in the audio is Marcelo.')
+    assert result.usage() == snapshot(
+        RunUsage(
+            input_tokens=64,
+            output_tokens=9,
+            input_audio_tokens=44,
+            details={
+                'accepted_prediction_tokens': 0,
+                'audio_tokens': 0,
+                'reasoning_tokens': 0,
+                'rejected_prediction_tokens': 0,
+                'text_tokens': 9,
+            },
+            requests=1,
+        )
+    )
 
 
 async def test_document_as_binary_content_input(

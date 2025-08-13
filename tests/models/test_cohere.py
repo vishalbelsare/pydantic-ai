@@ -433,9 +433,7 @@ async def test_cohere_model_thinking_part(allow_model_requests: None, co_api_key
                     IsInstance(ThinkingPart),
                     IsInstance(TextPart),
                 ],
-                usage=RequestUsage(
-                    input_tokens=13, cache_read_tokens=0, output_tokens=1909, details={'reasoning_tokens': 1472}
-                ),
+                usage=RequestUsage(input_tokens=13, output_tokens=1909, details={'reasoning_tokens': 1472}),
                 model_name='o3-mini-2025-01-31',
                 timestamp=IsDatetime(),
                 provider_request_id='resp_680739f4ad748191bd11096967c37c8b048efc3f8b2a068e',
@@ -459,9 +457,7 @@ async def test_cohere_model_thinking_part(allow_model_requests: None, co_api_key
                     IsInstance(ThinkingPart),
                     IsInstance(TextPart),
                 ],
-                usage=RequestUsage(
-                    input_tokens=13, cache_read_tokens=0, output_tokens=1909, details={'reasoning_tokens': 1472}
-                ),
+                usage=RequestUsage(input_tokens=13, output_tokens=1909, details={'reasoning_tokens': 1472}),
                 model_name='o3-mini-2025-01-31',
                 timestamp=IsDatetime(),
                 provider_request_id='resp_680739f4ad748191bd11096967c37c8b048efc3f8b2a068e',

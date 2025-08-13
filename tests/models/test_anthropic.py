@@ -1496,9 +1496,7 @@ The year 2025 is a regular year with 365 days
             ModelRequest(parts=[UserPromptPart(content='What day is tomorrow?', timestamp=IsDatetime())]),
             ModelResponse(
                 parts=[TextPart(content='Tomorrow will be **Tuesday, May 27, 2025**.')],
-                usage=RequestUsage(
-                    input_tokens=410, cache_read_tokens=0, output_tokens=17, details={'reasoning_tokens': 0}
-                ),
+                usage=RequestUsage(input_tokens=410, output_tokens=17, details={'reasoning_tokens': 0}),
                 model_name='gpt-4.1-2025-04-14',
                 timestamp=IsDatetime(),
                 provider_request_id='resp_6834631faf2481918638284f62855ddf040b4e5d7e74f261',

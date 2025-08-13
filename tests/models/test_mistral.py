@@ -2052,9 +2052,7 @@ async def test_mistral_model_thinking_part(allow_model_requests: None, openai_ap
                     ThinkingPart(content=IsStr(), id='rs_68079ad7f0588191af64f067e7314d840493b22e4095129c'),
                     TextPart(content=IsStr()),
                 ],
-                usage=RequestUsage(
-                    input_tokens=13, cache_read_tokens=0, output_tokens=1789, details={'reasoning_tokens': 1344}
-                ),
+                usage=RequestUsage(input_tokens=13, output_tokens=1789, details={'reasoning_tokens': 1344}),
                 model_name='o3-mini-2025-01-31',
                 timestamp=IsDatetime(),
                 provider_request_id='resp_68079acebbfc819189ec20e1e5bf525d0493b22e4095129c',
@@ -2112,9 +2110,7 @@ These suggestions are meant to help you think through pedestrian safety. Differe
 """
                     ),
                 ],
-                usage=RequestUsage(
-                    input_tokens=13, cache_read_tokens=0, output_tokens=1789, details={'reasoning_tokens': 1344}
-                ),
+                usage=RequestUsage(input_tokens=13, output_tokens=1789, details={'reasoning_tokens': 1344}),
                 model_name='o3-mini-2025-01-31',
                 timestamp=IsDatetime(),
                 provider_request_id='resp_68079acebbfc819189ec20e1e5bf525d0493b22e4095129c',

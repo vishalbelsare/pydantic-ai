@@ -203,10 +203,7 @@ async def test_agent_with_stdio_server(allow_model_requests: None, agent: Agent)
                     ],
                     usage=RequestUsage(
                         input_tokens=195,
-                        cache_read_tokens=0,
                         output_tokens=19,
-                        input_audio_tokens=0,
-                        output_audio_tokens=0,
                         details={
                             'accepted_prediction_tokens': 0,
                             'audio_tokens': 0,
@@ -232,10 +229,7 @@ async def test_agent_with_stdio_server(allow_model_requests: None, agent: Agent)
                     parts=[TextPart(content='0 degrees Celsius is equal to 32 degrees Fahrenheit.')],
                     usage=RequestUsage(
                         input_tokens=227,
-                        cache_read_tokens=0,
                         output_tokens=13,
-                        input_audio_tokens=0,
-                        output_audio_tokens=0,
                         details={
                             'accepted_prediction_tokens': 0,
                             'audio_tokens': 0,
@@ -339,10 +333,7 @@ async def test_tool_returning_str(allow_model_requests: None, agent: Agent):
                     ],
                     usage=RequestUsage(
                         input_tokens=194,
-                        cache_read_tokens=0,
                         output_tokens=18,
-                        input_audio_tokens=0,
-                        output_audio_tokens=0,
                         details={
                             'accepted_prediction_tokens': 0,
                             'audio_tokens': 0,
@@ -372,10 +363,7 @@ async def test_tool_returning_str(allow_model_requests: None, agent: Agent):
                     ],
                     usage=RequestUsage(
                         input_tokens=234,
-                        cache_read_tokens=0,
                         output_tokens=19,
-                        input_audio_tokens=0,
-                        output_audio_tokens=0,
                         details={
                             'accepted_prediction_tokens': 0,
                             'audio_tokens': 0,
@@ -416,10 +404,7 @@ async def test_tool_returning_text_resource(allow_model_requests: None, agent: A
                     ],
                     usage=RequestUsage(
                         input_tokens=200,
-                        cache_read_tokens=0,
                         output_tokens=12,
-                        input_audio_tokens=0,
-                        output_audio_tokens=0,
                         details={
                             'accepted_prediction_tokens': 0,
                             'audio_tokens': 0,
@@ -445,10 +430,7 @@ async def test_tool_returning_text_resource(allow_model_requests: None, agent: A
                     parts=[TextPart(content='The product name is "Pydantic AI".')],
                     usage=RequestUsage(
                         input_tokens=224,
-                        cache_read_tokens=0,
                         output_tokens=12,
-                        input_audio_tokens=0,
-                        output_audio_tokens=0,
                         details={
                             'accepted_prediction_tokens': 0,
                             'audio_tokens': 0,
@@ -489,10 +471,7 @@ async def test_tool_returning_text_resource_link(allow_model_requests: None, age
                     ],
                     usage=RequestUsage(
                         input_tokens=305,
-                        cache_read_tokens=0,
                         output_tokens=12,
-                        input_audio_tokens=0,
-                        output_audio_tokens=0,
                         details={
                             'accepted_prediction_tokens': 0,
                             'audio_tokens': 0,
@@ -518,10 +497,7 @@ async def test_tool_returning_text_resource_link(allow_model_requests: None, age
                     parts=[TextPart(content='The product name is "Pydantic AI".')],
                     usage=RequestUsage(
                         input_tokens=332,
-                        cache_read_tokens=0,
                         output_tokens=11,
-                        input_audio_tokens=0,
-                        output_audio_tokens=0,
                         details={
                             'accepted_prediction_tokens': 0,
                             'audio_tokens': 0,
@@ -564,10 +540,7 @@ async def test_tool_returning_image_resource(allow_model_requests: None, agent: 
                     ],
                     usage=RequestUsage(
                         input_tokens=191,
-                        cache_read_tokens=0,
                         output_tokens=12,
-                        input_audio_tokens=0,
-                        output_audio_tokens=0,
                         details={
                             'accepted_prediction_tokens': 0,
                             'audio_tokens': 0,
@@ -598,10 +571,7 @@ async def test_tool_returning_image_resource(allow_model_requests: None, agent: 
                     ],
                     usage=RequestUsage(
                         input_tokens=1332,
-                        cache_read_tokens=0,
                         output_tokens=19,
-                        input_audio_tokens=0,
-                        output_audio_tokens=0,
                         details={
                             'accepted_prediction_tokens': 0,
                             'audio_tokens': 0,
@@ -646,10 +616,7 @@ async def test_tool_returning_image_resource_link(
                     ],
                     usage=RequestUsage(
                         input_tokens=305,
-                        cache_read_tokens=0,
                         output_tokens=12,
-                        input_audio_tokens=0,
-                        output_audio_tokens=0,
                         details={
                             'accepted_prediction_tokens': 0,
                             'audio_tokens': 0,
@@ -680,10 +647,7 @@ async def test_tool_returning_image_resource_link(
                     ],
                     usage=RequestUsage(
                         input_tokens=1452,
-                        cache_read_tokens=0,
                         output_tokens=29,
-                        input_audio_tokens=0,
-                        output_audio_tokens=0,
                         details={
                             'accepted_prediction_tokens': 0,
                             'audio_tokens': 0,
@@ -832,10 +796,7 @@ async def test_tool_returning_image(allow_model_requests: None, agent: Agent, im
                     ],
                     usage=RequestUsage(
                         input_tokens=190,
-                        cache_read_tokens=0,
                         output_tokens=11,
-                        input_audio_tokens=0,
-                        output_audio_tokens=0,
                         details={
                             'accepted_prediction_tokens': 0,
                             'audio_tokens': 0,
@@ -868,10 +829,7 @@ async def test_tool_returning_image(allow_model_requests: None, agent: Agent, im
                     parts=[TextPart(content='Here is an image of a sliced kiwi on a white background.')],
                     usage=RequestUsage(
                         input_tokens=1329,
-                        cache_read_tokens=0,
                         output_tokens=15,
-                        input_audio_tokens=0,
-                        output_audio_tokens=0,
                         details={
                             'accepted_prediction_tokens': 0,
                             'audio_tokens': 0,
@@ -906,10 +864,7 @@ async def test_tool_returning_dict(allow_model_requests: None, agent: Agent):
                     parts=[ToolCallPart(tool_name='get_dict', args='{}', tool_call_id='call_oqKviITBj8PwpQjGyUu4Zu5x')],
                     usage=RequestUsage(
                         input_tokens=195,
-                        cache_read_tokens=0,
                         output_tokens=11,
-                        input_audio_tokens=0,
-                        output_audio_tokens=0,
                         details={
                             'accepted_prediction_tokens': 0,
                             'audio_tokens': 0,
@@ -935,10 +890,7 @@ async def test_tool_returning_dict(allow_model_requests: None, agent: Agent):
                     parts=[TextPart(content='{"foo":"bar","baz":123}')],
                     usage=RequestUsage(
                         input_tokens=222,
-                        cache_read_tokens=0,
                         output_tokens=11,
-                        input_audio_tokens=0,
-                        output_audio_tokens=0,
                         details={
                             'accepted_prediction_tokens': 0,
                             'audio_tokens': 0,
@@ -981,10 +933,7 @@ async def test_tool_returning_error(allow_model_requests: None, agent: Agent):
                     ],
                     usage=RequestUsage(
                         input_tokens=203,
-                        cache_read_tokens=0,
                         output_tokens=15,
-                        input_audio_tokens=0,
-                        output_audio_tokens=0,
                         details={
                             'accepted_prediction_tokens': 0,
                             'audio_tokens': 0,
@@ -1016,10 +965,7 @@ async def test_tool_returning_error(allow_model_requests: None, agent: Agent):
                     ],
                     usage=RequestUsage(
                         input_tokens=250,
-                        cache_read_tokens=0,
                         output_tokens=15,
-                        input_audio_tokens=0,
-                        output_audio_tokens=0,
                         details={
                             'accepted_prediction_tokens': 0,
                             'audio_tokens': 0,
@@ -1049,10 +995,7 @@ async def test_tool_returning_error(allow_model_requests: None, agent: Agent):
                     ],
                     usage=RequestUsage(
                         input_tokens=277,
-                        cache_read_tokens=0,
                         output_tokens=22,
-                        input_audio_tokens=0,
-                        output_audio_tokens=0,
                         details={
                             'accepted_prediction_tokens': 0,
                             'audio_tokens': 0,
@@ -1087,10 +1030,7 @@ async def test_tool_returning_none(allow_model_requests: None, agent: Agent):
                     parts=[ToolCallPart(tool_name='get_none', args='{}', tool_call_id='call_mJTuQ2Cl5SaHPTJbIILEUhJC')],
                     usage=RequestUsage(
                         input_tokens=193,
-                        cache_read_tokens=0,
                         output_tokens=11,
-                        input_audio_tokens=0,
-                        output_audio_tokens=0,
                         details={
                             'accepted_prediction_tokens': 0,
                             'audio_tokens': 0,
@@ -1116,10 +1056,7 @@ async def test_tool_returning_none(allow_model_requests: None, agent: Agent):
                     parts=[TextPart(content='Hello! How can I assist you today?')],
                     usage=RequestUsage(
                         input_tokens=212,
-                        cache_read_tokens=0,
                         output_tokens=11,
-                        input_audio_tokens=0,
-                        output_audio_tokens=0,
                         details={
                             'accepted_prediction_tokens': 0,
                             'audio_tokens': 0,
@@ -1162,10 +1099,7 @@ async def test_tool_returning_multiple_items(allow_model_requests: None, agent: 
                     ],
                     usage=RequestUsage(
                         input_tokens=195,
-                        cache_read_tokens=0,
                         output_tokens=12,
-                        input_audio_tokens=0,
-                        output_audio_tokens=0,
                         details={
                             'accepted_prediction_tokens': 0,
                             'audio_tokens': 0,
@@ -1207,10 +1141,7 @@ async def test_tool_returning_multiple_items(allow_model_requests: None, agent: 
                     ],
                     usage=RequestUsage(
                         input_tokens=1355,
-                        cache_read_tokens=0,
                         output_tokens=24,
-                        input_audio_tokens=0,
-                        output_audio_tokens=0,
                         details={
                             'accepted_prediction_tokens': 0,
                             'audio_tokens': 0,

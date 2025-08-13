@@ -1484,9 +1484,7 @@ Always be cautious—even if you have the right-of-way—and understand that it'
 """
                     ),
                 ],
-                usage=RequestUsage(
-                    input_tokens=13, cache_read_tokens=0, output_tokens=2028, details={'reasoning_tokens': 1664}
-                ),
+                usage=RequestUsage(input_tokens=13, output_tokens=2028, details={'reasoning_tokens': 1664}),
                 model_name='o3-mini-2025-01-31',
                 timestamp=IsDatetime(),
                 provider_request_id='resp_680393ff82488191a7d0850bf0dd99a004f0817ea037a07b',
@@ -1512,9 +1510,7 @@ Always be cautious—even if you have the right-of-way—and understand that it'
                     IsInstance(ThinkingPart),
                     IsInstance(TextPart),
                 ],
-                usage=RequestUsage(
-                    input_tokens=13, cache_read_tokens=0, output_tokens=2028, details={'reasoning_tokens': 1664}
-                ),
+                usage=RequestUsage(input_tokens=13, output_tokens=2028, details={'reasoning_tokens': 1664}),
                 model_name='o3-mini-2025-01-31',
                 timestamp=IsDatetime(),
                 provider_request_id='resp_680393ff82488191a7d0850bf0dd99a004f0817ea037a07b',

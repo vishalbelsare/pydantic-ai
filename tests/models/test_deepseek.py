@@ -46,7 +46,6 @@ async def test_deepseek_model_thinking_part(allow_model_requests: None, deepseek
                 parts=[ThinkingPart(content=IsStr()), TextPart(content=IsStr())],
                 usage=RequestUsage(
                     input_tokens=12,
-                    cache_read_tokens=0,
                     output_tokens=789,
                     details={
                         'prompt_cache_hit_tokens': 0,

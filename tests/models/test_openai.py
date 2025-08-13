@@ -821,10 +821,7 @@ async def test_image_url_tool_response(allow_model_requests: None, openai_api_ke
                 parts=[ToolCallPart(tool_name='get_image', args='{}', tool_call_id='call_4hrT4QP9jfojtK69vGiFCFjG')],
                 usage=RequestUsage(
                     input_tokens=46,
-                    cache_read_tokens=0,
                     output_tokens=11,
-                    input_audio_tokens=0,
-                    output_audio_tokens=0,
                     details={
                         'accepted_prediction_tokens': 0,
                         'audio_tokens': 0,
@@ -859,10 +856,7 @@ async def test_image_url_tool_response(allow_model_requests: None, openai_api_ke
                 parts=[TextPart(content='The image shows a potato.')],
                 usage=RequestUsage(
                     input_tokens=503,
-                    cache_read_tokens=0,
                     output_tokens=8,
-                    input_audio_tokens=0,
-                    output_audio_tokens=0,
                     details={
                         'accepted_prediction_tokens': 0,
                         'audio_tokens': 0,
@@ -903,10 +897,7 @@ async def test_image_as_binary_content_tool_response(
                 parts=[ToolCallPart(tool_name='get_image', args='{}', tool_call_id='call_Btn0GIzGr4ugNlLmkQghQUMY')],
                 usage=RequestUsage(
                     input_tokens=46,
-                    cache_read_tokens=0,
                     output_tokens=11,
-                    input_audio_tokens=0,
-                    output_audio_tokens=0,
                     details={
                         'accepted_prediction_tokens': 0,
                         'audio_tokens': 0,
@@ -939,10 +930,7 @@ async def test_image_as_binary_content_tool_response(
                 parts=[TextPart(content='The image shows a kiwi fruit.')],
                 usage=RequestUsage(
                     input_tokens=1185,
-                    cache_read_tokens=0,
                     output_tokens=9,
-                    input_audio_tokens=0,
-                    output_audio_tokens=0,
                     details={
                         'accepted_prediction_tokens': 0,
                         'audio_tokens': 0,
@@ -1825,10 +1813,7 @@ async def test_openai_instructions(allow_model_requests: None, openai_api_key: s
                 parts=[TextPart(content='The capital of France is Paris.')],
                 usage=RequestUsage(
                     input_tokens=24,
-                    cache_read_tokens=0,
                     output_tokens=8,
-                    input_audio_tokens=0,
-                    output_audio_tokens=0,
                     details={
                         'accepted_prediction_tokens': 0,
                         'audio_tokens': 0,
@@ -1872,10 +1857,7 @@ async def test_openai_instructions_with_tool_calls_keep_instructions(allow_model
                 parts=[ToolCallPart(tool_name='get_temperature', args='{"city":"Tokyo"}', tool_call_id=IsStr())],
                 usage=RequestUsage(
                     input_tokens=50,
-                    cache_read_tokens=0,
                     output_tokens=15,
-                    input_audio_tokens=0,
-                    output_audio_tokens=0,
                     details={
                         'accepted_prediction_tokens': 0,
                         'audio_tokens': 0,
@@ -1899,10 +1881,7 @@ async def test_openai_instructions_with_tool_calls_keep_instructions(allow_model
                 parts=[TextPart(content='The temperature in Tokyo is currently 20.0 degrees Celsius.')],
                 usage=RequestUsage(
                     input_tokens=75,
-                    cache_read_tokens=0,
                     output_tokens=15,
-                    input_audio_tokens=0,
-                    output_audio_tokens=0,
                     details={
                         'accepted_prediction_tokens': 0,
                         'audio_tokens': 0,
@@ -1935,9 +1914,7 @@ async def test_openai_responses_model_thinking_part(allow_model_requests: None, 
                     ThinkingPart(content=IsStr(), id='rs_68034841ab2881918a8c210e3d988b9208c845d2be9bcdd8'),
                     IsInstance(TextPart),
                 ],
-                usage=RequestUsage(
-                    input_tokens=13, cache_read_tokens=0, output_tokens=2050, details={'reasoning_tokens': 1664}
-                ),
+                usage=RequestUsage(input_tokens=13, output_tokens=2050, details={'reasoning_tokens': 1664}),
                 model_name='o3-mini-2025-01-31',
                 timestamp=IsDatetime(),
                 provider_request_id='resp_68034835d12481919c80a7fd8dbe6f7e08c845d2be9bcdd8',
@@ -1960,9 +1937,7 @@ async def test_openai_responses_model_thinking_part(allow_model_requests: None, 
                     ThinkingPart(content=IsStr(), id='rs_68034841ab2881918a8c210e3d988b9208c845d2be9bcdd8'),
                     IsInstance(TextPart),
                 ],
-                usage=RequestUsage(
-                    input_tokens=13, cache_read_tokens=0, output_tokens=2050, details={'reasoning_tokens': 1664}
-                ),
+                usage=RequestUsage(input_tokens=13, output_tokens=2050, details={'reasoning_tokens': 1664}),
                 model_name='o3-mini-2025-01-31',
                 timestamp=IsDatetime(),
                 provider_request_id='resp_68034835d12481919c80a7fd8dbe6f7e08c845d2be9bcdd8',
@@ -1982,9 +1957,7 @@ async def test_openai_responses_model_thinking_part(allow_model_requests: None, 
                     ThinkingPart(content=IsStr(), id='rs_68034858dc588191bc3a6801c23e728f08c845d2be9bcdd8'),
                     IsInstance(TextPart),
                 ],
-                usage=RequestUsage(
-                    input_tokens=424, cache_read_tokens=0, output_tokens=2033, details={'reasoning_tokens': 1408}
-                ),
+                usage=RequestUsage(input_tokens=424, output_tokens=2033, details={'reasoning_tokens': 1408}),
                 model_name='o3-mini-2025-01-31',
                 timestamp=IsDatetime(),
                 provider_request_id='resp_6803484f19a88191b9ea975d7cfbbe8408c845d2be9bcdd8',
@@ -2011,9 +1984,7 @@ async def test_openai_model_thinking_part(allow_model_requests: None, openai_api
                     IsInstance(ThinkingPart),
                     IsInstance(TextPart),
                 ],
-                usage=RequestUsage(
-                    input_tokens=13, cache_read_tokens=0, output_tokens=1900, details={'reasoning_tokens': 1536}
-                ),
+                usage=RequestUsage(input_tokens=13, output_tokens=1900, details={'reasoning_tokens': 1536}),
                 model_name='o3-mini-2025-01-31',
                 timestamp=IsDatetime(),
                 provider_request_id='resp_680797310bbc8191971fff5a405113940ed3ec3064b5efac',
@@ -2037,9 +2008,7 @@ async def test_openai_model_thinking_part(allow_model_requests: None, openai_api
                     IsInstance(ThinkingPart),
                     IsInstance(TextPart),
                 ],
-                usage=RequestUsage(
-                    input_tokens=13, cache_read_tokens=0, output_tokens=1900, details={'reasoning_tokens': 1536}
-                ),
+                usage=RequestUsage(input_tokens=13, output_tokens=1900, details={'reasoning_tokens': 1536}),
                 model_name='o3-mini-2025-01-31',
                 timestamp=IsDatetime(),
                 provider_request_id='resp_680797310bbc8191971fff5a405113940ed3ec3064b5efac',
@@ -2056,10 +2025,7 @@ async def test_openai_model_thinking_part(allow_model_requests: None, openai_api
                 parts=[TextPart(content=IsStr())],
                 usage=RequestUsage(
                     input_tokens=822,
-                    cache_read_tokens=0,
                     output_tokens=2437,
-                    input_audio_tokens=0,
-                    output_audio_tokens=0,
                     details={
                         'accepted_prediction_tokens': 0,
                         'audio_tokens': 0,
@@ -2358,10 +2324,7 @@ async def test_openai_tool_output(allow_model_requests: None, openai_api_key: st
                 parts=[ToolCallPart(tool_name='get_user_country', args='{}', tool_call_id=IsStr())],
                 usage=RequestUsage(
                     input_tokens=68,
-                    cache_read_tokens=0,
                     output_tokens=12,
-                    input_audio_tokens=0,
-                    output_audio_tokens=0,
                     details={
                         'accepted_prediction_tokens': 0,
                         'audio_tokens': 0,
@@ -2393,10 +2356,7 @@ async def test_openai_tool_output(allow_model_requests: None, openai_api_key: st
                 ],
                 usage=RequestUsage(
                     input_tokens=89,
-                    cache_read_tokens=0,
                     output_tokens=36,
-                    input_audio_tokens=0,
-                    output_audio_tokens=0,
                     details={
                         'accepted_prediction_tokens': 0,
                         'audio_tokens': 0,
@@ -2453,10 +2413,7 @@ async def test_openai_text_output_function(allow_model_requests: None, openai_ap
                 ],
                 usage=RequestUsage(
                     input_tokens=42,
-                    cache_read_tokens=0,
                     output_tokens=11,
-                    input_audio_tokens=0,
-                    output_audio_tokens=0,
                     details={
                         'accepted_prediction_tokens': 0,
                         'audio_tokens': 0,
@@ -2482,10 +2439,7 @@ async def test_openai_text_output_function(allow_model_requests: None, openai_ap
                 parts=[TextPart(content='The largest city in Mexico is Mexico City.')],
                 usage=RequestUsage(
                     input_tokens=63,
-                    cache_read_tokens=0,
                     output_tokens=10,
-                    input_audio_tokens=0,
-                    output_audio_tokens=0,
                     details={
                         'accepted_prediction_tokens': 0,
                         'audio_tokens': 0,
@@ -2535,10 +2489,7 @@ async def test_openai_native_output(allow_model_requests: None, openai_api_key: 
                 ],
                 usage=RequestUsage(
                     input_tokens=71,
-                    cache_read_tokens=0,
                     output_tokens=12,
-                    input_audio_tokens=0,
-                    output_audio_tokens=0,
                     details={
                         'accepted_prediction_tokens': 0,
                         'audio_tokens': 0,
@@ -2564,10 +2515,7 @@ async def test_openai_native_output(allow_model_requests: None, openai_api_key: 
                 parts=[TextPart(content='{"city":"Mexico City","country":"Mexico"}')],
                 usage=RequestUsage(
                     input_tokens=92,
-                    cache_read_tokens=0,
                     output_tokens=15,
-                    input_audio_tokens=0,
-                    output_audio_tokens=0,
                     details={
                         'accepted_prediction_tokens': 0,
                         'audio_tokens': 0,
@@ -2619,10 +2567,7 @@ async def test_openai_native_output_multiple(allow_model_requests: None, openai_
                 ],
                 usage=RequestUsage(
                     input_tokens=160,
-                    cache_read_tokens=0,
                     output_tokens=11,
-                    input_audio_tokens=0,
-                    output_audio_tokens=0,
                     details={
                         'accepted_prediction_tokens': 0,
                         'audio_tokens': 0,
@@ -2652,10 +2597,7 @@ async def test_openai_native_output_multiple(allow_model_requests: None, openai_
                 ],
                 usage=RequestUsage(
                     input_tokens=181,
-                    cache_read_tokens=0,
                     output_tokens=25,
-                    input_audio_tokens=0,
-                    output_audio_tokens=0,
                     details={
                         'accepted_prediction_tokens': 0,
                         'audio_tokens': 0,
@@ -2710,10 +2652,7 @@ Don't include any text or Markdown fencing before or after.\
                 ],
                 usage=RequestUsage(
                     input_tokens=109,
-                    cache_read_tokens=0,
                     output_tokens=11,
-                    input_audio_tokens=0,
-                    output_audio_tokens=0,
                     details={
                         'accepted_prediction_tokens': 0,
                         'audio_tokens': 0,
@@ -2746,10 +2685,7 @@ Don't include any text or Markdown fencing before or after.\
                 parts=[TextPart(content='{"city":"Mexico City","country":"Mexico"}')],
                 usage=RequestUsage(
                     input_tokens=130,
-                    cache_read_tokens=0,
                     output_tokens=11,
-                    input_audio_tokens=0,
-                    output_audio_tokens=0,
                     details={
                         'accepted_prediction_tokens': 0,
                         'audio_tokens': 0,
@@ -2808,10 +2744,7 @@ Don't include any text or Markdown fencing before or after.\
                 ],
                 usage=RequestUsage(
                     input_tokens=273,
-                    cache_read_tokens=0,
                     output_tokens=11,
-                    input_audio_tokens=0,
-                    output_audio_tokens=0,
                     details={
                         'accepted_prediction_tokens': 0,
                         'audio_tokens': 0,
@@ -2848,10 +2781,7 @@ Don't include any text or Markdown fencing before or after.\
                 ],
                 usage=RequestUsage(
                     input_tokens=294,
-                    cache_read_tokens=0,
                     output_tokens=21,
-                    input_audio_tokens=0,
-                    output_audio_tokens=0,
                     details={
                         'accepted_prediction_tokens': 0,
                         'audio_tokens': 0,

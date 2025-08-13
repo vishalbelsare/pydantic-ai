@@ -486,6 +486,7 @@ async def test_tool_returning_text_resource_link(allow_model_requests: None, age
                         cache_read_tokens=0,
                         output_tokens=12,
                         input_audio_tokens=0,
+                        output_audio_tokens=0,
                         details={
                             'accepted_prediction_tokens': 0,
                             'audio_tokens': 0,
@@ -514,6 +515,7 @@ async def test_tool_returning_text_resource_link(allow_model_requests: None, age
                         cache_read_tokens=0,
                         output_tokens=11,
                         input_audio_tokens=0,
+                        output_audio_tokens=0,
                         details={
                             'accepted_prediction_tokens': 0,
                             'audio_tokens': 0,
@@ -893,6 +895,7 @@ async def test_tool_returning_dict(allow_model_requests: None, agent: Agent):
                         cache_read_tokens=0,
                         output_tokens=11,
                         input_audio_tokens=0,
+                        output_audio_tokens=0,
                         details={
                             'accepted_prediction_tokens': 0,
                             'audio_tokens': 0,
@@ -921,6 +924,7 @@ async def test_tool_returning_dict(allow_model_requests: None, agent: Agent):
                         cache_read_tokens=0,
                         output_tokens=11,
                         input_audio_tokens=0,
+                        output_audio_tokens=0,
                         details={
                             'accepted_prediction_tokens': 0,
                             'audio_tokens': 0,

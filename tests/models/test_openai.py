@@ -824,6 +824,7 @@ async def test_image_url_tool_response(allow_model_requests: None, openai_api_ke
                     cache_read_tokens=0,
                     output_tokens=11,
                     input_audio_tokens=0,
+                    output_audio_tokens=0,
                     details={
                         'accepted_prediction_tokens': 0,
                         'audio_tokens': 0,
@@ -861,6 +862,7 @@ async def test_image_url_tool_response(allow_model_requests: None, openai_api_ke
                     cache_read_tokens=0,
                     output_tokens=8,
                     input_audio_tokens=0,
+                    output_audio_tokens=0,
                     details={
                         'accepted_prediction_tokens': 0,
                         'audio_tokens': 0,
@@ -904,6 +906,7 @@ async def test_image_as_binary_content_tool_response(
                     cache_read_tokens=0,
                     output_tokens=11,
                     input_audio_tokens=0,
+                    output_audio_tokens=0,
                     details={
                         'accepted_prediction_tokens': 0,
                         'audio_tokens': 0,
@@ -939,6 +942,7 @@ async def test_image_as_binary_content_tool_response(
                     cache_read_tokens=0,
                     output_tokens=9,
                     input_audio_tokens=0,
+                    output_audio_tokens=0,
                     details={
                         'accepted_prediction_tokens': 0,
                         'audio_tokens': 0,
@@ -1824,6 +1828,7 @@ async def test_openai_instructions(allow_model_requests: None, openai_api_key: s
                     cache_read_tokens=0,
                     output_tokens=8,
                     input_audio_tokens=0,
+                    output_audio_tokens=0,
                     details={
                         'accepted_prediction_tokens': 0,
                         'audio_tokens': 0,
@@ -1870,6 +1875,7 @@ async def test_openai_instructions_with_tool_calls_keep_instructions(allow_model
                     cache_read_tokens=0,
                     output_tokens=15,
                     input_audio_tokens=0,
+                    output_audio_tokens=0,
                     details={
                         'accepted_prediction_tokens': 0,
                         'audio_tokens': 0,
@@ -1896,6 +1902,7 @@ async def test_openai_instructions_with_tool_calls_keep_instructions(allow_model
                     cache_read_tokens=0,
                     output_tokens=15,
                     input_audio_tokens=0,
+                    output_audio_tokens=0,
                     details={
                         'accepted_prediction_tokens': 0,
                         'audio_tokens': 0,
@@ -2052,6 +2059,7 @@ async def test_openai_model_thinking_part(allow_model_requests: None, openai_api
                     cache_read_tokens=0,
                     output_tokens=2437,
                     input_audio_tokens=0,
+                    output_audio_tokens=0,
                     details={
                         'accepted_prediction_tokens': 0,
                         'audio_tokens': 0,
@@ -2353,6 +2361,7 @@ async def test_openai_tool_output(allow_model_requests: None, openai_api_key: st
                     cache_read_tokens=0,
                     output_tokens=12,
                     input_audio_tokens=0,
+                    output_audio_tokens=0,
                     details={
                         'accepted_prediction_tokens': 0,
                         'audio_tokens': 0,
@@ -2387,6 +2396,7 @@ async def test_openai_tool_output(allow_model_requests: None, openai_api_key: st
                     cache_read_tokens=0,
                     output_tokens=36,
                     input_audio_tokens=0,
+                    output_audio_tokens=0,
                     details={
                         'accepted_prediction_tokens': 0,
                         'audio_tokens': 0,
@@ -2446,6 +2456,7 @@ async def test_openai_text_output_function(allow_model_requests: None, openai_ap
                     cache_read_tokens=0,
                     output_tokens=11,
                     input_audio_tokens=0,
+                    output_audio_tokens=0,
                     details={
                         'accepted_prediction_tokens': 0,
                         'audio_tokens': 0,
@@ -2474,6 +2485,7 @@ async def test_openai_text_output_function(allow_model_requests: None, openai_ap
                     cache_read_tokens=0,
                     output_tokens=10,
                     input_audio_tokens=0,
+                    output_audio_tokens=0,
                     details={
                         'accepted_prediction_tokens': 0,
                         'audio_tokens': 0,
@@ -2526,6 +2538,7 @@ async def test_openai_native_output(allow_model_requests: None, openai_api_key: 
                     cache_read_tokens=0,
                     output_tokens=12,
                     input_audio_tokens=0,
+                    output_audio_tokens=0,
                     details={
                         'accepted_prediction_tokens': 0,
                         'audio_tokens': 0,
@@ -2554,6 +2567,7 @@ async def test_openai_native_output(allow_model_requests: None, openai_api_key: 
                     cache_read_tokens=0,
                     output_tokens=15,
                     input_audio_tokens=0,
+                    output_audio_tokens=0,
                     details={
                         'accepted_prediction_tokens': 0,
                         'audio_tokens': 0,
@@ -2608,6 +2622,7 @@ async def test_openai_native_output_multiple(allow_model_requests: None, openai_
                     cache_read_tokens=0,
                     output_tokens=11,
                     input_audio_tokens=0,
+                    output_audio_tokens=0,
                     details={
                         'accepted_prediction_tokens': 0,
                         'audio_tokens': 0,
@@ -2640,6 +2655,7 @@ async def test_openai_native_output_multiple(allow_model_requests: None, openai_
                     cache_read_tokens=0,
                     output_tokens=25,
                     input_audio_tokens=0,
+                    output_audio_tokens=0,
                     details={
                         'accepted_prediction_tokens': 0,
                         'audio_tokens': 0,
@@ -2697,6 +2713,7 @@ Don't include any text or Markdown fencing before or after.\
                     cache_read_tokens=0,
                     output_tokens=11,
                     input_audio_tokens=0,
+                    output_audio_tokens=0,
                     details={
                         'accepted_prediction_tokens': 0,
                         'audio_tokens': 0,
@@ -2732,6 +2749,7 @@ Don't include any text or Markdown fencing before or after.\
                     cache_read_tokens=0,
                     output_tokens=11,
                     input_audio_tokens=0,
+                    output_audio_tokens=0,
                     details={
                         'accepted_prediction_tokens': 0,
                         'audio_tokens': 0,
@@ -2793,6 +2811,7 @@ Don't include any text or Markdown fencing before or after.\
                     cache_read_tokens=0,
                     output_tokens=11,
                     input_audio_tokens=0,
+                    output_audio_tokens=0,
                     details={
                         'accepted_prediction_tokens': 0,
                         'audio_tokens': 0,
@@ -2832,6 +2851,7 @@ Don't include any text or Markdown fencing before or after.\
                     cache_read_tokens=0,
                     output_tokens=21,
                     input_audio_tokens=0,
+                    output_audio_tokens=0,
                     details={
                         'accepted_prediction_tokens': 0,
                         'audio_tokens': 0,

@@ -268,11 +268,11 @@ class UsageLimits:
 
     def check_tokens(self, usage: RunUsage) -> None:
         """Raises a `UsageLimitExceeded` exception if the usage exceeds any of the token limits."""
-        input_tokens = usage.input_tokens or 0
+        input_tokens = usage.input_tokens
         if self.input_tokens_limit is not None and input_tokens > self.input_tokens_limit:
             raise UsageLimitExceeded(f'Exceeded the input_tokens_limit of {self.input_tokens_limit} ({input_tokens=})')
 
-        output_tokens = usage.output_tokens or 0
+        output_tokens = usage.output_tokens
         if self.output_tokens_limit is not None and output_tokens > self.output_tokens_limit:
             raise UsageLimitExceeded(
                 f'Exceeded the output_tokens_limit of {self.output_tokens_limit} ({output_tokens=})'

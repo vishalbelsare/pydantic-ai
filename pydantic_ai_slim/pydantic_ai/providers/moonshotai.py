@@ -11,8 +11,8 @@ from pydantic_ai.models import cached_async_http_client
 from pydantic_ai.profiles import ModelProfile
 from pydantic_ai.profiles.moonshotai import moonshotai_model_profile
 from pydantic_ai.profiles.openai import (
-    OpenAIJsonSchemaTransformer,
     OpenAIChatModelProfile,
+    OpenAIJsonSchemaTransformer,
 )
 from pydantic_ai.providers import Provider
 

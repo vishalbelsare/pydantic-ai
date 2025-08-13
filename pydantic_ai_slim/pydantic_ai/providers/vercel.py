@@ -15,7 +15,7 @@ from pydantic_ai.profiles.deepseek import deepseek_model_profile
 from pydantic_ai.profiles.google import google_model_profile
 from pydantic_ai.profiles.grok import grok_model_profile
 from pydantic_ai.profiles.mistral import mistral_model_profile
-from pydantic_ai.profiles.openai import OpenAIJsonSchemaTransformer, OpenAIChatModelProfile, openai_model_profile
+from pydantic_ai.profiles.openai import OpenAIChatModelProfile, OpenAIJsonSchemaTransformer, openai_model_profile
 from pydantic_ai.providers import Provider
 
 try:

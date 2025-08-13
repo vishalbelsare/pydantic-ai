@@ -2971,25 +2971,23 @@ async def test_openai_model_settings_temperature_ignored_on_gpt_5(allow_model_re
 
 def test_openai_model_deprecation_warning():
     """Test that OpenAIModel shows deprecation warning."""
-    with pytest.warns(DeprecationWarning, match=r"Use `OpenAIChatModel` instead"):
+    with pytest.warns(DeprecationWarning, match=r'Use `OpenAIChatModel` instead'):
         OpenAIModel('gpt-4', provider=OpenAIProvider(api_key='test'))
 
 
 def test_openai_model_settings_deprecation_warning():
     """Test that OpenAIModelSettings is deprecated (TypedDict deprecation works differently)."""
     # TypedDict classes don't trigger warnings on instantiation, but we can verify the deprecation attribute exists
-    import warnings
-    from typing_extensions import get_origin
-    
+
     # Check that it's still a valid TypedDict that can be instantiated
     settings = OpenAIModelSettings()
     assert isinstance(settings, dict)
-    
+
     # Check that the class has the deprecated decorator applied
     assert hasattr(OpenAIModelSettings, '__deprecated__')
 
 
 def test_openai_model_profile_deprecation_warning():
     """Test that OpenAIModelProfile shows deprecation warning."""
-    with pytest.warns(DeprecationWarning, match=r"Use `OpenAIChatModelProfile` instead"):
+    with pytest.warns(DeprecationWarning, match=r'Use `OpenAIChatModelProfile` instead'):
         OpenAIModelProfile()

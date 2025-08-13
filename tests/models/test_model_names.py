@@ -18,7 +18,7 @@ with try_import() as imports_successful:
     from pydantic_ai.models.groq import GroqModelName
     from pydantic_ai.models.huggingface import HuggingFaceModelName
     from pydantic_ai.models.mistral import MistralModelName
-    from pydantic_ai.models.openai import OpenAIChatModelName
+    from pydantic_ai.models.openai import OpenAIModelName
     from pydantic_ai.providers.grok import GrokModelName
     from pydantic_ai.providers.moonshotai import MoonshotAIModelName
 

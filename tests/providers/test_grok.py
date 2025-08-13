@@ -4,7 +4,7 @@ import httpx
 import pytest
 
 from pydantic_ai.exceptions import UserError
-from pydantic_ai.profiles.openai import OpenAIJsonSchemaTransformer, OpenAIChatModelProfile
+from pydantic_ai.profiles.openai import OpenAIChatModelProfile, OpenAIJsonSchemaTransformer
 
 from ..conftest import TestEnv, try_import
 

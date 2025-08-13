@@ -1770,7 +1770,7 @@ def test_run_with_history_new():
     assert result2._new_message_index == snapshot(4)  # pyright: ignore[reportPrivateUsage]
     assert result2.output == snapshot('{"ret_a":"a-apple"}')
     assert result2._output_tool_name == snapshot(None)  # pyright: ignore[reportPrivateUsage]
-    assert result2.usage() == snapshot(RunUsage(requests=1, input_tokens=55, output_tokens=13, details=None))
+    assert result2.usage() == snapshot(RunUsage(requests=1, input_tokens=55, output_tokens=13))
     new_msg_part_kinds = [(m.kind, [p.part_kind for p in m.parts]) for m in result2.all_messages()]
     assert new_msg_part_kinds == snapshot(
         [
@@ -1827,7 +1827,7 @@ def test_run_with_history_new():
     assert result3._new_message_index == snapshot(4)  # pyright: ignore[reportPrivateUsage]
     assert result3.output == snapshot('{"ret_a":"a-apple"}')
     assert result3._output_tool_name == snapshot(None)  # pyright: ignore[reportPrivateUsage]
-    assert result3.usage() == snapshot(RunUsage(requests=1, input_tokens=55, output_tokens=13, details=None))
+    assert result3.usage() == snapshot(RunUsage(requests=1, input_tokens=55, output_tokens=13))
 
 
 def test_run_with_history_new_structured():
@@ -1954,7 +1954,7 @@ def test_run_with_history_new_structured():
     assert result2.output == snapshot(Response(a=0))
     assert result2._new_message_index == snapshot(5)  # pyright: ignore[reportPrivateUsage]
     assert result2._output_tool_name == snapshot('final_result')  # pyright: ignore[reportPrivateUsage]
-    assert result2.usage() == snapshot(RunUsage(requests=1, input_tokens=59, output_tokens=13, details=None))
+    assert result2.usage() == snapshot(RunUsage(requests=1, input_tokens=59, output_tokens=13))
     new_msg_part_kinds = [(m.kind, [p.part_kind for p in m.parts]) for m in result2.all_messages()]
     assert new_msg_part_kinds == snapshot(
         [

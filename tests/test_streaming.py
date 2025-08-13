@@ -860,7 +860,7 @@ async def test_iter_stream_output():
                         messages.append(chunk)
                 stream_usage = deepcopy(stream.usage())
     assert run.next_node == End(data=FinalResult(output='The bat sat on the mat.', tool_name=None, tool_call_id=None))
-    assert run.usage() == stream_usage == RunUsage(requests=1, input_tokens=51, output_tokens=7, details=None)
+    assert run.usage() == stream_usage == RunUsage(requests=1, input_tokens=51, output_tokens=7)
 
     assert messages == [
         '',

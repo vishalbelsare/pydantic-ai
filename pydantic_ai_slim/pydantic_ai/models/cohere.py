@@ -316,8 +316,8 @@ def _map_usage(response: V2ChatResponse) -> usage.RequestUsage:
             if u.billed_units.classifications:  # pragma: no cover
                 details['classifications'] = int(u.billed_units.classifications)
 
-        request_tokens = int(u.tokens.input_tokens) if u.tokens and u.tokens.input_tokens else None
-        response_tokens = int(u.tokens.output_tokens) if u.tokens and u.tokens.output_tokens else None
+        request_tokens = int(u.tokens.input_tokens) if u.tokens and u.tokens.input_tokens else 0
+        response_tokens = int(u.tokens.output_tokens) if u.tokens and u.tokens.output_tokens else 0
         return usage.RequestUsage(
             input_tokens=request_tokens,
             output_tokens=response_tokens,

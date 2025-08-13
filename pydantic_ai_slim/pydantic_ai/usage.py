@@ -13,9 +13,9 @@ __all__ = 'RequestUsage', 'RunUsage', 'UsageLimits'
 
 
 class UsageBase:
-    input_tokens: int | None = None
-    output_tokens: int | None = None
-    details: dict[str, int] | None = None
+    input_tokens: int
+    output_tokens: int
+    details: dict[str, int]
 
     def opentelemetry_attributes(self) -> dict[str, int]:
         """Get the token usage values as OpenTelemetry attributes."""
@@ -50,25 +50,25 @@ class RequestUsage(UsageBase):
     Prices for LLM requests are calculated using [genai-prices](https://github.com/pydantic/genai-prices).
     """
 
-    input_tokens: int | None = None
-    """Number of text input/prompt tokens."""
+    input_tokens: int = 0
+    """Number of input/prompt tokens."""
 
-    cache_write_tokens: int | None = None
+    cache_write_tokens: int = 0
     """Number of tokens written to the cache."""
-    cache_read_tokens: int | None = None
+    cache_read_tokens: int = 0
     """Number of tokens read from the cache."""
 
-    output_tokens: int | None = None
-    """Number of text output/completion tokens."""
+    output_tokens: int = 0
+    """Number of output/completion tokens."""
 
-    input_audio_tokens: int | None = None
+    input_audio_tokens: int = 0
     """Number of audio input tokens."""
-    cache_audio_read_tokens: int | None = None
+    cache_audio_read_tokens: int = 0
     """Number of audio tokens read from the cache."""
-    output_audio_tokens: int | None = None
+    output_audio_tokens: int = 0
     """Number of audio output tokens."""
 
-    details: dict[str, int] | None = None
+    details: dict[str, int] = dataclasses.field(default_factory=dict)
     """Any extra details returned by the model."""
 
     @property
@@ -120,46 +120,39 @@ class RunUsage(UsageBase):
     requests: int = 0
     """Number of requests made to the LLM API."""
 
-    input_tokens: int | None = None
+    input_tokens: int = 0
     """Total number of text input/prompt tokens."""
 
-    cache_write_tokens: int | None = None
+    cache_write_tokens: int = 0
     """Total number of tokens written to the cache."""
-    cache_read_tokens: int | None = None
+    cache_read_tokens: int = 0
     """Total number of tokens read from the cache."""
 
-    input_audio_tokens: int | None = None
+    input_audio_tokens: int = 0
     """Total number of audio input tokens."""
-    cache_audio_read_tokens: int | None = None
+    cache_audio_read_tokens: int = 0
     """Total number of audio tokens read from the cache."""
 
-    output_tokens: int | None = None
+    output_tokens: int = 0
     """Total number of text output/completion tokens."""
 
-    details: dict[str, int] | None = None
+    details: dict[str, int] = dataclasses.field(default_factory=dict)
     """Any extra details returned by the model."""
-
-    def input_output_tokens(self) -> int | None:
-        """Sum of `input_tokens + output_tokens`."""
-        if self.input_tokens is None and self.output_tokens is None:
-            return None
-        else:
-            return (self.input_tokens or 0) + (self.output_tokens or 0)
 
     @property
     @deprecated('`request_tokens` is deprecated, use `input_tokens` instead')
-    def request_tokens(self) -> int | None:
+    def request_tokens(self) -> int:
         return self.input_tokens
 
     @property
     @deprecated('`response_tokens` is deprecated, use `output_tokens` instead')
-    def response_tokens(self) -> int | None:
+    def response_tokens(self) -> int:
         return self.output_tokens
 
     @property
-    @deprecated('`total_tokens` is deprecated, sum the specific fields you need or use `input_output_tokens` instead')
-    def total_tokens(self) -> int | None:
-        return sum(v for k, v in dataclasses.asdict(self).values() if k.endswith('_tokens') and v is not None)
+    def total_tokens(self) -> int:
+        """Sum of `input_tokens + output_tokens`."""
+        return self.input_tokens + self.output_tokens
 
     def incr(self, incr_usage: RunUsage | RequestUsage) -> None:
         """Increment the usage in place.
@@ -309,7 +302,7 @@ class UsageLimits:
                 f'Exceeded the output_tokens_limit of {self.output_tokens_limit} ({output_tokens=})'
             )
 
-        total_tokens = usage.input_output_tokens() or 0
+        total_tokens = usage.total_tokens
         if self.total_tokens_limit is not None and total_tokens > self.total_tokens_limit:
             raise UsageLimitExceeded(f'Exceeded the total_tokens_limit of {self.total_tokens_limit} ({total_tokens=})')
 

@@ -201,7 +201,7 @@ async def test_multi_agent_usage_sync():
 
 def test_request_usage_basics():
     usage = RequestUsage()
-    assert usage.output_audio_tokens is None
+    assert usage.output_audio_tokens == 0
     assert usage.requests == 1
 
 

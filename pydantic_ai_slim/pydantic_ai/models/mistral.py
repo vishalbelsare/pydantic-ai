@@ -708,7 +708,6 @@ def _map_usage(response: MistralChatCompletionResponse | MistralCompletionChunk)
         return RequestUsage(
             input_tokens=response.usage.prompt_tokens,
             output_tokens=response.usage.completion_tokens,
-            details=None,
         )
     else:
         return RequestUsage()  # pragma: no cover

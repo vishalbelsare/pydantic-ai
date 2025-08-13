@@ -558,11 +558,11 @@ def _map_usage(message: BetaMessage | BetaRawMessageStreamEvent) -> usage.Reques
     request_tokens = details.get('input_tokens', 0) + cache_write_tokens + cache_read_tokens
 
     return usage.RequestUsage(
-        input_tokens=request_tokens or None,
-        cache_read_tokens=cache_read_tokens or None,
-        cache_write_tokens=cache_write_tokens or None,
+        input_tokens=request_tokens,
+        cache_read_tokens=cache_read_tokens,
+        cache_write_tokens=cache_write_tokens,
         output_tokens=response_usage.output_tokens,
-        details=details or None,
+        details=details,
     )
 
 

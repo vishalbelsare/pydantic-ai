@@ -1063,7 +1063,7 @@ async def test_request_tool_call(allow_model_requests: None):
     assert result.output == 'final response'
     assert result.usage().input_tokens == 6
     assert result.usage().output_tokens == 4
-    assert result.usage().input_output_tokens() == 10
+    assert result.usage().total_tokens == 10
     assert result.all_messages() == snapshot(
         [
             ModelRequest(

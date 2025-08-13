@@ -481,5 +481,4 @@ def _map_usage(response: ChatCompletionOutput | ChatCompletionStreamOutput) -> u
     return usage.RequestUsage(
         input_tokens=response_usage.prompt_tokens,
         output_tokens=response_usage.completion_tokens,
-        details=None,
     )

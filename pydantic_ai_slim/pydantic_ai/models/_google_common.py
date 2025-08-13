@@ -47,18 +47,18 @@ def metadata_as_request_usage(metadata: GeminiUsageMetaData | None) -> usage.Req
     if metadata is None:
         return usage.RequestUsage()  # pragma: no cover
     details: dict[str, int] = {}
-    if cached_content_token_count := metadata.get('cached_content_token_count'):
+    if cached_content_token_count := metadata.get('cached_content_token_count', 0):
         details['cached_content_tokens'] = cached_content_token_count  # pragma: no cover
 
-    if thoughts_token_count := metadata.get('thoughts_token_count'):
+    if thoughts_token_count := metadata.get('thoughts_token_count', 0):
         details['thoughts_tokens'] = thoughts_token_count
 
-    if tool_use_prompt_token_count := metadata.get('tool_use_prompt_token_count'):
+    if tool_use_prompt_token_count := metadata.get('tool_use_prompt_token_count', 0):
         details['tool_use_prompt_tokens'] = tool_use_prompt_token_count  # pragma: no cover
 
-    input_audio_tokens = None
-    output_audio_tokens = None
-    cache_audio_read_tokens = None
+    input_audio_tokens = 0
+    output_audio_tokens = 0
+    cache_audio_read_tokens = 0
     for key, metadata_details in metadata.items():
         if key.endswith('_details') and metadata_details:
             metadata_details = cast(list[_GeminiModalityTokenCount], metadata_details)

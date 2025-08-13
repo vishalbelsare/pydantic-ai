@@ -1272,6 +1272,7 @@ def _map_usage(response: chat.ChatCompletion | ChatCompletionChunk | responses.R
         )
         if response_usage.completion_tokens_details is not None:
             details.update(response_usage.completion_tokens_details.model_dump(exclude_none=True))
+            u.output_audio_tokens = response_usage.completion_tokens_details.audio_tokens
         if response_usage.prompt_tokens_details is not None:
             u.input_audio_tokens = response_usage.prompt_tokens_details.audio_tokens
             u.cache_read_tokens = response_usage.prompt_tokens_details.cached_tokens

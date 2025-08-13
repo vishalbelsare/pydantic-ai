@@ -65,13 +65,11 @@ class RequestUsage(UsageBase):
     """Number of audio input tokens."""
     cache_audio_read_tokens: int | None = None
     """Number of audio tokens read from the cache."""
+    output_audio_tokens: int | None = None
+    """Number of audio output tokens."""
 
     details: dict[str, int] | None = None
     """Any extra details returned by the model."""
-
-    @property
-    def output_audio_tokens(self):
-        return None
 
     @property
     def requests(self):

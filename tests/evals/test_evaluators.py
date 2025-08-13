@@ -25,7 +25,7 @@ from pydantic_evals.evaluators.common import (
 from pydantic_evals.evaluators.context import EvaluatorContext
 from pydantic_evals.evaluators.evaluator import EvaluationReason, Evaluator, EvaluatorOutput
 from pydantic_evals.evaluators.spec import EvaluatorSpec
-from pydantic_evals.otel._context_in_memory_span_exporter import context_subtree
+from pydantic_evals.otel._context_subtree import context_subtree
 from pydantic_evals.otel.span_tree import SpanQuery, SpanTree
 
 if TYPE_CHECKING:

@@ -46,6 +46,7 @@ from pydantic_ai.models.gemini import (
     _GeminiFunctionCall,
     _GeminiFunctionCallingConfig,
     _GeminiFunctionCallPart,
+    _GeminiModalityTokenCount,
     _GeminiResponse,
     _GeminiSafetyRating,
     _GeminiTextPart,
@@ -53,6 +54,7 @@ from pydantic_ai.models.gemini import (
     _GeminiToolConfig,
     _GeminiTools,
     _GeminiUsageMetaData,
+    _metadata_as_usage,
 )
 from pydantic_ai.output import NativeOutput, PromptedOutput, TextOutput, ToolOutput
 from pydantic_ai.providers.google_gla import GoogleGLAProvider
@@ -2149,4 +2151,36 @@ Don't include any text or Markdown fencing before or after.\
                 provider_request_id=IsStr(),
             ),
         ]
+    )
+
+
+def test_map_usage():
+    response = gemini_response(_content_model_response(ModelResponse(parts=[TextPart('Hello world')])))
+    assert 'usage_metadata' in response
+    response['usage_metadata']['cached_content_token_count'] = 9100
+    response['usage_metadata']['prompt_tokens_details'] = [
+        _GeminiModalityTokenCount(modality='AUDIO', token_count=9200)
+    ]
+    response['usage_metadata']['cache_tokens_details'] = [
+        _GeminiModalityTokenCount(modality='AUDIO', token_count=9300),
+    ]
+    response['usage_metadata']['candidates_tokens_details'] = [
+        _GeminiModalityTokenCount(modality='AUDIO', token_count=9400)
+    ]
+
+    assert _metadata_as_usage(response) == snapshot(
+        RequestUsage(
+            input_tokens=1,
+            cache_read_tokens=9100,
+            output_tokens=2,
+            input_audio_tokens=9200,
+            cache_audio_read_tokens=9300,
+            output_audio_tokens=9400,
+            details={
+                'cached_content_tokens': 9100,
+                'audio_prompt_tokens': 9200,
+                'audio_cache_tokens': 9300,
+                'audio_candidates_tokens': 9400,
+            },
+        )
     )

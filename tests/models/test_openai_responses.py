@@ -1,5 +1,6 @@
 import json
 from dataclasses import replace
+from typing import Any
 
 import pytest
 from inline_snapshot import snapshot
@@ -7,15 +8,20 @@ from pydantic import BaseModel
 from typing_extensions import TypedDict
 
 from pydantic_ai.agent import Agent
+from pydantic_ai.builtin_tools import CodeExecutionTool, WebSearchTool
 from pydantic_ai.exceptions import ModelHTTPError, ModelRetry
 from pydantic_ai.messages import (
     BinaryContent,
     DocumentUrl,
+    FinalResultEvent,
     ImageUrl,
     ModelRequest,
     ModelResponse,
+    PartDeltaEvent,
+    PartStartEvent,
     RetryPromptPart,
     TextPart,
+    TextPartDelta,
     ToolCallPart,
     ToolReturnPart,
     UserPromptPart,
@@ -26,6 +32,7 @@ from pydantic_ai.tools import ToolDefinition
 from pydantic_ai.usage import Usage
 
 from ..conftest import IsDatetime, IsStr, TestEnv, try_import
+from ..parts_from_messages import part_types_from_messages
 
 with try_import() as imports_successful:
     from pydantic_ai.models.openai import OpenAIModelSettings, OpenAIResponsesModel, OpenAIResponsesModelSettings
@@ -421,23 +428,23 @@ async def test_openai_responses_model_builtin_tools(allow_model_requests: None, 
                 parts=[
                     TextPart(
                         content="""\
-In the past 24 hours, OpenAI announced plans to release its first open-weight language model with reasoning capabilities since GPT-2. This model will allow developers to fine-tune it for specific applications without needing the original training data. To gather feedback and refine the model, OpenAI will host developer events starting in San Francisco and expanding to Europe and Asia-Pacific regions. ([reuters.com](https://www.reuters.com/technology/artificial-intelligence/openai-plans-release-open-weight-language-model-coming-months-2025-03-31/?utm_source=openai))
+OpenAI's recent launch of GPT-5 has faced mixed reactions. Despite strong benchmark performance and early praise, users have reported issues like errors in basic math and geography. CEO Sam Altman has acknowledged these concerns and assured that improvements are underway. ([axios.com](https://www.axios.com/2025/08/12/gpt-5-bumpy-launch-openai?utm_source=openai))
 
 
-## OpenAI to Release Open-Weight Language Model:
-- [OpenAI plans to release open-weight language model in coming months](https://www.reuters.com/technology/artificial-intelligence/openai-plans-release-open-weight-language-model-coming-months-2025-03-31/?utm_source=openai) \
+## OpenAI's GPT-5 Launch Faces Mixed Reactions:
+- [OpenAI's big GPT-5 launch gets bumpy](https://www.axios.com/2025/08/12/gpt-5-bumpy-launch-openai?utm_source=openai) \
 """
                     )
                 ],
                 usage=Usage(
                     request_tokens=320,
-                    response_tokens=200,
-                    total_tokens=520,
+                    response_tokens=159,
+                    total_tokens=479,
                     details={'reasoning_tokens': 0, 'cached_tokens': 0},
                 ),
                 model_name='gpt-4o-2024-08-06',
                 timestamp=IsDatetime(),
-                vendor_id='resp_67ebcbb93728819197f923ff16e98bce04f5055a2a33abc3',
+                vendor_id='resp_689b7c90010c8196ac0efd68b021490f07450cfc2d48b975',
             ),
         ]
     )
@@ -467,6 +474,161 @@ async def test_openai_responses_model_instructions(allow_model_requests: None, o
                 timestamp=IsDatetime(),
                 vendor_id='resp_67f3fdfd9fa08191a3d5825db81b8df6003bc73febb56d77',
             ),
+        ]
+    )
+
+
+async def test_openai_responses_model_web_search_tool(allow_model_requests: None, openai_api_key: str):
+    m = OpenAIResponsesModel('gpt-4o', provider=OpenAIProvider(api_key=openai_api_key))
+    agent = Agent(m, instructions='You are a helpful assistant.', builtin_tools=[WebSearchTool()])
+
+    result = await agent.run('What day is it today?')
+    assert result.output == snapshot("""\
+Today is Wednesday, May 14, 2025.
+
+## Weather for San Francisco, CA:
+Current Conditions: Mostly clear, 50°F (10°C)
+
+Daily Forecast:
+* Wednesday, May 14: Low: 51°F (10°C), High: 65°F (18°C), Description: Areas of low clouds early; otherwise, mostly sunny
+* Thursday, May 15: Low: 53°F (12°C), High: 66°F (19°C), Description: Areas of low clouds, then sun
+* Friday, May 16: Low: 53°F (12°C), High: 64°F (18°C), Description: Partly sunny
+* Saturday, May 17: Low: 52°F (11°C), High: 63°F (17°C), Description: Low clouds breaking for some sun; breezy in the afternoon
+* Sunday, May 18: Low: 51°F (10°C), High: 68°F (20°C), Description: Clouds yielding to sun
+* Monday, May 19: Low: 53°F (12°C), High: 68°F (20°C), Description: Sunny
+* Tuesday, May 20: Low: 52°F (11°C), High: 70°F (21°C), Description: Mostly sunny
+ \
+""")
+
+
+async def test_openai_responses_model_web_search_tool_with_user_location(
+    allow_model_requests: None, openai_api_key: str
+):
+    m = OpenAIResponsesModel('gpt-4o', provider=OpenAIProvider(api_key=openai_api_key))
+    agent = Agent(
+        m,
+        instructions='You are a helpful assistant.',
+        builtin_tools=[WebSearchTool(user_location={'city': 'Utrecht', 'region': 'NL'})],
+    )
+
+    result = await agent.run('What is the current temperature?')
+    assert result.output == snapshot("""\
+As of 12:58 PM on Wednesday, May 14, 2025, in Utrecht, Netherlands, the weather is sunny with a temperature of 22°C (71°F).
+
+## Weather for Utrecht, Netherlands:
+Current Conditions: Sunny, 71°F (22°C)
+
+Daily Forecast:
+* Wednesday, May 14: Low: 48°F (9°C), High: 71°F (22°C), Description: Clouds yielding to sun
+* Thursday, May 15: Low: 43°F (6°C), High: 67°F (20°C), Description: After a cloudy start, sun returns
+* Friday, May 16: Low: 45°F (7°C), High: 64°F (18°C), Description: Mostly sunny
+* Saturday, May 17: Low: 47°F (9°C), High: 68°F (20°C), Description: Mostly sunny
+* Sunday, May 18: Low: 47°F (8°C), High: 68°F (20°C), Description: Some sun
+* Monday, May 19: Low: 49°F (9°C), High: 70°F (21°C), Description: Delightful with partial sunshine
+* Tuesday, May 20: Low: 49°F (10°C), High: 72°F (22°C), Description: Warm with sunshine and a few clouds
+ \
+""")
+
+
+async def test_openai_responses_model_web_search_tool_with_invalid_region(
+    allow_model_requests: None, openai_api_key: str
+):
+    m = OpenAIResponsesModel('gpt-4o', provider=OpenAIProvider(api_key=openai_api_key))
+    agent = Agent(
+        m,
+        instructions='You are a helpful assistant.',
+        builtin_tools=[WebSearchTool(user_location={'city': 'Salvador', 'region': 'BRLO'})],
+    )
+
+    result = await agent.run('What is the current temperature?')
+    assert result.output == snapshot("""\
+As of 12:15 PM on Thursday, August 7, 2025, in Salvador, Brazil, the current weather conditions are:
+
+- **Temperature:** 84°F (29°C)
+- **Feels Like:** 88°F (31°C)
+- **Condition:** Sunny
+- **Wind:** East at 16 mph (25 km/h)
+- **Humidity:** 65%
+- **Dew Point:** 71°F (22°C)
+- **Pressure:** 29.88 in (1012 mb)
+- **Visibility:** 8 miles (13 km)
+
+([aerisweather.com](https://www.aerisweather.com/weather/local/br/salvador?utm_source=openai))
+
+The forecast for today indicates partly cloudy skies with temperatures remaining around 84°F (29°C) this afternoon. \
+""")
+
+
+async def test_openai_responses_model_web_search_tool_stream(allow_model_requests: None, openai_api_key: str):
+    m = OpenAIResponsesModel('gpt-4o', provider=OpenAIProvider(api_key=openai_api_key))
+    agent = Agent(m, instructions='You are a helpful assistant.', builtin_tools=[WebSearchTool()])
+
+    event_parts: list[Any] = []
+    async with agent.iter(user_prompt='Give me the top 3 news in the world today.') as agent_run:
+        async for node in agent_run:
+            if Agent.is_model_request_node(node) or Agent.is_call_tools_node(node):
+                async with node.stream(agent_run.ctx) as request_stream:
+                    async for event in request_stream:
+                        event_parts.append(event)
+
+    assert event_parts.pop(0) == snapshot(PartStartEvent(index=0, part=TextPart(content='Here')))
+    assert event_parts.pop(0) == snapshot(FinalResultEvent(tool_name=None, tool_call_id=None))
+    assert ''.join(event.delta.content_delta for event in event_parts) == snapshot("""\
+ are the top three news stories from around the world as of August 7, 2025:
+
+1. **U.S. Imposes New Tariffs Amid Market Optimism**
+
+   The United States has implemented new tariffs ranging from 10% to 50% on imports from multiple countries. Despite this, global markets have shown resilience, buoyed by expectations of interest rate cuts and positive earnings reports. Notably, exemptions were granted to Taiwan and South Korea, shielding major chipmakers like TSMC, Samsung, and SK Hynix from the highest levies. ([reuters.com](https://www.reuters.com/business/finance/global-markets-view-usa-2025-08-07/?utm_source=openai))
+
+2. **Ghanaian Ministers Killed in Helicopter Crash**
+
+   Ghana's Defence Minister Edward Omane Boamah and Environment Minister Ibrahim Murtala Muhammed, along with six others, have died in a military helicopter crash in the Ashanti region. The incident has been described as a "national tragedy" by Chief of Staff Julius Debrah. ([anewz.tv](https://anewz.tv/world/world-news/11722/anewz-morning-brief-7th-august-2025/news?utm_source=openai))
+
+3. **Massive Wildfire in France Claims Lives**
+
+   A significant wildfire in southern France's Aude region has resulted in at least one death and nine injuries. The fire, which began on August 6, has destroyed or damaged 25 homes, with over 1,800 firefighters working to control the blaze. ([anewz.tv](https://anewz.tv/world/world-news/11722/anewz-morning-brief-7th-august-2025/news?utm_source=openai))
+
+Please note that news developments are continually evolving. For the most current information, refer to reputable news sources. \
+""")
+
+
+async def test_openai_responses_code_execution_tool(allow_model_requests: None, openai_api_key: str):
+    m = OpenAIResponsesModel('gpt-4o', provider=OpenAIProvider(api_key=openai_api_key))
+    agent = Agent(m, instructions='You are a helpful assistant.', builtin_tools=[CodeExecutionTool()])
+
+    result = await agent.run('What is 3 * 12390?')
+    # NOTE: OpenAI doesn't return neither the `BuiltinToolCallPart` nor the `BuiltinToolReturnPart`.
+    assert part_types_from_messages(result.all_messages()) == snapshot([[UserPromptPart], [TextPart]])
+
+
+async def test_openai_responses_code_execution_tool_stream(allow_model_requests: None, openai_api_key: str):
+    m = OpenAIResponsesModel('gpt-4o', provider=OpenAIProvider(api_key=openai_api_key))
+    agent = Agent(m, instructions='You are a helpful assistant.', builtin_tools=[CodeExecutionTool()])
+
+    event_parts: list[Any] = []
+    async with agent.iter(user_prompt='What is 3 * 12390?') as agent_run:
+        async for node in agent_run:
+            if Agent.is_model_request_node(node) or Agent.is_call_tools_node(node):
+                async with node.stream(agent_run.ctx) as request_stream:
+                    async for event in request_stream:
+                        event_parts.append(event)
+
+    assert event_parts == snapshot(
+        [
+            PartStartEvent(index=0, part=TextPart(content='\\(')),
+            FinalResultEvent(tool_name=None, tool_call_id=None),
+            PartDeltaEvent(index=0, delta=TextPartDelta(content_delta='3')),
+            PartDeltaEvent(index=0, delta=TextPartDelta(content_delta=' \\')),
+            PartDeltaEvent(index=0, delta=TextPartDelta(content_delta='times')),
+            PartDeltaEvent(index=0, delta=TextPartDelta(content_delta=' ')),
+            PartDeltaEvent(index=0, delta=TextPartDelta(content_delta='123')),
+            PartDeltaEvent(index=0, delta=TextPartDelta(content_delta='90')),
+            PartDeltaEvent(index=0, delta=TextPartDelta(content_delta=' =')),
+            PartDeltaEvent(index=0, delta=TextPartDelta(content_delta=' ')),
+            PartDeltaEvent(index=0, delta=TextPartDelta(content_delta='371')),
+            PartDeltaEvent(index=0, delta=TextPartDelta(content_delta='70')),
+            PartDeltaEvent(index=0, delta=TextPartDelta(content_delta='\\')),
+            PartDeltaEvent(index=0, delta=TextPartDelta(content_delta=').')),
         ]
     )
 
@@ -972,3 +1134,17 @@ Don't include any text or Markdown fencing before or after.\
             ),
         ]
     )
+
+
+@pytest.mark.vcr()
+async def test_openai_responses_verbosity(allow_model_requests: None, openai_api_key: str):
+    """Test that verbosity setting is properly passed to the OpenAI API"""
+    # Following GPT-5 + verbosity documentation pattern
+    provider = OpenAIProvider(
+        api_key=openai_api_key,
+        base_url='https://api.openai.com/v1',  # Explicitly set base URL
+    )
+    model = OpenAIResponsesModel('gpt-5', provider=provider)
+    agent = Agent(model=model, model_settings=OpenAIResponsesModelSettings(openai_text_verbosity='low'))
+    result = await agent.run('What is 2+2?')
+    assert result.output == snapshot('4')

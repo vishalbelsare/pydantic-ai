@@ -197,7 +197,11 @@ class UsageLimits:
     output_tokens_limit: int | None = None
     """The maximum number of output/response tokens allowed."""
     total_tokens_limit: int | None = None
-    """The maximum number of combined input and output tokens allowed."""
+    """The maximum number of tokens allowed in requests and responses combined."""
+    count_tokens_before_request: bool = False
+    """If True, perform a token counting pass before sending the request to the model,
+    to enforce `request_tokens_limit` ahead of time. This may incur additional overhead
+    (from calling the model's `count_tokens` API before making the actual request) and is disabled by default."""
 
     @overload
     def __init__(
@@ -207,11 +211,13 @@ class UsageLimits:
         input_tokens_limit: int | None = None,
         output_tokens_limit: int | None = None,
         total_tokens_limit: int | None = None,
+        count_tokens_before_request: bool = False,
     ) -> None:
         self.request_limit = request_limit
         self.input_tokens_limit = input_tokens_limit
         self.output_tokens_limit = output_tokens_limit
         self.total_tokens_limit = total_tokens_limit
+        self.count_tokens_before_request = count_tokens_before_request
 
     @overload
     @deprecated(
@@ -224,11 +230,13 @@ class UsageLimits:
         request_tokens_limit: int | None = None,
         response_tokens_limit: int | None = None,
         total_tokens_limit: int | None = None,
+        count_tokens_before_request: bool = False,
     ) -> None:
         self.request_limit = request_limit
         self.input_tokens_limit = request_tokens_limit
         self.output_tokens_limit = response_tokens_limit
         self.total_tokens_limit = total_tokens_limit
+        self.count_tokens_before_request = count_tokens_before_request
 
     def __init__(
         self,
@@ -237,6 +245,7 @@ class UsageLimits:
         input_tokens_limit: int | None = None,
         output_tokens_limit: int | None = None,
         total_tokens_limit: int | None = None,
+        count_tokens_before_request: bool = False,
         # deprecated:
         request_tokens_limit: int | None = None,
         response_tokens_limit: int | None = None,
@@ -245,6 +254,7 @@ class UsageLimits:
         self.input_tokens_limit = input_tokens_limit or request_tokens_limit
         self.output_tokens_limit = output_tokens_limit or response_tokens_limit
         self.total_tokens_limit = total_tokens_limit
+        self.count_tokens_before_request = count_tokens_before_request
 
     def has_token_limits(self) -> bool:
         """Returns `True` if this instance places any limits on token counts.
@@ -259,10 +269,22 @@ class UsageLimits:
         )
 
     def check_before_request(self, usage: RunUsage) -> None:
-        """Raises a `UsageLimitExceeded` exception if the next request would exceed the request_limit."""
+        """Raises a `UsageLimitExceeded` exception if the next request would exceed any of the limits."""
         request_limit = self.request_limit
         if request_limit is not None and usage.requests >= request_limit:
             raise UsageLimitExceeded(f'The next request would exceed the request_limit of {request_limit}')
+
+        input_tokens = usage.input_tokens
+        if self.input_tokens_limit is not None and input_tokens > self.input_tokens_limit:
+            raise UsageLimitExceeded(
+                f'The next request would exceed the input_tokens_limit of {self.input_tokens_limit} ({input_tokens=})'
+            )
+
+        total_tokens = usage.total_tokens
+        if self.total_tokens_limit is not None and total_tokens > self.total_tokens_limit:
+            raise UsageLimitExceeded(
+                f'The next request would exceed the total_tokens_limit of {self.total_tokens_limit} ({total_tokens=})'
+            )
 
     def check_tokens(self, usage: RunUsage) -> None:
         """Raises a `UsageLimitExceeded` exception if the usage exceeds any of the token limits."""
